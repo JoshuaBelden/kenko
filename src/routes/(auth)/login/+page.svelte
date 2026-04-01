@@ -1,13 +1,21 @@
 <script lang="ts">
-  import { Button, Card, Input, PageHeader } from "$lib/components"
+  import { page } from "$app/state"
+  import { Button, Card, Input } from "$lib/components"
+
+  const form = $derived(page.form)
 </script>
 
 <div class="auth-container">
-  <PageHeader title="Welcome back" subtitle="Sign in to continue your journey" />
-
   <Card>
     <form method="POST" class="auth-form">
-      <Input name="email" label="Email" type="email" placeholder="you@example.com" required />
+      {#if form?.missing}
+        <p class="form-error">Please fill in all fields.</p>
+      {/if}
+      {#if form?.invalid}
+        <p class="form-error">Invalid email or password.</p>
+      {/if}
+
+      <Input name="email" label="Email" type="email" placeholder="you@example.com" value={form?.email ?? ""} required />
       <Input name="password" label="Password" type="password" placeholder="Your password" required />
       <div class="auth-actions">
         <Button variant="primary" type="submit">Sign in</Button>
@@ -23,7 +31,7 @@
 <style>
   .auth-container {
     max-width: 400px;
-    margin: var(--space-8) auto;
+    width: 100%;
   }
 
   .auth-form {
@@ -49,5 +57,11 @@
 
   .auth-link a:hover {
     text-decoration: underline;
+  }
+
+  .form-error {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--accent);
   }
 </style>

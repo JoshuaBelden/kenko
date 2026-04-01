@@ -4,7 +4,20 @@ declare global {
       userId?: string
     }
     interface PageData {
-      user: { id: string; email: string; name: string } | null
+      user: {
+        id: string
+        email: string
+        profileComplete: boolean
+        profile: {
+          firstName: string
+          lastName: string
+          weight?: number
+          height?: number
+          sex?: "male" | "female"
+          bmi?: number
+          bodyFatPercent?: number
+        } | null
+      } | null
     }
   }
 }

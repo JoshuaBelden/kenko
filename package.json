@@ -16,6 +16,7 @@
     "@sveltejs/adapter-vercel": "^6.3.3",
     "@sveltejs/kit": "^2.50.2",
     "@sveltejs/vite-plugin-svelte": "^6.2.4",
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^25.5.0",
     "svelte": "^5.54.0",
     "svelte-check": "^4.4.2",
@@ -23,6 +24,7 @@
     "vite": "^7.3.1"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "mongodb": "^7.1.1"
   }
 }
