@@ -103,5 +103,9 @@ export async function ensureIndexes(): Promise<void> {
     db.collection("sessions").createIndex({ token: 1 }, { unique: true }),
     db.collection("sessions").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
     db.collection("journeys").createIndex({ userId: 1, status: 1, startDate: -1 }),
+    db.collection("foodItems").createIndex({ userId: 1 }),
+    db.collection("foodItems").createIndex({ userId: 1, name: "text" }),
+    db.collection("diaryEntries").createIndex({ userId: 1, date: 1 }),
+    db.collection("diaryEntries").createIndex({ journeyIds: 1 }),
   ])
 }

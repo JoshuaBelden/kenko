@@ -18,7 +18,7 @@
   // Clear stale lens selection if the journey no longer exists
   $effect(() => {
     if (journeyLens.selectedId && activeJourneys.length > 0) {
-      const exists = activeJourneys.some((j) => j.id === journeyLens.selectedId)
+      const exists = activeJourneys.some(j => j.id === journeyLens.selectedId)
       if (!exists) journeyLens.clear()
     }
   })
@@ -26,7 +26,7 @@
   const selectedJourneyName = $derived(
     journeyLens.isGlobalView
       ? "All data"
-      : activeJourneys.find((j) => j.id === journeyLens.selectedId)?.name ?? "All data",
+      : (activeJourneys.find(j => j.id === journeyLens.selectedId)?.name ?? "All data"),
   )
 
   const navItems = [
@@ -112,7 +112,10 @@
             <button
               class="lens-option"
               class:active={journeyLens.isGlobalView}
-              onclick={() => { journeyLens.clear(); lensOpen = false }}
+              onclick={() => {
+                journeyLens.clear()
+                lensOpen = false
+              }}
             >
               All data
             </button>
@@ -120,7 +123,10 @@
               <button
                 class="lens-option"
                 class:active={journeyLens.selectedId === journey.id}
-                onclick={() => { journeyLens.select(journey.id); lensOpen = false }}
+                onclick={() => {
+                  journeyLens.select(journey.id)
+                  lensOpen = false
+                }}
               >
                 {journey.name}
               </button>
@@ -180,6 +186,21 @@
               <span class="settings-label">Theme</span>
               <ThemeToggle />
             </div>
+            <a href="/shoku/library" class="settings-link" onclick={() => (settingsOpen = false)}>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M18 8h1a4 4 0 0 1 0 8h-1" /><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" />
+              </svg>
+              <span>Food Library</span>
+            </a>
           </div>
         {/if}
       </div>
@@ -424,6 +445,24 @@
     align-items: center;
     justify-content: space-between;
     gap: var(--space-4);
+  }
+
+  .settings-link {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 0.5px solid var(--border);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-light);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+  }
+
+  .settings-link:hover {
+    color: var(--ink);
   }
 
   .settings-label {
