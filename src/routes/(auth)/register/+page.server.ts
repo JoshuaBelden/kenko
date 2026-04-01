@@ -1,5 +1,6 @@
 import { createSession, hashPassword, setSessionCookie } from "$lib/server/auth"
 import { getUsersCollection } from "$lib/server/collections"
+import { createDefaultJourney } from "$lib/server/journeys"
 import { fail, redirect } from "@sveltejs/kit"
 import type { Actions } from "./$types"
 
@@ -37,6 +38,12 @@ export const actions: Actions = {
       createdAt: new Date(),
       updatedAt: new Date(),
     })
+
+    try {
+      await createDefaultJourney(result.insertedId)
+    } catch {
+      // Journey seeding failure must not block registration
+    }
 
     const token = await createSession(result.insertedId.toString())
     setSessionCookie(cookies, token)

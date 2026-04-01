@@ -18,6 +18,12 @@ declare global {
           bodyFatPercent?: number
         } | null
       } | null
+      activeJourneys: Array<{
+        id: string
+        name: string
+        startDate: string
+        endDate: string
+      }>
     }
   }
 }

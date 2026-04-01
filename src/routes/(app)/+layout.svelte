@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state"
   import { NavItem, ThemeToggle } from "$lib/components"
+  import { journeyLens } from "$lib/stores/journeyLens.svelte"
   import type { Snippet } from "svelte"
 
   interface Props {
@@ -9,8 +10,24 @@
 
   let { children }: Props = $props()
   let settingsOpen = $state(false)
+  let lensOpen = $state(false)
 
   const user = $derived(page.data.user)
+  const activeJourneys = $derived(page.data.activeJourneys ?? [])
+
+  // Clear stale lens selection if the journey no longer exists
+  $effect(() => {
+    if (journeyLens.selectedId && activeJourneys.length > 0) {
+      const exists = activeJourneys.some((j) => j.id === journeyLens.selectedId)
+      if (!exists) journeyLens.clear()
+    }
+  })
+
+  const selectedJourneyName = $derived(
+    journeyLens.isGlobalView
+      ? "All data"
+      : activeJourneys.find((j) => j.id === journeyLens.selectedId)?.name ?? "All data",
+  )
 
   const navItems = [
     { href: "/", label: "Dashboard", kanji: undefined, icon: "dashboard" },
@@ -68,6 +85,50 @@
         </NavItem>
       {/each}
     </nav>
+
+    {#if activeJourneys.length > 0}
+      <div class="sidebar-lens">
+        <button class="lens-toggle" onclick={() => (lensOpen = !lensOpen)}>
+          <span class="lens-icon">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
+            </svg>
+          </span>
+          <span class="lens-label">{selectedJourneyName}</span>
+        </button>
+
+        {#if lensOpen}
+          <div class="lens-popover">
+            <button
+              class="lens-option"
+              class:active={journeyLens.isGlobalView}
+              onclick={() => { journeyLens.clear(); lensOpen = false }}
+            >
+              All data
+            </button>
+            {#each activeJourneys as journey}
+              <button
+                class="lens-option"
+                class:active={journeyLens.selectedId === journey.id}
+                onclick={() => { journeyLens.select(journey.id); lensOpen = false }}
+              >
+                {journey.name}
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {/if}
 
     <div class="sidebar-footer">
       <!-- Profile link -->
@@ -203,6 +264,94 @@
     align-items: center;
     gap: var(--space-1);
     width: 100%;
+  }
+
+  /* ---- Lens toggle ---- */
+  .sidebar-lens {
+    position: relative;
+    padding: var(--space-3) 0;
+    border-top: 0.5px solid var(--border);
+    width: 100%;
+  }
+
+  .lens-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--ink-light);
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    width: 100%;
+    transition: all var(--transition-fast);
+  }
+
+  .lens-toggle:hover {
+    color: var(--ink);
+    background: var(--paper-warm);
+  }
+
+  .lens-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+  }
+
+  .lens-label {
+    display: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: left;
+    flex: 1;
+    font-weight: 500;
+  }
+
+  .lens-popover {
+    position: absolute;
+    left: 0;
+    bottom: 100%;
+    margin-bottom: var(--space-2);
+    background: var(--paper-card);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2);
+    min-width: 160px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    z-index: 20;
+  }
+
+  .lens-option {
+    display: block;
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-light);
+    text-align: left;
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-fast);
+  }
+
+  .lens-option:hover {
+    color: var(--ink);
+    background: var(--paper-warm);
+  }
+
+  .lens-option.active {
+    color: var(--accent);
+    font-weight: 500;
   }
 
   /* ---- Footer items ---- */
@@ -351,6 +500,14 @@
 
     .footer-label {
       display: block;
+    }
+
+    .lens-label {
+      display: block;
+    }
+
+    .lens-toggle {
+      justify-content: flex-start;
     }
 
     .logo {

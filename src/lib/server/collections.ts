@@ -9,3 +9,8 @@ export async function getSessionsCollection() {
   const db = await getDb()
   return db.collection("sessions")
 }
+
+export async function getJourneysCollection() {
+  const db = await getDb()
+  return db.collection("journeys")
+}
