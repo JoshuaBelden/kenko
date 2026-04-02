@@ -15,7 +15,20 @@
   let unit = $state(commitment?.unit ?? "")
   let journeyId = $state<string | null>(commitment?.journeyId ?? null)
   let saving = $state(false)
+  let deleting = $state(false)
   let error = $state("")
+
+  async function handleDelete() {
+    if (!confirm("Delete this commitment? This cannot be undone.")) return
+    deleting = true
+    const res = await fetch(`/api/kata/commitments/${commitment.id}`, { method: "DELETE" })
+    if (!res.ok) {
+      error = "Failed to delete commitment"
+      deleting = false
+      return
+    }
+    goto("/kata")
+  }
 
   async function handleSubmit() {
     if (!name.trim()) {
@@ -82,16 +95,30 @@
       </div>
 
       <div class="field">
-        <span class="label">Direction</span>
+        <span class="label">Logging Style</span>
         <div class="toggle-group">
-          <button type="button" class="toggle-btn" class:active={direction === "achieve"} onclick={() => direction = "achieve"}>
-            Achieve
+          <button type="button" class="toggle-btn" class:active={loggingStyle === "checkbox"} onclick={() => { loggingStyle = "checkbox"; targetValue = 1; direction = "achieve" }}>
+            Checkbox
           </button>
-          <button type="button" class="toggle-btn" class:active={direction === "limit"} onclick={() => direction = "limit"}>
-            Limit
+          <button type="button" class="toggle-btn" class:active={loggingStyle === "quantity"} onclick={() => loggingStyle = "quantity"}>
+            Quantity
           </button>
         </div>
       </div>
+
+      {#if loggingStyle === "quantity"}
+        <div class="field">
+          <span class="label">Direction</span>
+          <div class="toggle-group">
+            <button type="button" class="toggle-btn" class:active={direction === "achieve"} onclick={() => direction = "achieve"}>
+              Achieve
+            </button>
+            <button type="button" class="toggle-btn" class:active={direction === "limit"} onclick={() => direction = "limit"}>
+              Limit
+            </button>
+          </div>
+        </div>
+      {/if}
 
       <div class="field">
         <span class="label">Period</span>
@@ -103,27 +130,15 @@
         </div>
       </div>
 
-      <div class="field">
-        <span class="label">Logging Style</span>
-        <div class="toggle-group">
-          <button type="button" class="toggle-btn" class:active={loggingStyle === "checkbox"} onclick={() => { loggingStyle = "checkbox"; targetValue = 1 }}>
-            Checkbox
-          </button>
-          <button type="button" class="toggle-btn" class:active={loggingStyle === "quantity"} onclick={() => loggingStyle = "quantity"}>
-            Quantity
-          </button>
-        </div>
-      </div>
-
-      <div class="field">
-        <label class="label" for="target">Target</label>
-        <div class="target-row">
-          <input id="target" class="input target-input" type="number" bind:value={targetValue} min="1" step="any" />
-          {#if loggingStyle === "quantity"}
+      {#if loggingStyle === "quantity"}
+        <div class="field">
+          <label class="label" for="target">Target</label>
+          <div class="target-row">
+            <input id="target" class="input target-input" type="number" bind:value={targetValue} min="1" step="any" />
             <input class="input unit-input" type="text" bind:value={unit} placeholder="unit (e.g. minutes)" />
-          {/if}
+          </div>
         </div>
-      </div>
+      {/if}
 
       <div class="field">
         <label class="label" for="journey">Journey</label>
@@ -137,9 +152,14 @@
 
       <div class="actions">
         <Button variant="ghost" href="/kata/{commitment.id}">Cancel</Button>
-        <button type="submit" class="submit-btn" disabled={saving}>
-          {saving ? "Saving..." : "Save Changes"}
-        </button>
+        <div class="actions-right">
+          <button type="button" class="delete-btn" disabled={deleting} onclick={handleDelete}>
+            {deleting ? "Deleting..." : "Delete"}
+          </button>
+          <button type="submit" class="submit-btn" disabled={saving}>
+            {saving ? "Saving..." : "Save Changes"}
+          </button>
+        </div>
       </div>
     </form>
   </Card>
@@ -258,6 +278,35 @@
     justify-content: space-between;
     align-items: center;
     padding-top: var(--space-3);
+  }
+
+  .actions-right {
+    display: flex;
+    gap: var(--space-3);
+    align-items: center;
+  }
+
+  .delete-btn {
+    padding: var(--space-2) var(--space-5);
+    border: 0.5px solid var(--accent);
+    border-radius: var(--radius-pill);
+    background: none;
+    color: var(--accent);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .delete-btn:hover {
+    background: var(--accent);
+    color: white;
+  }
+
+  .delete-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .submit-btn {

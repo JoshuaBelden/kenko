@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { goto, invalidateAll } from "$app/navigation"
   import { page } from "$app/state"
   import { Button, Card, PageHeader, StatNumber } from "$lib/components"
 
@@ -8,9 +7,6 @@
   const history = $derived(page.data.history ?? [])
   const journeyTotal = $derived(page.data.journeyTotal)
   const allTimeTotal = $derived(page.data.allTimeTotal ?? 0)
-
-  let confirmDelete = $state(false)
-  let deleting = $state(false)
 
   function periodLabel(period: string): string {
     switch (period) {
@@ -63,15 +59,7 @@
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
   }
 
-  async function handleDelete() {
-    if (!confirmDelete) {
-      confirmDelete = true
-      return
-    }
-    deleting = true
-    await fetch(`/api/kata/commitments/${commitment.id}`, { method: "DELETE" })
-    goto("/kata")
-  }
+
 </script>
 
 {#if !commitment}
@@ -86,28 +74,32 @@
   <!-- Summary -->
   <div class="stats-row">
     <StatNumber value={progress?.current ?? 0} label={periodLabel(commitment.period)} size="lg" />
-    <StatNumber value={commitment.targetValue} label="target" size="md" />
+    {#if commitment.loggingStyle !== "checkbox"}
+      <StatNumber value={commitment.targetValue} label="target" size="md" />
+    {/if}
     <StatNumber value={allTimeTotal} label="all time" size="md" />
   </div>
 
   <!-- Current period progress -->
-  <Card>
-    <div class="progress-section">
-      <div class="progress-meta">
-        <span class="meta-label">{directionLabel(commitment.direction)}</span>
-        <span class="meta-value">
-          {progress?.current ?? 0}{commitment.unit ? ` ${commitment.unit}` : ""} / {commitment.targetValue}{commitment.unit ? ` ${commitment.unit}` : ""}
-        </span>
+  {#if commitment.loggingStyle !== "checkbox"}
+    <Card>
+      <div class="progress-section">
+        <div class="progress-meta">
+          <span class="meta-label">{directionLabel(commitment.direction)}</span>
+          <span class="meta-value">
+            {progress?.current ?? 0}{commitment.unit ? ` ${commitment.unit}` : ""} / {commitment.targetValue}{commitment.unit ? ` ${commitment.unit}` : ""}
+          </span>
+        </div>
+        <div class="progress-track">
+          <div
+            class="progress-fill"
+            style:width="{Math.min(progress?.percentage ?? 0, 100)}%"
+            style:background={progressColor()}
+          ></div>
+        </div>
       </div>
-      <div class="progress-track">
-        <div
-          class="progress-fill"
-          style:width="{Math.min(progress?.percentage ?? 0, 100)}%"
-          style:background={progressColor()}
-        ></div>
-      </div>
-    </div>
-  </Card>
+    </Card>
+  {/if}
 
   <!-- Details -->
   {#if commitment.description || commitment.journeyName}
@@ -218,26 +210,10 @@
 
   <!-- Actions -->
   <div class="actions">
+    <Button variant="ghost" href="/kata">Close</Button>
     <Button variant="secondary" href="/kata/{commitment.id}/edit">Edit</Button>
-    <button
-      class="delete-btn"
-      class:confirming={confirmDelete}
-      onclick={handleDelete}
-      disabled={deleting}
-    >
-      {#if deleting}
-        Deleting...
-      {:else if confirmDelete}
-        Confirm Delete
-      {:else}
-        Delete
-      {/if}
-    </button>
   </div>
 
-  <div class="back-link">
-    <Button variant="ghost" href="/kata">Back to Kata</Button>
-  </div>
 {/if}
 
 <style>
@@ -520,38 +496,7 @@
     gap: var(--space-3);
   }
 
-  .delete-btn {
-    padding: var(--space-2) var(--space-4);
-    border: 0.5px solid var(--border);
-    border-radius: var(--radius-pill);
-    background: none;
-    font-family: var(--font-body);
-    font-size: var(--text-sm);
-    color: var(--ink-faint);
-    cursor: pointer;
-    transition: all var(--transition-fast);
-  }
 
-  .delete-btn:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-
-  .delete-btn.confirming {
-    border-color: var(--accent);
-    color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 8%, transparent);
-  }
-
-  .delete-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .back-link {
-    text-align: center;
-    margin-top: var(--space-4);
-  }
 
   .empty-state {
     text-align: center;

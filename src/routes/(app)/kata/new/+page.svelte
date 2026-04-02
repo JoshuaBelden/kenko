@@ -74,16 +74,30 @@
     </div>
 
     <div class="field">
-      <span class="label">Direction</span>
+      <span class="label">Logging Style</span>
       <div class="toggle-group">
-        <button type="button" class="toggle-btn" class:active={direction === "achieve"} onclick={() => direction = "achieve"}>
-          Achieve
+        <button type="button" class="toggle-btn" class:active={loggingStyle === "checkbox"} onclick={() => { loggingStyle = "checkbox"; targetValue = 1; direction = "achieve" }}>
+          Checkbox
         </button>
-        <button type="button" class="toggle-btn" class:active={direction === "limit"} onclick={() => direction = "limit"}>
-          Limit
+        <button type="button" class="toggle-btn" class:active={loggingStyle === "quantity"} onclick={() => loggingStyle = "quantity"}>
+          Quantity
         </button>
       </div>
     </div>
+
+    {#if loggingStyle === "quantity"}
+      <div class="field">
+        <span class="label">Direction</span>
+        <div class="toggle-group">
+          <button type="button" class="toggle-btn" class:active={direction === "achieve"} onclick={() => direction = "achieve"}>
+            Achieve
+          </button>
+          <button type="button" class="toggle-btn" class:active={direction === "limit"} onclick={() => direction = "limit"}>
+            Limit
+          </button>
+        </div>
+      </div>
+    {/if}
 
     <div class="field">
       <span class="label">Period</span>
@@ -95,27 +109,15 @@
       </div>
     </div>
 
-    <div class="field">
-      <span class="label">Logging Style</span>
-      <div class="toggle-group">
-        <button type="button" class="toggle-btn" class:active={loggingStyle === "checkbox"} onclick={() => { loggingStyle = "checkbox"; targetValue = 1 }}>
-          Checkbox
-        </button>
-        <button type="button" class="toggle-btn" class:active={loggingStyle === "quantity"} onclick={() => loggingStyle = "quantity"}>
-          Quantity
-        </button>
-      </div>
-    </div>
-
-    <div class="field">
-      <label class="label" for="target">Target</label>
-      <div class="target-row">
-        <input id="target" class="input target-input" type="number" bind:value={targetValue} min="1" step="any" />
-        {#if loggingStyle === "quantity"}
+    {#if loggingStyle === "quantity"}
+      <div class="field">
+        <label class="label" for="target">Target</label>
+        <div class="target-row">
+          <input id="target" class="input target-input" type="number" bind:value={targetValue} min="1" step="any" />
           <input class="input unit-input" type="text" bind:value={unit} placeholder="unit (e.g. minutes)" />
-        {/if}
+        </div>
       </div>
-    </div>
+    {/if}
 
     <div class="field">
       <label class="label" for="journey">Journey</label>

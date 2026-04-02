@@ -39,7 +39,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
   if (!commitment) return json({ error: "Not found" }, { status: 404 })
 
   const body = await request.json()
-  const value = commitment.loggingStyle === "checkbox" ? 1 : body.value
+  const value = body.value
   if (typeof value !== "number" || value < 0) {
     return json({ error: "value must be a non-negative number" }, { status: 400 })
   }

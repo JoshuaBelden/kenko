@@ -4,10 +4,7 @@
   import { Button, Card, PageHeader, StatNumber } from "$lib/components"
   import { journeyLens } from "$lib/stores/journeyLens.svelte"
 
-  let commitments = $state(page.data.commitments ?? [])
-  $effect(() => {
-    commitments = page.data.commitments ?? []
-  })
+  const commitments = $derived(page.data.commitments ?? [])
 
   // Journey lens re-navigation
   $effect(() => {
@@ -53,19 +50,13 @@
   }
 
   async function toggleCheckbox(c: any) {
-    if (c.todayLog && c.todayLog.value > 0) {
-      await fetch(`/api/kata/commitments/${c.id}/logs`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value: 0 }),
-      })
-    } else {
-      await fetch(`/api/kata/commitments/${c.id}/logs`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value: 1 }),
-      })
-    }
+    const current = c.todayLog?.value ?? 0
+    const next = current > 0 ? 0 : c.progress.target
+    await fetch(`/api/kata/commitments/${c.id}/logs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value: next }),
+    })
     await invalidateAll()
   }
 
@@ -94,6 +85,7 @@
   }
 
   function formatProgress(c: any): string {
+    if (c.loggingStyle === "checkbox") return ""
     const current = c.progress.current
     const target = c.progress.target
     const unit = c.unit ? ` ${c.unit}` : ""
@@ -159,18 +151,20 @@
           <strong class="commitment-name">{c.name}</strong>
           <span class="commitment-period">{periodLabel(c.period)}</span>
         </div>
-        <div class="commitment-progress">
-          <div class="progress-bar-wrapper">
-            <div class="progress-track">
-              <div
-                class="progress-fill"
-                style:width="{Math.min(c.progress.percentage, 100)}%"
-                style:background={progressColor(c)}
-              ></div>
+        {#if c.loggingStyle !== "checkbox"}
+          <div class="commitment-progress">
+            <div class="progress-bar-wrapper">
+              <div class="progress-track">
+                <div
+                  class="progress-fill"
+                  style:width="{Math.min(c.progress.percentage, 100)}%"
+                  style:background={progressColor(c)}
+                ></div>
+              </div>
             </div>
+            <span class="progress-text">{formatProgress(c)}</span>
           </div>
-          <span class="progress-text">{formatProgress(c)}</span>
-        </div>
+        {/if}
       </a>
       <div class="commitment-action">
         {#if c.loggingStyle === "checkbox"}
@@ -234,6 +228,9 @@
 
   .section {
     margin-bottom: var(--space-6);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
   }
 
   .section-title {
