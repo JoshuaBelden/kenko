@@ -11,7 +11,7 @@
 <div class="auth-layout">
   <div class="auth-brand">
     <span class="auth-kanji">健</span>
-    <span class="auth-text">Kenko</span>
+    <span class="auth-text">Kenkō</span>
   </div>
   {@render children()}
 </div>

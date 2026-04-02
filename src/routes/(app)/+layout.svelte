@@ -33,7 +33,7 @@
     { href: "/", label: "Dashboard", kanji: undefined, icon: "dashboard" },
     { href: "/tabi", label: "Tabi", kanji: "旅", icon: "tabi" },
     { href: "/shoku", label: "Shoku", kanji: "食", icon: "shoku" },
-    { href: "/dojo", label: "Dojo", kanji: "道場", icon: "dojo" },
+    { href: "/dojo", label: "Dojo", kanji: "道", icon: "dojo" },
     { href: "/kata", label: "Kata", kanji: "型", icon: "kata" },
   ]
 
@@ -61,30 +61,9 @@
     <div class="sidebar-header">
       <a href="/" class="logo">
         <span class="logo-kanji">健</span>
-        <span class="logo-text">Kenko</span>
+        <span class="logo-text">Kenkō</span>
       </a>
     </div>
-
-    <nav class="sidebar-nav">
-      {#each navItems as item}
-        <NavItem href={item.href} label={item.label} kanji={item.kanji} active={isActive(item.href)}>
-          {#snippet children()}
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              {@html icon(item.icon)}
-            </svg>
-          {/snippet}
-        </NavItem>
-      {/each}
-    </nav>
 
     {#if activeJourneys.length > 0}
       <div class="sidebar-lens">
@@ -135,6 +114,27 @@
         {/if}
       </div>
     {/if}
+
+    <nav class="sidebar-nav">
+      {#each navItems as item}
+        <NavItem href={item.href} label={item.label} kanji={item.kanji} active={isActive(item.href)}>
+          {#snippet children()}
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              {@html icon(item.icon)}
+            </svg>
+          {/snippet}
+        </NavItem>
+      {/each}
+    </nav>
 
     <div class="sidebar-footer">
       <!-- Profile link -->
@@ -306,7 +306,7 @@
   .sidebar-lens {
     position: relative;
     padding: var(--space-3) 0;
-    border-top: 0.5px solid var(--border);
+    border-bottom: 0.5px solid var(--border);
     width: 100%;
   }
 
@@ -354,8 +354,8 @@
   .lens-popover {
     position: absolute;
     left: 0;
-    bottom: 100%;
-    margin-bottom: var(--space-2);
+    top: 100%;
+    margin-top: var(--space-2);
     background: var(--paper-card);
     border: 0.5px solid var(--border);
     border-radius: var(--radius-sm);
