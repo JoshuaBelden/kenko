@@ -24,6 +24,7 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
 
   if (body.name !== undefined) updates.name = body.name
   if (body.brand !== undefined) updates.brand = body.brand
+  if (body.barcode !== undefined) updates.barcode = body.barcode
   if (body.baseUnit !== undefined) updates.baseUnit = body.baseUnit
   if (body.servingSize !== undefined) updates.servingSize = body.servingSize
   if (body.servingUnit !== undefined) updates.servingUnit = body.servingUnit

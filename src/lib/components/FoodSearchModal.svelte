@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Button } from "$lib/components"
+  import { Button, BarcodeScanner } from "$lib/components"
 
   interface Props {
     open: boolean
@@ -11,16 +11,46 @@
 
   let { open, category, onclose, onselect, oncreate }: Props = $props()
 
+  let mode = $state<"search" | "scanner" | "create" | "confirm">("search")
   let query = $state("")
   let results = $state<any[]>([])
   let searching = $state(false)
   let selectedFood = $state<any | null>(null)
   let servings = $state(1)
   let selectedCategory = $state("")
+  let scannerSupported = $state(false)
+  let barcodeError = $state("")
+  let scannedBarcode = $state<string | null>(null)
+  let scannerComponent = $state<BarcodeScanner | null>(null)
+
+  // Inline create form fields
+  let fName = $state("")
+  let fBrand = $state("")
+  let fBaseUnit = $state<"g" | "ml">("g")
+  let fServingSize = $state("")
+  let fCalories = $state("")
+  let fProtein = $state("")
+  let fNetCarbs = $state("")
+  let fFat = $state("")
+  let fFiber = $state("")
+  let fIron = $state("")
+  let fCalcium = $state("")
+  let fVitaminA = $state("")
+  let fVitaminC = $state("")
+  let fVitaminB12 = $state("")
+  let fFolate = $state("")
+  let fPotassium = $state("")
+  let createError = $state("")
+  let creating = $state(false)
 
   $effect(() => {
     selectedCategory = category
   })
+
+  $effect(() => {
+    scannerSupported = typeof window !== "undefined" && "BarcodeDetector" in window
+  })
+
   let searchTimeout: ReturnType<typeof setTimeout> | undefined
 
   async function search(q: string) {
@@ -45,6 +75,7 @@
     selectedFood = food
     servings = 1
     selectedCategory = category
+    mode = "confirm"
   }
 
   function confirmSelection() {
@@ -53,14 +84,140 @@
     reset()
   }
 
+  async function handleBarcodeScan(barcode: string) {
+    barcodeError = ""
+    try {
+      const res = await fetch(`/api/shoku/barcode/${encodeURIComponent(barcode)}`)
+      if (!res.ok) {
+        barcodeError = "Failed to look up barcode"
+        mode = "search"
+        return
+      }
+
+      const data = await res.json()
+
+      if (data.match) {
+        onselect(data.foodItem.id, 1, "serving", category)
+        reset()
+        return
+      }
+
+      if (data.nutritionData) {
+        scannedBarcode = barcode
+        populateFormFromNutritionData(data.nutritionData)
+        mode = "create"
+        return
+      }
+
+      barcodeError = "No food found for this barcode"
+      mode = "search"
+    } catch {
+      barcodeError = "Failed to look up barcode"
+      mode = "search"
+    }
+  }
+
+  function populateFormFromNutritionData(data: any) {
+    fName = data.name ?? ""
+    fBrand = data.brand ?? ""
+    fBaseUnit = data.baseUnit ?? "g"
+    fServingSize = data.servingSize?.toString() ?? ""
+    fCalories = data.calories?.toString() ?? "0"
+    fProtein = data.protein?.toString() ?? "0"
+    fNetCarbs = data.netCarbs?.toString() ?? "0"
+    fFat = data.fat?.toString() ?? "0"
+    fFiber = data.fiber?.toString() ?? ""
+    fIron = data.iron?.toString() ?? ""
+    fCalcium = data.calcium?.toString() ?? ""
+    fVitaminA = data.vitaminA?.toString() ?? ""
+    fVitaminC = data.vitaminC?.toString() ?? ""
+    fVitaminB12 = data.vitaminB12?.toString() ?? ""
+    fFolate = data.folate?.toString() ?? ""
+    fPotassium = data.potassium?.toString() ?? ""
+  }
+
+  async function handleInlineCreate() {
+    if (!fName.trim()) {
+      createError = "Name is required"
+      return
+    }
+    creating = true
+    createError = ""
+
+    const payload = {
+      name: fName.trim(),
+      brand: fBrand.trim() || null,
+      barcode: scannedBarcode,
+      baseUnit: fBaseUnit,
+      servingSize: parseFloat(fServingSize) || null,
+      calories: parseFloat(fCalories) || 0,
+      protein: parseFloat(fProtein) || 0,
+      netCarbs: parseFloat(fNetCarbs) || 0,
+      fat: parseFloat(fFat) || 0,
+      fiber: parseFloat(fFiber) || null,
+      iron: parseFloat(fIron) || null,
+      calcium: parseFloat(fCalcium) || null,
+      vitaminA: parseFloat(fVitaminA) || null,
+      vitaminC: parseFloat(fVitaminC) || null,
+      vitaminB12: parseFloat(fVitaminB12) || null,
+      folate: parseFloat(fFolate) || null,
+      potassium: parseFloat(fPotassium) || null,
+      source: "openfoodfacts",
+    }
+
+    try {
+      const res = await fetch("/api/shoku/foods", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+
+      if (!res.ok) {
+        const err = await res.json()
+        createError = err.error ?? "Failed to create food item"
+        creating = false
+        return
+      }
+
+      const created = await res.json()
+      onselect(created.id, 1, "serving", selectedCategory)
+      reset()
+    } catch {
+      createError = "Failed to create food item"
+    }
+    creating = false
+  }
+
   function reset() {
     query = ""
     results = []
     selectedFood = null
     servings = 1
+    mode = "search"
+    barcodeError = ""
+    scannedBarcode = null
+    fName = ""
+    fBrand = ""
+    fBaseUnit = "g"
+    fServingSize = ""
+    fCalories = ""
+    fProtein = ""
+    fNetCarbs = ""
+    fFat = ""
+    fFiber = ""
+    fIron = ""
+    fCalcium = ""
+    fVitaminA = ""
+    fVitaminC = ""
+    fVitaminB12 = ""
+    fFolate = ""
+    fPotassium = ""
+    createError = ""
+    creating = false
   }
 
   function handleClose() {
+    if (scannerComponent) scannerComponent.stop()
     reset()
     onclose()
   }
@@ -71,10 +228,132 @@
   <div class="modal-backdrop" role="presentation" onclick={handleClose}>
     <!-- svelte-ignore a11y_interactive_supports_focus a11y_click_events_have_key_events -->
     <div class="modal" role="dialog" aria-label="Search food items" onclick={e => e.stopPropagation()}>
-      {#if selectedFood}
+
+      {#if mode === "scanner"}
+        <div class="modal-header">
+          <h4>Scan Barcode</h4>
+        </div>
+        <div class="scanner-wrap">
+          <BarcodeScanner
+            bind:this={scannerComponent}
+            onscanned={handleBarcodeScan}
+            onerror={() => { barcodeError = "Camera access was denied"; mode = "search" }}
+            oncancelled={() => { mode = "search" }}
+          />
+        </div>
+
+      {:else if mode === "create"}
+        <div class="modal-header">
+          <h4>New Food Item</h4>
+          <button class="btn-text" onclick={() => { mode = "search"; barcodeError = "" }}>Back</button>
+        </div>
+        <div class="create-form">
+          {#if scannedBarcode}
+            <div class="form-field">
+              <label class="field-label" for="cf-barcode">Barcode</label>
+              <input id="cf-barcode" type="text" value={scannedBarcode} readonly class="readonly" />
+            </div>
+          {/if}
+          <div class="form-field">
+            <label class="field-label" for="cf-name">Name</label>
+            <input id="cf-name" type="text" bind:value={fName} />
+          </div>
+          <div class="form-field">
+            <label class="field-label" for="cf-brand">Brand</label>
+            <input id="cf-brand" type="text" bind:value={fBrand} />
+          </div>
+          <div class="form-row">
+            <div class="form-field">
+              <label class="field-label" for="cf-unit">Base unit</label>
+              <select id="cf-unit" bind:value={fBaseUnit}>
+                <option value="g">Grams (g)</option>
+                <option value="ml">Milliliters (ml)</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label class="field-label" for="cf-serving">Serving size</label>
+              <input id="cf-serving" type="number" step="any" placeholder="100" bind:value={fServingSize} />
+            </div>
+          </div>
+
+          <p class="section-label">Macronutrients</p>
+          <div class="form-row">
+            <div class="form-field">
+              <label class="field-label" for="cf-cal">Calories</label>
+              <input id="cf-cal" type="number" step="any" bind:value={fCalories} />
+            </div>
+            <div class="form-field">
+              <label class="field-label" for="cf-pro">Protein (g)</label>
+              <input id="cf-pro" type="number" step="any" bind:value={fProtein} />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-field">
+              <label class="field-label" for="cf-carb">Net Carbs (g)</label>
+              <input id="cf-carb" type="number" step="any" bind:value={fNetCarbs} />
+            </div>
+            <div class="form-field">
+              <label class="field-label" for="cf-fat">Fat (g)</label>
+              <input id="cf-fat" type="number" step="any" bind:value={fFat} />
+            </div>
+          </div>
+
+          <p class="section-label">Micronutrients</p>
+          <div class="form-row">
+            <div class="form-field">
+              <label class="field-label" for="cf-fiber">Fiber (g)</label>
+              <input id="cf-fiber" type="number" step="any" bind:value={fFiber} />
+            </div>
+            <div class="form-field">
+              <label class="field-label" for="cf-iron">Iron (mg)</label>
+              <input id="cf-iron" type="number" step="any" bind:value={fIron} />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-field">
+              <label class="field-label" for="cf-calcium">Calcium (mg)</label>
+              <input id="cf-calcium" type="number" step="any" bind:value={fCalcium} />
+            </div>
+            <div class="form-field">
+              <label class="field-label" for="cf-vita">Vitamin A</label>
+              <input id="cf-vita" type="number" step="any" bind:value={fVitaminA} />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-field">
+              <label class="field-label" for="cf-vitc">Vitamin C (mg)</label>
+              <input id="cf-vitc" type="number" step="any" bind:value={fVitaminC} />
+            </div>
+            <div class="form-field">
+              <label class="field-label" for="cf-vitb">Vitamin B12</label>
+              <input id="cf-vitb" type="number" step="any" bind:value={fVitaminB12} />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-field">
+              <label class="field-label" for="cf-folate">Folate</label>
+              <input id="cf-folate" type="number" step="any" bind:value={fFolate} />
+            </div>
+            <div class="form-field">
+              <label class="field-label" for="cf-potas">Potassium (mg)</label>
+              <input id="cf-potas" type="number" step="any" bind:value={fPotassium} />
+            </div>
+          </div>
+
+          {#if createError}
+            <p class="error-msg">{createError}</p>
+          {/if}
+          <div class="form-actions">
+            <Button variant="primary" onclick={handleInlineCreate} disabled={creating}>
+              {creating ? "Saving..." : "Save & add to diary"}
+            </Button>
+          </div>
+        </div>
+
+      {:else if mode === "confirm"}
         <div class="modal-header">
           <h4>{selectedFood.name}</h4>
-          <button class="btn-text" onclick={() => (selectedFood = null)}>Back</button>
+          <button class="btn-text" onclick={() => { selectedFood = null; mode = "search" }}>Back</button>
         </div>
         <div class="confirm-form">
           <div class="food-detail">
@@ -103,20 +382,34 @@
             <Button variant="primary" onclick={confirmSelection}>Add to diary</Button>
           </div>
         </div>
+
       {:else}
         <div class="modal-header">
           <h4>Add Food</h4>
           <button class="btn-text" onclick={handleClose}>Close</button>
         </div>
         <div class="search-input-wrap">
-          <input
-            class="search-input"
-            type="text"
-            placeholder="Search food items..."
-            value={query}
-            oninput={handleInput}
-          />
+          <div class="search-row">
+            <input
+              class="search-input"
+              type="text"
+              placeholder="Search food items..."
+              value={query}
+              oninput={handleInput}
+            />
+            {#if scannerSupported}
+              <button class="scan-btn" onclick={() => { barcodeError = ""; mode = "scanner" }} title="Scan barcode">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 7V5a2 2 0 0 1 2-2h2" /><path d="M17 3h2a2 2 0 0 1 2 2v2" /><path d="M21 17v2a2 2 0 0 1-2 2h-2" /><path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+                  <line x1="7" y1="12" x2="17" y2="12" /><line x1="7" y1="8" x2="17" y2="8" /><line x1="7" y1="16" x2="17" y2="16" />
+                </svg>
+              </button>
+            {/if}
+          </div>
         </div>
+        {#if barcodeError}
+          <p class="barcode-error">{barcodeError}</p>
+        {/if}
         <div class="results">
           {#if searching}
             <p class="results-hint">Searching...</p>
@@ -145,6 +438,7 @@
           </button>
         </div>
       {/if}
+
     </div>
   </div>
 {/if}
@@ -189,8 +483,14 @@
     padding: var(--space-3) var(--space-5);
   }
 
+  .search-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
   .search-input {
-    width: 100%;
+    flex: 1;
     font-family: var(--font-body);
     font-size: var(--text-base);
     color: var(--ink);
@@ -207,6 +507,35 @@
 
   .search-input::placeholder {
     color: var(--ink-faint);
+  }
+
+  .scan-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2);
+    cursor: pointer;
+    color: var(--ink-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color var(--transition-fast), border-color var(--transition-fast);
+  }
+
+  .scan-btn:hover {
+    color: var(--ink);
+    border-color: var(--border-strong);
+  }
+
+  .barcode-error {
+    padding: var(--space-2) var(--space-5);
+    font-size: var(--text-sm);
+    color: var(--accent);
+  }
+
+  .scanner-wrap {
+    flex: 1;
+    overflow: hidden;
   }
 
   .results {
@@ -336,6 +665,11 @@
     border-bottom-color: var(--border-strong);
   }
 
+  .form-field input.readonly {
+    color: var(--ink-faint);
+    cursor: default;
+  }
+
   .form-actions {
     padding-top: var(--space-2);
   }
@@ -354,5 +688,29 @@
 
   .btn-text:hover {
     color: var(--ink);
+  }
+
+  /* Create form */
+  .create-form {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-4) var(--space-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .section-label {
+    font-size: var(--text-xs);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--ink-faint);
+    margin: var(--space-2) 0 0;
+  }
+
+  .error-msg {
+    font-size: var(--text-sm);
+    color: var(--accent);
   }
 </style>

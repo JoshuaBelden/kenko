@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invalidateAll } from "$app/navigation"
   import { page } from "$app/state"
-  import { Button, Card, PageHeader } from "$lib/components"
+  import { BarcodeScanner, Button, Card, PageHeader } from "$lib/components"
 
   let foods = $state(page.data.foods ?? [])
   $effect(() => {
@@ -16,6 +16,16 @@
   let deletingId = $state<string | null>(null)
   let formError = $state("")
   let duplicateWarning = $state("")
+  let scanning = $state(false)
+  let scannerSupported = $state(false)
+  let scannerComponent = $state<BarcodeScanner | null>(null)
+  let scanRawJson = $state<Record<string, unknown> | null>(null)
+  let scanError = $state("")
+  let fBarcode = $state<string | null>(null)
+
+  $effect(() => {
+    scannerSupported = typeof window !== "undefined" && "BarcodeDetector" in window
+  })
 
   // Form fields
   let fName = $state("")
@@ -50,6 +60,52 @@
     }),
   )
 
+  async function handleBarcodeScan(barcode: string) {
+    scanError = ""
+    scanning = false
+    try {
+      const res = await fetch(`/api/shoku/barcode/${encodeURIComponent(barcode)}`)
+      if (!res.ok) {
+        scanError = "Failed to look up barcode"
+        return
+      }
+      const data = await res.json()
+      scanRawJson = data.raw ?? null
+
+      if (data.match) {
+        scanError = `Food item "${data.foodItem.name}" already exists for this barcode`
+        return
+      }
+
+      if (data.nutritionData) {
+        const d = data.nutritionData
+        fBarcode = barcode
+        fName = d.name ?? ""
+        fBrand = d.brand ?? ""
+        fBaseUnit = d.baseUnit ?? "g"
+        fServingSize = d.servingSize?.toString() ?? ""
+        fCalories = d.calories?.toString() ?? "0"
+        fProtein = d.protein?.toString() ?? "0"
+        fNetCarbs = d.netCarbs?.toString() ?? "0"
+        fFat = d.fat?.toString() ?? "0"
+        fFiber = d.fiber?.toString() ?? ""
+        fIron = d.iron?.toString() ?? ""
+        fCalcium = d.calcium?.toString() ?? ""
+        fVitaminA = d.vitaminA?.toString() ?? ""
+        fVitaminC = d.vitaminC?.toString() ?? ""
+        fVitaminB12 = d.vitaminB12?.toString() ?? ""
+        fFolate = d.folate?.toString() ?? ""
+        fPotassium = d.potassium?.toString() ?? ""
+        creating = true
+        return
+      }
+
+      scanError = "No food found for this barcode"
+    } catch {
+      scanError = "Failed to look up barcode"
+    }
+  }
+
   function resetForm() {
     fName = ""
     fBrand = ""
@@ -69,6 +125,9 @@
     fPotassium = ""
     formError = ""
     duplicateWarning = ""
+    fBarcode = null
+    scanRawJson = null
+    scanError = ""
   }
 
   function checkDuplicateName(name: string) {
@@ -86,7 +145,9 @@
     return {
       name: fName.trim(),
       brand: fBrand.trim() || null,
+      barcode: fBarcode,
       baseUnit: fBaseUnit,
+      source: fBarcode ? "openfoodfacts" : "manual",
       servingSize: numOrNull(fServingSize),
       calories: parseFloat(fCalories) || 0,
       protein: parseFloat(fProtein) || 0,
@@ -199,15 +260,66 @@
       <option value="usda">USDA</option>
     </select>
   </div>
-  {#if !creating && !editingId}
-    <Button
-      onclick={() => {
-        creating = true
-        resetForm()
-      }}>New food item</Button
-    >
+  {#if !creating && !editingId && !scanning}
+    <div class="action-buttons">
+      <Button
+        onclick={() => {
+          creating = true
+          resetForm()
+        }}>New food item</Button
+      >
+      {#if scannerSupported}
+        <Button variant="secondary" onclick={() => { scanning = true; scanError = ""; scanRawJson = null }}>Scan barcode</Button>
+      {/if}
+    </div>
   {/if}
 </section>
+
+<!-- Scanner -->
+{#if scanning}
+  <section class="section">
+    <Card>
+      <div class="scanner-card">
+        <h4>Scan Barcode</h4>
+        <div class="scanner-container">
+          <BarcodeScanner
+            bind:this={scannerComponent}
+            onscanned={handleBarcodeScan}
+            onerror={() => { scanError = "Camera access was denied"; scanning = false }}
+            oncancelled={() => { scanning = false }}
+          />
+        </div>
+      </div>
+    </Card>
+  </section>
+{/if}
+
+<!-- Scan error -->
+{#if scanError}
+  <section class="section">
+    <Card>
+      <div class="scan-message">
+        <p class="error">{scanError}</p>
+        <button class="btn-text" onclick={() => { scanError = "" }}>Dismiss</button>
+      </div>
+    </Card>
+  </section>
+{/if}
+
+<!-- Raw JSON from scan -->
+{#if scanRawJson}
+  <section class="section">
+    <Card>
+      <div class="raw-json-card">
+        <div class="raw-json-header">
+          <h4>Raw Open Food Facts Response</h4>
+          <button class="btn-text" onclick={() => { scanRawJson = null }}>Hide</button>
+        </div>
+        <pre class="raw-json">{JSON.stringify(scanRawJson, null, 2)}</pre>
+      </div>
+    </Card>
+  </section>
+{/if}
 
 <!-- Create form -->
 {#if creating}
@@ -320,6 +432,12 @@
   <div class="create-form">
     <h4>{title}</h4>
     <div class="form-fields">
+      {#if fBarcode}
+        <div class="form-field">
+          <label class="field-label" for="food-barcode">Barcode</label>
+          <input id="food-barcode" value={fBarcode} readonly class="readonly-input" />
+        </div>
+      {/if}
       <div class="form-field">
         <label class="field-label" for="food-name">Name</label>
         <input
@@ -749,5 +867,73 @@
 
   .btn-danger-text:hover {
     opacity: 0.8;
+  }
+
+  .action-buttons {
+    display: flex;
+    gap: var(--space-3);
+  }
+
+  .scanner-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .scanner-card h4 {
+    margin: 0;
+  }
+
+  .scanner-container {
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    max-height: 300px;
+  }
+
+  .scan-message {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+
+  .scan-message .error {
+    margin: 0;
+  }
+
+  .raw-json-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .raw-json-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .raw-json-header h4 {
+    margin: 0;
+  }
+
+  .raw-json {
+    font-family: monospace;
+    font-size: var(--text-xs);
+    color: var(--ink-light);
+    background: var(--paper-warm);
+    border-radius: var(--radius-sm);
+    padding: var(--space-3);
+    overflow-x: auto;
+    max-height: 400px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0;
+  }
+
+  .readonly-input {
+    color: var(--ink-faint) !important;
+    cursor: default !important;
   }
 </style>

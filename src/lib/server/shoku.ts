@@ -98,6 +98,7 @@ export function serializeFoodItem(doc: WithId<Document>) {
     userId: doc.userId.toString(),
     name: doc.name,
     brand: doc.brand ?? null,
+    barcode: doc.barcode ?? null,
     baseUnit: doc.baseUnit,
     servingSize: doc.servingSize ?? null,
     servingUnit: doc.servingUnit ?? null,

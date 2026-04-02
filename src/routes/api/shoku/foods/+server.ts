@@ -30,6 +30,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     userId: new ObjectId(locals.userId),
     name: body.name,
     brand: body.brand ?? null,
+    barcode: body.barcode ?? null,
     baseUnit: body.baseUnit,
     servingSize: body.servingSize ?? null,
     servingUnit: body.servingUnit ?? null,

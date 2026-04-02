@@ -1,3 +1,4 @@
+export { default as BarcodeScanner } from "./BarcodeScanner.svelte"
 export { default as Button } from "./Button.svelte"
 export { default as Card } from "./Card.svelte"
 export { default as ExerciseSearchModal } from "./ExerciseSearchModal.svelte"
