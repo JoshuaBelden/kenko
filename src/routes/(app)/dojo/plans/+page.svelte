@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto, invalidateAll } from "$app/navigation"
   import { page } from "$app/state"
-  import { Button, Card, PageHeader } from "$lib/components"
+  import { Button, Card, ExerciseSearchModal, PageHeader } from "$lib/components"
 
   let plans = $state(page.data.plans ?? [])
   let exercises = $state(page.data.exercises ?? [])
@@ -12,31 +12,33 @@
 
   let creating = $state(false)
   let editingPlanId = $state<string | null>(null)
-  let deletingId = $state<string | null>(null)
   let formError = $state("")
 
-  // Plan form
+  // Plan form — sessions are edited in-place, no separate session state
   let fPlanName = $state("")
   let fSessions = $state<any[]>([])
-
-  // Session editing
   let editingSessionIdx = $state<number | null>(null)
-  let sName = $state("")
-  let sTargetDay = $state<number | null>(null)
-  let sExercises = $state<any[]>([])
 
-  // Add exercise to session
-  let addExerciseOpen = $state(false)
-  let addExerciseId = $state("")
-  let addTargetSets = $state("3")
-  let addTargetReps = $state("10")
-  let addTargetWeight = $state("")
-  let addRestSeconds = $state("90")
+  // Exercise editing
+  let exerciseModalOpen = $state(false)
+  let editingExerciseIdx = $state<number | null>(null)
+
+  // Auto-save
+  let autoSaveTimer: ReturnType<typeof setTimeout> | undefined
+  let saving = $state(false)
 
   const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
+  function findExercise(exerciseId: string): any | undefined {
+    return exercises.find((e: any) => e.id === exerciseId)
+  }
+
   function exerciseName(exerciseId: string): string {
-    return exercises.find((e: any) => e.id === exerciseId)?.name ?? "Unknown"
+    return findExercise(exerciseId)?.name ?? "Unknown"
+  }
+
+  function formatLabel(value: string): string {
+    return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
   }
 
   function resetPlanForm() {
@@ -44,6 +46,14 @@
     fSessions = []
     editingSessionIdx = null
     formError = ""
+    editingExerciseIdx = null
+    clearTimeout(autoSaveTimer)
+  }
+
+  function scheduleAutoSave() {
+    if (!editingPlanId) return
+    clearTimeout(autoSaveTimer)
+    autoSaveTimer = setTimeout(() => persistPlan(), 800)
   }
 
   function startCreatePlan() {
@@ -69,68 +79,70 @@
   function addSession() {
     fSessions = [...fSessions, { name: "Session " + (fSessions.length + 1), targetDayOfWeek: null, exercises: [] }]
     editingSessionIdx = fSessions.length - 1
-    sName = fSessions[fSessions.length - 1].name
-    sTargetDay = null
-    sExercises = []
-  }
-
-  function editSession(idx: number) {
-    editingSessionIdx = idx
-    const s = fSessions[idx]
-    sName = s.name
-    sTargetDay = s.targetDayOfWeek
-    sExercises = s.exercises.map((e: any) => ({ ...e }))
-  }
-
-  function saveSession() {
-    if (editingSessionIdx === null) return
-    fSessions[editingSessionIdx] = {
-      ...fSessions[editingSessionIdx],
-      name: sName,
-      targetDayOfWeek: sTargetDay,
-      exercises: sExercises,
-    }
-    fSessions = [...fSessions]
-    editingSessionIdx = null
+    scheduleAutoSave()
   }
 
   function removeSession(idx: number) {
     fSessions = fSessions.filter((_, i) => i !== idx)
     if (editingSessionIdx === idx) editingSessionIdx = null
+    else if (editingSessionIdx !== null && editingSessionIdx > idx) editingSessionIdx--
+    scheduleAutoSave()
   }
 
-  function openAddExercise() {
-    addExerciseOpen = true
-    addExerciseId = exercises[0]?.id ?? ""
-    addTargetSets = "3"
-    addTargetReps = "10"
-    addTargetWeight = ""
-    addRestSeconds = "90"
-  }
-
-  function confirmAddExercise() {
-    if (!addExerciseId) return
-    sExercises = [...sExercises, {
-      exerciseId: addExerciseId,
-      order: sExercises.length,
-      targetSets: parseInt(addTargetSets) || 3,
-      targetReps: parseInt(addTargetReps) || 10,
-      targetWeight: addTargetWeight ? parseFloat(addTargetWeight) : null,
-      restSeconds: parseInt(addRestSeconds) || 90,
-    }]
-    addExerciseOpen = false
+  function handleAddExercise(exercise: any) {
+    if (editingSessionIdx === null) return
+    fSessions[editingSessionIdx].exercises = [
+      ...fSessions[editingSessionIdx].exercises,
+      {
+        exerciseId: exercise.exerciseId,
+        order: fSessions[editingSessionIdx].exercises.length,
+        targetSets: exercise.targetSets,
+        targetReps: exercise.targetReps,
+        targetWeight: exercise.targetWeight,
+        restSeconds: exercise.restSeconds,
+      },
+    ]
+    fSessions = [...fSessions]
+    exerciseModalOpen = false
+    scheduleAutoSave()
   }
 
   function removeExerciseFromSession(idx: number) {
-    sExercises = sExercises.filter((_, i) => i !== idx).map((e, i) => ({ ...e, order: i }))
+    if (editingSessionIdx === null) return
+    fSessions[editingSessionIdx].exercises = fSessions[editingSessionIdx].exercises
+      .filter((_: any, i: number) => i !== idx)
+      .map((e: any, i: number) => ({ ...e, order: i }))
+    fSessions = [...fSessions]
+    scheduleAutoSave()
   }
 
   function moveExercise(idx: number, direction: -1 | 1) {
+    if (editingSessionIdx === null) return
+    const exs = fSessions[editingSessionIdx].exercises
     const newIdx = idx + direction
-    if (newIdx < 0 || newIdx >= sExercises.length) return
-    const copy = [...sExercises]
+    if (newIdx < 0 || newIdx >= exs.length) return
+    const copy = [...exs]
     ;[copy[idx], copy[newIdx]] = [copy[newIdx], copy[idx]]
-    sExercises = copy.map((e, i) => ({ ...e, order: i }))
+    fSessions[editingSessionIdx].exercises = copy.map((e: any, i: number) => ({ ...e, order: i }))
+    fSessions = [...fSessions]
+    scheduleAutoSave()
+  }
+
+  function handleSessionNameInput() {
+    scheduleAutoSave()
+  }
+
+  function handleSessionDayChange() {
+    scheduleAutoSave()
+  }
+
+  function handlePlanNameInput() {
+    scheduleAutoSave()
+  }
+
+  function handleExerciseFieldChange() {
+    fSessions = [...fSessions]
+    scheduleAutoSave()
   }
 
   async function handleCreatePlan() {
@@ -163,11 +175,9 @@
     await invalidateAll()
   }
 
-  async function handleUpdatePlan() {
-    if (!fPlanName.trim()) {
-      formError = "Plan name is required"
-      return
-    }
+  async function persistPlan() {
+    if (!editingPlanId || !fPlanName.trim()) return
+    saving = true
 
     // Update name
     await fetch(`/api/dojo/plans/${editingPlanId}`, {
@@ -176,7 +186,7 @@
       body: JSON.stringify({ name: fPlanName.trim() }),
     })
 
-    // Delete existing sessions and re-add — simplest approach for full rewrite
+    // Delete existing sessions and re-add
     const existingPlan = plans.find((p: any) => p.id === editingPlanId)
     if (existingPlan) {
       for (const s of existingPlan.sessions) {
@@ -196,14 +206,24 @@
       })
     }
 
-    editingPlanId = null
-    resetPlanForm()
     await invalidateAll()
+    saving = false
+  }
+
+  async function closePlanEditor() {
+    clearTimeout(autoSaveTimer)
+    if (editingPlanId) await persistPlan()
+    editingPlanId = null
+    creating = false
+    resetPlanForm()
   }
 
   async function handleDeletePlan(id: string) {
+    if (!confirm("Delete this plan? This cannot be undone.")) return
+    clearTimeout(autoSaveTimer)
     await fetch(`/api/dojo/plans/${id}`, { method: "DELETE" })
-    deletingId = null
+    editingPlanId = null
+    resetPlanForm()
     await invalidateAll()
   }
 
@@ -227,7 +247,7 @@
 
       <div class="form-field">
         <label class="field-label">Plan Name</label>
-        <input type="text" class="field-input" bind:value={fPlanName} placeholder="e.g. Push Pull Legs" />
+        <input type="text" class="field-input" bind:value={fPlanName} oninput={handlePlanNameInput} placeholder="e.g. Push Pull Legs" />
       </div>
 
       <div class="sessions-section">
@@ -243,11 +263,11 @@
                 <div class="form-row">
                   <div class="form-field">
                     <label class="field-label">Session Name</label>
-                    <input type="text" class="field-input" bind:value={sName} />
+                    <input type="text" class="field-input" bind:value={session.name} oninput={handleSessionNameInput} />
                   </div>
                   <div class="form-field">
                     <label class="field-label">Target Day</label>
-                    <select class="field-input" bind:value={sTargetDay}>
+                    <select class="field-input" bind:value={session.targetDayOfWeek} onchange={handleSessionDayChange}>
                       <option value={null}>Any</option>
                       {#each DAY_NAMES as day, i}
                         <option value={i}>{day}</option>
@@ -257,53 +277,50 @@
                 </div>
 
                 <div class="session-exercises">
-                  <span class="field-label">Exercises ({sExercises.length})</span>
-                  {#each sExercises as ex, exIdx}
-                    <div class="session-exercise-row">
-                      <span class="exercise-order">{exIdx + 1}.</span>
-                      <span class="exercise-name-inline">{exerciseName(ex.exerciseId)}</span>
-                      <span class="exercise-targets">{ex.targetSets}x{ex.targetReps}{ex.targetWeight ? ` @ ${ex.targetWeight}lbs` : ""}</span>
-                      <span class="exercise-rest">{ex.restSeconds}s rest</span>
-                      <div class="reorder-btns">
-                        <button class="action-btn" onclick={() => moveExercise(exIdx, -1)} disabled={exIdx === 0}>&#x25B2;</button>
-                        <button class="action-btn" onclick={() => moveExercise(exIdx, 1)} disabled={exIdx === sExercises.length - 1}>&#x25BC;</button>
+                  <span class="field-label">Exercises ({session.exercises.length})</span>
+                  {#each session.exercises as ex, exIdx}
+                    {@const exData = findExercise(ex.exerciseId)}
+                    <div class="session-exercise-item" class:expanded={editingExerciseIdx === exIdx}>
+                      <div class="session-exercise-row" role="button" tabindex="0" onclick={() => (editingExerciseIdx = editingExerciseIdx === exIdx ? null : exIdx)} onkeydown={e => e.key === 'Enter' && (editingExerciseIdx = editingExerciseIdx === exIdx ? null : exIdx)}>
+                        <span class="exercise-order">{exIdx + 1}.</span>
+                        <span class="exercise-name-inline">{exData?.name ?? "Unknown"}</span>
+                        {#if exData}
+                          <span class="exercise-tag">{formatLabel(exData.muscleGroup.muscle)}</span>
+                          <span class="exercise-tag">{formatLabel(exData.equipment)}</span>
+                        {/if}
+                        <span class="exercise-targets">{ex.targetSets}x{ex.targetReps}{ex.targetWeight ? ` @ ${ex.targetWeight}lbs` : ""}</span>
+                        <span class="exercise-rest">{ex.restSeconds}s rest</span>
+                        <div class="reorder-btns">
+                          <button class="action-btn" onclick={(e) => { e.stopPropagation(); moveExercise(exIdx, -1) }} disabled={exIdx === 0}>&#x25B2;</button>
+                          <button class="action-btn" onclick={(e) => { e.stopPropagation(); moveExercise(exIdx, 1) }} disabled={exIdx === session.exercises.length - 1}>&#x25BC;</button>
+                        </div>
+                        <button class="action-btn delete" onclick={(e) => { e.stopPropagation(); removeExerciseFromSession(exIdx) }}>&#x2715;</button>
                       </div>
-                      <button class="action-btn delete" onclick={() => removeExerciseFromSession(exIdx)}>&#x2715;</button>
+                      {#if editingExerciseIdx === exIdx}
+                        <div class="exercise-edit-fields">
+                          <div class="exercise-edit-field">
+                            <label class="field-label">Sets</label>
+                            <input type="number" class="field-input" bind:value={ex.targetSets} oninput={handleExerciseFieldChange} min="1" />
+                          </div>
+                          <div class="exercise-edit-field">
+                            <label class="field-label">Reps</label>
+                            <input type="number" class="field-input" bind:value={ex.targetReps} oninput={handleExerciseFieldChange} min="1" />
+                          </div>
+                          <div class="exercise-edit-field">
+                            <label class="field-label">Weight (lbs)</label>
+                            <input type="number" class="field-input" bind:value={ex.targetWeight} oninput={handleExerciseFieldChange} placeholder="opt" />
+                          </div>
+                          <div class="exercise-edit-field">
+                            <label class="field-label">Rest (s)</label>
+                            <input type="number" class="field-input" bind:value={ex.restSeconds} oninput={handleExerciseFieldChange} min="0" />
+                          </div>
+                        </div>
+                      {/if}
                     </div>
                   {/each}
 
-                  {#if addExerciseOpen}
-                    <div class="add-exercise-form">
-                      <select class="field-input" bind:value={addExerciseId}>
-                        {#each exercises as ex}
-                          <option value={ex.id}>{ex.name}</option>
-                        {/each}
-                      </select>
-                      <div class="form-row compact">
-                        <div class="form-field">
-                          <label class="field-label">Sets</label>
-                          <input type="number" class="field-input" bind:value={addTargetSets} min="1" />
-                        </div>
-                        <div class="form-field">
-                          <label class="field-label">Reps</label>
-                          <input type="number" class="field-input" bind:value={addTargetReps} min="1" />
-                        </div>
-                        <div class="form-field">
-                          <label class="field-label">Weight (lbs)</label>
-                          <input type="number" class="field-input" bind:value={addTargetWeight} placeholder="opt" />
-                        </div>
-                        <div class="form-field">
-                          <label class="field-label">Rest (s)</label>
-                          <input type="number" class="field-input" bind:value={addRestSeconds} min="0" />
-                        </div>
-                      </div>
-                      <div class="form-actions">
-                        <Button variant="secondary" onclick={() => (addExerciseOpen = false)}>Cancel</Button>
-                        <Button variant="primary" onclick={confirmAddExercise}>Add</Button>
-                      </div>
-                    </div>
-                  {:else if exercises.length > 0}
-                    <button class="add-exercise-btn" onclick={openAddExercise}>+ Add Exercise</button>
+                  {#if exercises.length > 0}
+                    <button class="add-exercise-btn" onclick={() => (exerciseModalOpen = true)}>+ Add Exercise</button>
                   {:else}
                     <p class="hint">Create exercises in the <a href="/dojo/library">library</a> first</p>
                   {/if}
@@ -311,11 +328,11 @@
 
                 <div class="form-actions">
                   <Button variant="secondary" onclick={() => removeSession(idx)}>Remove Session</Button>
-                  <Button variant="primary" onclick={saveSession}>Done</Button>
+                  <Button variant="primary" onclick={() => (editingSessionIdx = null)}>Done</Button>
                 </div>
               </div>
             {:else}
-              <div class="session-summary" role="button" tabindex="0" onclick={() => editSession(idx)} onkeydown={e => e.key === 'Enter' && editSession(idx)}>
+              <div class="session-summary" role="button" tabindex="0" onclick={() => (editingSessionIdx = idx)} onkeydown={e => e.key === 'Enter' && (editingSessionIdx = idx)}>
                 <div class="session-summary-header">
                   <strong>{session.name}</strong>
                   {#if session.targetDayOfWeek !== null}
@@ -334,10 +351,18 @@
       {/if}
 
       <div class="form-actions">
-        <Button variant="secondary" onclick={() => { creating = false; editingPlanId = null; resetPlanForm() }}>Cancel</Button>
-        <Button variant="primary" onclick={creating ? handleCreatePlan : handleUpdatePlan}>
-          {creating ? "Create Plan" : "Save Plan"}
-        </Button>
+        {#if editingPlanId}
+          <button class="delete-btn" onclick={() => handleDeletePlan(editingPlanId!)}>Delete</button>
+          <div class="form-actions-right">
+            <span class="save-status">{saving ? "Saving..." : ""}</span>
+            <Button variant="secondary" onclick={closePlanEditor}>Done</Button>
+          </div>
+        {:else}
+          <div class="form-actions-right">
+            <Button variant="secondary" onclick={() => { creating = false; resetPlanForm() }}>Cancel</Button>
+            <Button variant="primary" onclick={handleCreatePlan}>Create Plan</Button>
+          </div>
+        {/if}
       </div>
     </div>
   </Card>
@@ -371,18 +396,9 @@
           </div>
         {/each}
 
-        {#if deletingId === plan.id}
-          <div class="confirm-delete">
-            <span class="confirm-text">Delete this plan? Existing logs keep their snapshots.</span>
-            <Button variant="secondary" onclick={() => (deletingId = null)}>No</Button>
-            <Button variant="primary" onclick={() => handleDeletePlan(plan.id)}>Yes, Delete</Button>
-          </div>
-        {:else}
-          <div class="plan-actions">
-            <button class="action-btn" onclick={() => startEditPlan(plan)}>Edit</button>
-            <button class="action-btn delete" onclick={() => (deletingId = plan.id)}>Delete</button>
-          </div>
-        {/if}
+        <div class="plan-actions">
+          <button class="edit-btn" onclick={() => startEditPlan(plan)}>Edit</button>
+        </div>
       </div>
     </Card>
   {/if}
@@ -393,6 +409,13 @@
     <p>No workout plans yet. Create a plan to start training.</p>
   </div>
 {/if}
+
+<ExerciseSearchModal
+  open={exerciseModalOpen}
+  {exercises}
+  onclose={() => (exerciseModalOpen = false)}
+  onadd={handleAddExercise}
+/>
 
 <style>
   .plans-controls {
@@ -453,10 +476,6 @@
     flex-wrap: wrap;
   }
 
-  .form-row.compact {
-    gap: var(--space-2);
-  }
-
   .form-error {
     font-size: var(--text-sm);
     color: var(--accent);
@@ -465,7 +484,20 @@
   .form-actions {
     display: flex;
     gap: var(--space-2);
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .form-actions-right {
+    display: flex;
+    gap: var(--space-2);
+    align-items: center;
+  }
+
+  .save-status {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
   }
 
   .sessions-section {
@@ -502,6 +534,16 @@
     gap: var(--space-2);
   }
 
+  .session-exercise-item {
+    border-radius: var(--radius-sm);
+    transition: background var(--transition-fast);
+  }
+
+  .session-exercise-item.expanded {
+    background: var(--paper-card);
+    padding: var(--space-2);
+  }
+
   .session-exercise-row {
     display: flex;
     align-items: center;
@@ -509,6 +551,20 @@
     font-family: var(--font-body);
     font-size: var(--text-sm);
     padding: var(--space-1) 0;
+    cursor: pointer;
+  }
+
+  .exercise-edit-fields {
+    display: flex;
+    gap: var(--space-3);
+    padding: var(--space-2) 0 var(--space-1) 20px;
+  }
+
+  .exercise-edit-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    flex: 1;
   }
 
   .exercise-order {
@@ -520,6 +576,15 @@
     flex: 1;
     color: var(--ink);
     font-weight: 500;
+  }
+
+  .exercise-tag {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    padding: 1px var(--space-2);
+    border-radius: var(--radius-pill);
+    background: var(--paper-warm);
+    color: var(--ink-light);
   }
 
   .exercise-targets {
@@ -576,16 +641,6 @@
   .add-exercise-btn:hover {
     border-color: var(--border-strong);
     color: var(--ink);
-  }
-
-  .add-exercise-form {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    padding: var(--space-3);
-    border: 0.5px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--paper-card);
   }
 
   .hint {
@@ -701,19 +756,40 @@
     border-top: 0.5px solid var(--border);
   }
 
-  .confirm-delete {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding-top: var(--space-2);
-    border-top: 0.5px solid var(--border);
-  }
-
-  .confirm-text {
+  .edit-btn {
+    padding: var(--space-2) var(--space-5);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--ink-light);
     font-family: var(--font-body);
     font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .edit-btn:hover {
+    border-color: var(--ink);
+    color: var(--ink);
+  }
+
+  .delete-btn {
+    padding: var(--space-2) var(--space-5);
+    border: 0.5px solid var(--accent);
+    border-radius: var(--radius-sm);
+    background: none;
     color: var(--accent);
-    flex: 1;
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .delete-btn:hover {
+    background: var(--accent);
+    color: white;
   }
 
   .empty-state {

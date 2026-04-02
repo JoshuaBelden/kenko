@@ -50,6 +50,7 @@ export type Equipment =
   | "dumbbell"
   | "cable"
   | "machine"
+  | "medicine_ball"
   | "resistance_band"
   | "bodyweight"
   | "other"

@@ -1,27 +1,6 @@
 import "dotenv/config"
 import { MongoClient, ObjectId } from "mongodb"
-
-type Equipment = "barbell" | "dumbbell" | "cable" | "machine" | "resistance_band" | "bodyweight" | "other"
-
-type MuscleRegion = "torso" | "arms" | "lower_body"
-
-type Muscle =
-  | "chest"
-  | "abs"
-  | "back"
-  | "lower_back"
-  | "trapezius"
-  | "neck"
-  | "shoulders"
-  | "biceps"
-  | "triceps"
-  | "forearms"
-  | "glutes"
-  | "quads"
-  | "hamstrings"
-  | "calves"
-  | "abductors"
-  | "adductors"
+import type { Equipment, Muscle, MuscleRegion } from "../src/lib/server/dojo"
 
 interface GlobalExercise {
   _id: ObjectId
@@ -86,6 +65,26 @@ const exercises: GlobalExercise[] = [
     userId: null,
     isGlobal: true,
     name: "Incline Dumbbell Bench Press",
+    muscleGroup: { region: "torso", muscle: "chest" },
+    equipment: "dumbbell",
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    _id: new ObjectId(),
+    userId: null,
+    isGlobal: true,
+    name: "Dumbbell Squeeze Press",
+    muscleGroup: { region: "torso", muscle: "chest" },
+    equipment: "dumbbell",
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    _id: new ObjectId(),
+    userId: null,
+    isGlobal: true,
+    name: "Svend Press",
     muscleGroup: { region: "torso", muscle: "chest" },
     equipment: "dumbbell",
     createdAt: now,
@@ -178,6 +177,16 @@ const exercises: GlobalExercise[] = [
     name: "Chest Dip",
     muscleGroup: { region: "torso", muscle: "chest" },
     equipment: "bodyweight",
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    _id: new ObjectId(),
+    userId: null,
+    isGlobal: true,
+    name: "Alternating Medicine Ball Push Up",
+    muscleGroup: { region: "torso", muscle: "chest" },
+    equipment: "medicine_ball",
     createdAt: now,
     updatedAt: now,
   },
@@ -283,6 +292,46 @@ const exercises: GlobalExercise[] = [
     createdAt: now,
     updatedAt: now,
   },
+  {
+    _id: new ObjectId(),
+    userId: null,
+    isGlobal: true,
+    name: "Dumbbell Side Bend",
+    muscleGroup: { region: "torso", muscle: "abs" },
+    equipment: "dumbbell",
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    _id: new ObjectId(),
+    userId: null,
+    isGlobal: true,
+    name: "Alternating Heel Touch",
+    muscleGroup: { region: "torso", muscle: "abs" },
+    equipment: "bodyweight",
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    _id: new ObjectId(),
+    userId: null,
+    isGlobal: true,
+    name: "Scissor Kick",
+    muscleGroup: { region: "torso", muscle: "abs" },
+    equipment: "bodyweight",
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    _id: new ObjectId(),
+    userId: null,
+    isGlobal: true,
+    name: "Mountain Climbers",
+    muscleGroup: { region: "torso", muscle: "abs" },
+    equipment: "bodyweight",
+    createdAt: now,
+    updatedAt: now,
+  },
 
   // ─── BACK ─────────────────────────────────────────────────────────
   {
@@ -310,6 +359,16 @@ const exercises: GlobalExercise[] = [
     userId: null,
     isGlobal: true,
     name: "Dumbbell Row",
+    muscleGroup: { region: "torso", muscle: "back" },
+    equipment: "dumbbell",
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    _id: new ObjectId(),
+    userId: null,
+    isGlobal: true,
+    name: "Dumbbell Bent Over Row",
     muscleGroup: { region: "torso", muscle: "back" },
     equipment: "dumbbell",
     createdAt: now,
@@ -467,6 +526,16 @@ const exercises: GlobalExercise[] = [
     createdAt: now,
     updatedAt: now,
   },
+  {
+    _id: new ObjectId(),
+    userId: null,
+    isGlobal: true,
+    name: "Alternating Superman",
+    muscleGroup: { region: "torso", muscle: "lower_back" },
+    equipment: "bodyweight",
+    createdAt: now,
+    updatedAt: now,
+  },
 
   // ─── TRAPEZIUS ────────────────────────────────────────────────────
   {
@@ -516,6 +585,17 @@ const exercises: GlobalExercise[] = [
     name: "Rack Pull",
     muscleGroup: { region: "torso", muscle: "trapezius" },
     equipment: "barbell",
+    createdAt: now,
+    updatedAt: now,
+  },
+
+  {
+    _id: new ObjectId(),
+    userId: null,
+    isGlobal: true,
+    name: "Dumbbell Upright row",
+    muscleGroup: { region: "torso", muscle: "trapezius" },
+    equipment: "dumbbell",
     createdAt: now,
     updatedAt: now,
   },
@@ -628,6 +708,16 @@ const exercises: GlobalExercise[] = [
     userId: null,
     isGlobal: true,
     name: "Reverse Fly",
+    muscleGroup: { region: "arms", muscle: "shoulders" },
+    equipment: "dumbbell",
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    _id: new ObjectId(),
+    userId: null,
+    isGlobal: true,
+    name: "Arnold Press",
     muscleGroup: { region: "arms", muscle: "shoulders" },
     equipment: "dumbbell",
     createdAt: now,
@@ -857,6 +947,16 @@ const exercises: GlobalExercise[] = [
     createdAt: now,
     updatedAt: now,
   },
+  {
+    _id: new ObjectId(),
+    userId: null,
+    isGlobal: true,
+    name: "Bench Dips",
+    muscleGroup: { region: "arms", muscle: "triceps" },
+    equipment: "bodyweight",
+    createdAt: now,
+    updatedAt: now,
+  },
 
   // ─── FOREARMS ─────────────────────────────────────────────────────
   {
@@ -1047,12 +1147,13 @@ const exercises: GlobalExercise[] = [
     _id: new ObjectId(),
     userId: null,
     isGlobal: true,
-    name: "Walking Lunge",
+    name: "Dumbbell Lunge",
     muscleGroup: { region: "lower_body", muscle: "quads" },
     equipment: "dumbbell",
     createdAt: now,
     updatedAt: now,
   },
+
   {
     _id: new ObjectId(),
     userId: null,
@@ -1090,6 +1191,26 @@ const exercises: GlobalExercise[] = [
     name: "Step Up",
     muscleGroup: { region: "lower_body", muscle: "quads" },
     equipment: "dumbbell",
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    _id: new ObjectId(),
+    userId: null,
+    isGlobal: true,
+    name: "Dumbbell Squat",
+    muscleGroup: { region: "lower_body", muscle: "quads" },
+    equipment: "dumbbell",
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    _id: new ObjectId(),
+    userId: null,
+    isGlobal: true,
+    name: "Squat",
+    muscleGroup: { region: "lower_body", muscle: "quads" },
+    equipment: "bodyweight",
     createdAt: now,
     updatedAt: now,
   },
@@ -1204,6 +1325,16 @@ const exercises: GlobalExercise[] = [
     name: "Leg Press Calf Raise",
     muscleGroup: { region: "lower_body", muscle: "calves" },
     equipment: "machine",
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    _id: new ObjectId(),
+    userId: null,
+    isGlobal: true,
+    name: "Dumbbell Calf Raise",
+    muscleGroup: { region: "lower_body", muscle: "quads" },
+    equipment: "dumbbell",
     createdAt: now,
     updatedAt: now,
   },
@@ -1606,26 +1737,27 @@ async function seed() {
     const db = client.db("kenko")
     const collection = db.collection("exercises")
 
-    const existingCount = await collection.countDocuments({ isGlobal: true })
-    if (existingCount > 0) {
-      console.log(`Found ${existingCount} global exercises already seeded. Skipping.`)
-      return
-    }
-
     // Backfill existing user exercises that lack isGlobal
-    await collection.updateMany(
-      { isGlobal: { $exists: false } },
-      { $set: { isGlobal: false } },
-    )
+    await collection.updateMany({ isGlobal: { $exists: false } }, { $set: { isGlobal: false } })
 
-    const result = await collection.insertMany(exercises)
-    console.log(`Seeded ${result.insertedCount} global exercises.`)
+    let inserted = 0
+    let skipped = 0
+    for (const exercise of exercises) {
+      const result = await collection.updateOne(
+        { isGlobal: true, name: exercise.name },
+        { $setOnInsert: exercise },
+        { upsert: true },
+      )
+      if (result.upsertedCount > 0) inserted++
+      else skipped++
+    }
+    console.log(`Seeded ${inserted} new global exercises. Skipped ${skipped} existing.`)
   } finally {
     await client.close()
   }
 }
 
-seed().catch((err) => {
+seed().catch(err => {
   console.error("Seed failed:", err)
   process.exit(1)
 })

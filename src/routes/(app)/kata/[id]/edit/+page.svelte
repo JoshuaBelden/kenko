@@ -231,7 +231,7 @@
   .toggle-btn {
     padding: var(--space-1) var(--space-3);
     border: 0.5px solid var(--border);
-    border-radius: var(--radius-pill);
+    border-radius: var(--radius-sm);
     background: none;
     font-family: var(--font-body);
     font-size: var(--text-sm);
@@ -289,7 +289,7 @@
   .delete-btn {
     padding: var(--space-2) var(--space-5);
     border: 0.5px solid var(--accent);
-    border-radius: var(--radius-pill);
+    border-radius: var(--radius-sm);
     background: none;
     color: var(--accent);
     font-family: var(--font-body);
@@ -312,7 +312,7 @@
   .submit-btn {
     padding: var(--space-2) var(--space-5);
     border: none;
-    border-radius: var(--radius-pill);
+    border-radius: var(--radius-sm);
     background: var(--accent);
     color: white;
     font-family: var(--font-body);

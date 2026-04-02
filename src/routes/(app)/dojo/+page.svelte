@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { goto } from "$app/navigation"
+  import { goto, invalidateAll } from "$app/navigation"
   import { page } from "$app/state"
   import { Button, Card, PageHeader, StatNumber } from "$lib/components"
   import { journeyLens } from "$lib/stores/journeyLens.svelte"
@@ -62,6 +62,14 @@
   async function startSession(planId: string, sessionId: string) {
     goto(`/dojo?startPlan=${planId}&startSession=${sessionId}`)
   }
+
+  let deletingLogId = $state<string | null>(null)
+
+  async function handleDeleteLog(id: string) {
+    await fetch(`/api/dojo/logs/${id}`, { method: "DELETE" })
+    deletingLogId = null
+    await invalidateAll()
+  }
 </script>
 
 <PageHeader kanji="道場" title="Dojo" subtitle="Forge your strength" />
@@ -83,7 +91,18 @@
             <span class="log-plan-name">{log.planSnapshot?.planName ?? ""}</span>
             <span class="log-date">{formatDate(log.startedAt)} at {formatTime(log.startedAt)}</span>
           </div>
-          <Button variant="primary" href="/dojo/session/{log.id}">Resume</Button>
+          <div class="log-actions">
+            <Button variant="secondary" href="/dojo/session/{log.id}">Resume</Button>
+            {#if deletingLogId === log.id}
+              <div class="confirm-delete-inline">
+                <span class="confirm-text">Delete?</span>
+                <button class="confirm-btn yes" onclick={() => handleDeleteLog(log.id)}>Yes</button>
+                <button class="confirm-btn no" onclick={() => (deletingLogId = null)}>No</button>
+              </div>
+            {:else}
+              <button class="delete-btn-sm" onclick={() => (deletingLogId = log.id)}>Delete</button>
+            {/if}
+          </div>
         </div>
       </Card>
     {/each}
@@ -204,6 +223,71 @@
     font-family: var(--font-body);
     font-size: var(--text-xs);
     color: var(--ink-faint);
+  }
+
+  .log-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .delete-btn-sm {
+    padding: var(--space-2) var(--space-4);
+    border: 0.5px solid var(--accent);
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--accent);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .delete-btn-sm:hover {
+    background: var(--accent);
+    color: white;
+  }
+
+  .confirm-delete-inline {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .confirm-text {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--accent);
+  }
+
+  .confirm-btn {
+    padding: var(--space-1) var(--space-3);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: none;
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .confirm-btn.yes {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .confirm-btn.yes:hover {
+    background: var(--accent);
+    color: white;
+  }
+
+  .confirm-btn.no {
+    color: var(--ink-light);
+  }
+
+  .confirm-btn.no:hover {
+    border-color: var(--ink-light);
   }
 
   .log-meta {

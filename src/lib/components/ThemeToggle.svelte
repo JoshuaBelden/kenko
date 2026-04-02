@@ -47,7 +47,7 @@
     justify-content: center;
     width: 32px;
     height: 32px;
-    border-radius: var(--radius-pill);
+    border-radius: var(--radius-sm);
     border: 0.5px solid var(--border);
     background: var(--paper-warm);
     color: var(--ink-light);

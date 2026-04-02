@@ -350,7 +350,7 @@
   .log-btn {
     padding: var(--space-1) var(--space-3);
     border: 0.5px solid var(--border);
-    border-radius: var(--radius-pill);
+    border-radius: var(--radius-sm);
     background: none;
     font-family: var(--font-body);
     font-size: var(--text-xs);
