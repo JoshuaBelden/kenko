@@ -1,4 +1,4 @@
-import { getExercisesCollection, getWorkoutLogsCollection, serializeExercise, serializeWorkoutLog } from "$lib/server/dojo"
+import { getExercisesCollection, getWorkoutLogsCollection, exerciseFilterForUser, serializeExercise, serializeWorkoutLog } from "$lib/server/dojo"
 import { ObjectId } from "mongodb"
 import type { PageServerLoad } from "./$types"
 
@@ -15,7 +15,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
   const log = await logsCol.findOne({ _id: new ObjectId(params.logId), userId })
   if (!log) return { log: null, exercises: [] }
 
-  const allExercises = await exercisesCol.find({ userId }).sort({ name: 1 }).toArray()
+  const allExercises = await exercisesCol.find(exerciseFilterForUser(userId)).sort({ name: 1 }).toArray()
 
   return {
     log: serializeWorkoutLog(log),

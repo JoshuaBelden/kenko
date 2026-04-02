@@ -2,6 +2,7 @@ import {
   getExercisesCollection,
   getWorkoutPlansCollection,
   getWorkoutLogsCollection,
+  exerciseFilterForUser,
   serializeExercise,
   ALL_MUSCLES,
   VALID_EQUIPMENT,
@@ -18,7 +19,7 @@ import type { RequestHandler } from "./$types"
 export const GET: RequestHandler = async ({ locals, url }) => {
   if (!locals.userId) return json({ error: "Unauthorized" }, { status: 401 })
 
-  const filter: Record<string, unknown> = { userId: new ObjectId(locals.userId) }
+  const filter: Record<string, unknown> = exerciseFilterForUser(new ObjectId(locals.userId))
 
   const region = url.searchParams.get("region")
   if (region && VALID_REGIONS.includes(region as MuscleRegion)) {
@@ -61,6 +62,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
   const exercises = await getExercisesCollection()
   const result = await exercises.insertOne({
     userId: new ObjectId(locals.userId),
+    isGlobal: false,
     name: body.name.trim(),
     muscleGroup: {
       region: body.muscleGroup.region,

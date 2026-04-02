@@ -2,6 +2,7 @@ import {
   getExercisesCollection,
   getWorkoutPlansCollection,
   getWorkoutLogsCollection,
+  exerciseFilterForUser,
   serializeExercise,
   VALID_REGIONS,
   MUSCLES_BY_REGION,
@@ -18,7 +19,7 @@ export const GET: RequestHandler = async ({ locals, params }) => {
   const exercises = await getExercisesCollection()
   const item = await exercises.findOne({
     _id: new ObjectId(params.id),
-    userId: new ObjectId(locals.userId),
+    ...exerciseFilterForUser(new ObjectId(locals.userId)),
   })
 
   if (!item) return json({ error: "Not found" }, { status: 404 })
@@ -27,6 +28,11 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 
 export const PUT: RequestHandler = async ({ locals, params, request }) => {
   if (!locals.userId) return json({ error: "Unauthorized" }, { status: 401 })
+
+  const exercises = await getExercisesCollection()
+  const existing = await exercises.findOne({ _id: new ObjectId(params.id) })
+  if (!existing) return json({ error: "Not found" }, { status: 404 })
+  if (existing.isGlobal) return json({ error: "Global exercises cannot be modified" }, { status: 403 })
 
   const body = await request.json()
   const updates: Record<string, unknown> = { updatedAt: new Date() }
@@ -48,7 +54,6 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
     updates.equipment = body.equipment
   }
 
-  const exercises = await getExercisesCollection()
   const result = await exercises.findOneAndUpdate(
     { _id: new ObjectId(params.id), userId: new ObjectId(locals.userId) },
     { $set: updates },
@@ -66,8 +71,10 @@ export const DELETE: RequestHandler = async ({ locals, params }) => {
   const userId = new ObjectId(locals.userId)
 
   const exercises = await getExercisesCollection()
-  const item = await exercises.findOne({ _id: exerciseId, userId })
+  const item = await exercises.findOne({ _id: exerciseId })
   if (!item) return json({ error: "Not found" }, { status: 404 })
+  if (item.isGlobal) return json({ error: "Global exercises cannot be deleted" }, { status: 403 })
+  if (item.userId?.toString() !== locals.userId) return json({ error: "Not found" }, { status: 404 })
 
   // Check if referenced in any plan
   const plans = await getWorkoutPlansCollection()

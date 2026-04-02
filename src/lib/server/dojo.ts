@@ -1,4 +1,4 @@
-import type { Document, ObjectId, WithId } from "mongodb"
+import type { Document, Filter, ObjectId, WithId } from "mongodb"
 import { getDb } from "./db"
 import { getActiveJourneyIds } from "./journeys"
 
@@ -78,10 +78,15 @@ export const VALID_EQUIPMENT: Equipment[] = [
 // Serializers
 // ========================================
 
+export function exerciseFilterForUser(userId: ObjectId): Filter<Document> {
+  return { $or: [{ isGlobal: true }, { userId }] }
+}
+
 export function serializeExercise(doc: WithId<Document>) {
   return {
     id: doc._id.toString(),
-    userId: doc.userId.toString(),
+    userId: doc.userId ? doc.userId.toString() : null,
+    isGlobal: doc.isGlobal ?? false,
     name: doc.name,
     muscleGroup: doc.muscleGroup ?? { region: "torso", muscle: "chest" },
     equipment: doc.equipment ?? "bodyweight",

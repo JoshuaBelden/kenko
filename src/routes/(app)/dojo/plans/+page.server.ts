@@ -1,4 +1,4 @@
-import { getExercisesCollection, getWorkoutPlansCollection, serializeExercise, serializeWorkoutPlan } from "$lib/server/dojo"
+import { getExercisesCollection, getWorkoutPlansCollection, exerciseFilterForUser, serializeExercise, serializeWorkoutPlan } from "$lib/server/dojo"
 import { ObjectId } from "mongodb"
 import type { PageServerLoad } from "./$types"
 
@@ -14,7 +14,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 
   const [plans, exercises] = await Promise.all([
     plansCol.find({ userId }).sort({ createdAt: -1 }).toArray(),
-    exercisesCol.find({ userId }).sort({ name: 1 }).toArray(),
+    exercisesCol.find(exerciseFilterForUser(userId)).sort({ name: 1 }).toArray(),
   ])
 
   return {

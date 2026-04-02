@@ -2,6 +2,7 @@ import {
   getExercisesCollection,
   getWorkoutLogsCollection,
   getWorkoutPlansCollection,
+  exerciseFilterForUser,
   serializeExercise,
   serializeWorkoutLog,
   serializeWorkoutPlan,
@@ -29,7 +30,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const [plans, logs, exercises] = await Promise.all([
     plansCol.find({ userId }).sort({ createdAt: -1 }).toArray(),
     logsCol.find(logFilter).sort({ startedAt: -1 }).limit(20).toArray(),
-    exercisesCol.find({ userId }).sort({ name: 1 }).toArray(),
+    exercisesCol.find(exerciseFilterForUser(userId)).sort({ name: 1 }).toArray(),
   ])
 
   // Handle starting a new session from a plan (via query params)
