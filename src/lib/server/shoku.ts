@@ -16,6 +16,11 @@ export async function getDiaryEntriesCollection() {
   return db.collection("diaryEntries")
 }
 
+export async function getWaterLogCollection() {
+  const db = await getDb()
+  return db.collection("waterLog")
+}
+
 // ========================================
 // Unit Conversion
 // ========================================

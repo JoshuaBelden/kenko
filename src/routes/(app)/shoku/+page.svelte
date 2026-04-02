@@ -8,11 +8,13 @@
   let grouped = $state(page.data.grouped ?? {})
   let totals = $state(page.data.totals ?? { calories: 0, protein: 0, netCarbs: 0, fat: 0 })
   let currentDate = $state(page.data.date ?? new Date().toISOString().split("T")[0])
+  let waterOunces = $state(page.data.waterOunces ?? 0)
 
   $effect(() => {
     grouped = page.data.grouped ?? {}
     totals = page.data.totals ?? { calories: 0, protein: 0, netCarbs: 0, fat: 0 }
     currentDate = page.data.date ?? new Date().toISOString().split("T")[0]
+    waterOunces = page.data.waterOunces ?? 0
   })
 
   // Food search modal state
@@ -31,6 +33,40 @@
   let editCategory = $state("")
   let editNote = $state("")
   let deletingId = $state<string | null>(null)
+
+  // Water tracking state
+  let waterAdd = $state("")
+  let waterSaving = $state(false)
+
+  async function addWater() {
+    const oz = parseFloat(waterAdd)
+    if (!oz || oz <= 0) return
+    waterSaving = true
+    const newTotal = waterOunces + oz
+    const res = await fetch("/api/shoku/water", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ounces: newTotal, date: currentDate }),
+    })
+    if (res.ok) {
+      waterOunces = newTotal
+      waterAdd = ""
+    }
+    waterSaving = false
+  }
+
+  async function resetWater() {
+    waterSaving = true
+    const res = await fetch("/api/shoku/water", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ounces: 0, date: currentDate }),
+    })
+    if (res.ok) {
+      waterOunces = 0
+    }
+    waterSaving = false
+  }
 
   // Expanded categories
   let expandedEmpty = $state<Set<string>>(new Set())
@@ -317,6 +353,33 @@
     {/if}
   </section>
 {/each}
+
+<!-- Water tracking -->
+<section class="section">
+  <div class="category-header">
+    <h3>Water</h3>
+  </div>
+  <Card>
+    <div class="water-section">
+      <span class="water-total">{waterOunces} oz</span>
+      <div class="water-add">
+        <input
+          type="number"
+          class="water-input"
+          min="0"
+          step="any"
+          placeholder="oz"
+          bind:value={waterAdd}
+          onkeydown={e => { if (e.key === "Enter") addWater() }}
+        />
+        <Button variant="primary" onclick={addWater} disabled={waterSaving}>Add</Button>
+        {#if waterOunces > 0}
+          <button class="btn-text" onclick={resetWater} disabled={waterSaving}>Reset</button>
+        {/if}
+      </div>
+    </div>
+  </Card>
+</section>
 
 <FoodSearchModal
   open={searchOpen}
@@ -626,5 +689,46 @@
 
   .btn-danger-text:hover {
     opacity: 0.8;
+  }
+
+  /* Water section */
+  .water-section {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+  }
+
+  .water-total {
+    font-size: var(--text-lg);
+    font-weight: 500;
+    min-width: 5rem;
+  }
+
+  .water-add {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin-left: auto;
+  }
+
+  .water-input {
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    color: var(--ink);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    padding: var(--space-2) 0;
+    outline: none;
+    width: 5rem;
+    text-align: right;
+  }
+
+  .water-input:focus {
+    border-bottom-color: var(--border-strong);
+  }
+
+  .water-input::placeholder {
+    color: var(--ink-faint);
   }
 </style>

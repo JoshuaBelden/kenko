@@ -1,9 +1,9 @@
-import { getDiaryEntriesCollection, serializeDiaryEntry } from "$lib/server/shoku"
+import { getDiaryEntriesCollection, getWaterLogCollection, serializeDiaryEntry } from "$lib/server/shoku"
 import { ObjectId } from "mongodb"
 import type { PageServerLoad } from "./$types"
 
 export const load: PageServerLoad = async ({ locals, url }) => {
-  if (!locals.userId) return { grouped: {}, totals: { calories: 0, protein: 0, netCarbs: 0, fat: 0 } }
+  if (!locals.userId) return { grouped: {}, totals: { calories: 0, protein: 0, netCarbs: 0, fat: 0 }, waterOunces: 0 }
 
   const dateStr = url.searchParams.get("date") ?? new Date().toISOString().split("T")[0]
   const date = new Date(dateStr + "T00:00:00.000Z")
@@ -46,5 +46,12 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   totals.netCarbs = Math.round(totals.netCarbs * 10) / 10
   totals.fat = Math.round(totals.fat * 10) / 10
 
-  return { grouped, totals, date: dateStr }
+  const waterLog = await getWaterLogCollection()
+  const waterDoc = await waterLog.findOne({
+    userId: new ObjectId(locals.userId),
+    date: dateStr,
+  })
+  const waterOunces = waterDoc?.ounces ?? 0
+
+  return { grouped, totals, date: dateStr, waterOunces }
 }
