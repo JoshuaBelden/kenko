@@ -3,7 +3,7 @@ import { getJourneysCollection } from "./collections"
 import { getDb } from "./db"
 
 /** Collection names that carry a journeyIds field. Future modules add theirs here. */
-const DATA_COLLECTIONS: string[] = ["diaryEntries"]
+const DATA_COLLECTIONS: string[] = ["diaryEntries", "workoutLogs"]
 
 export async function createDefaultJourney(userId: ObjectId): Promise<void> {
   const journeys = await getJourneysCollection()

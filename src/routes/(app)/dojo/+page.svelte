@@ -1,117 +1,261 @@
 <script lang="ts">
-  import { Card, PageHeader, StatNumber } from "$lib/components"
+  import { goto } from "$app/navigation"
+  import { page } from "$app/state"
+  import { Button, Card, PageHeader, StatNumber } from "$lib/components"
+  import { journeyLens } from "$lib/stores/journeyLens.svelte"
+
+  let plans = $state(page.data.plans ?? [])
+  let logs = $state(page.data.logs ?? [])
+  $effect(() => {
+    plans = page.data.plans ?? []
+    logs = page.data.logs ?? []
+  })
+
+  // If a new log was just created, redirect to its session page
+  $effect(() => {
+    const newLog = page.data.newLog
+    if (newLog) {
+      goto(`/dojo/session/${newLog.id}`, { replaceState: true })
+    }
+  })
+
+  // Journey lens re-navigation
+  $effect(() => {
+    const jid = journeyLens.selectedId
+    const current = page.url.searchParams.get("journeyId")
+    if (jid !== current) {
+      const params = new URLSearchParams()
+      if (jid) params.set("journeyId", jid)
+      goto(`/dojo${params.toString() ? "?" + params.toString() : ""}`, { invalidateAll: true })
+    }
+  })
+
+  const inProgressLogs = $derived(logs.filter((l: any) => l.status === "in_progress"))
+  const completedLogs = $derived(logs.filter((l: any) => l.status === "completed"))
+
+  const thisWeekCount = $derived(() => {
+    const now = new Date()
+    const startOfWeek = new Date(now)
+    startOfWeek.setDate(now.getDate() - now.getDay())
+    startOfWeek.setHours(0, 0, 0, 0)
+    return completedLogs.filter((l: any) => new Date(l.completedAt) >= startOfWeek).length
+  })
+
+  function formatDate(iso: string): string {
+    const d = new Date(iso)
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+  }
+
+  function formatTime(iso: string): string {
+    const d = new Date(iso)
+    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+  }
+
+  function duration(start: string, end: string | null): string {
+    if (!end) return "In progress"
+    const ms = new Date(end).getTime() - new Date(start).getTime()
+    const mins = Math.round(ms / 60000)
+    if (mins < 60) return `${mins}m`
+    return `${Math.floor(mins / 60)}h ${mins % 60}m`
+  }
+
+  async function startSession(planId: string, sessionId: string) {
+    goto(`/dojo?startPlan=${planId}&startSession=${sessionId}`)
+  }
 </script>
 
-<PageHeader kanji="道場" title="Dojo" subtitle="Train with purpose" />
+<PageHeader kanji="道場" title="Dojo" subtitle="Forge your strength" />
 
-<section class="section">
-  <h3>Workout Library</h3>
-  <div class="workout-grid">
-    <Card>
-      <span class="workout-label">Strength</span>
-      <h4 class="workout-name">Upper Body Push</h4>
-      <p class="workout-detail">Chest, shoulders, triceps</p>
-      <div class="workout-meta">
-        <StatNumber value="45" label="min" size="sm" />
-      </div>
-    </Card>
-    <Card>
-      <span class="workout-label">Strength</span>
-      <h4 class="workout-name">Lower Body</h4>
-      <p class="workout-detail">Squats, lunges, deadlifts</p>
-      <div class="workout-meta">
-        <StatNumber value="50" label="min" size="sm" />
-      </div>
-    </Card>
-    <Card>
-      <span class="workout-label">Cardio</span>
-      <h4 class="workout-name">Morning Run</h4>
-      <p class="workout-detail">Easy pace, 5K route</p>
-      <div class="workout-meta">
-        <StatNumber value="30" label="min" size="sm" />
-      </div>
-    </Card>
-    <Card>
-      <span class="workout-label">Flexibility</span>
-      <h4 class="workout-name">Yoga Flow</h4>
-      <p class="workout-detail">Sun salutations, balance poses</p>
-      <div class="workout-meta">
-        <StatNumber value="25" label="min" size="sm" />
-      </div>
-    </Card>
-  </div>
-</section>
+<div class="stats-row">
+  <StatNumber value={thisWeekCount()} label="this week" size="md" />
+  <StatNumber value={completedLogs.length} label="total sessions" size="md" />
+</div>
 
-<section class="section">
-  <h3>Personal Records</h3>
-  <div class="records-grid">
-    <Card>
-      <StatNumber value="185" label="Bench press (lbs)" size="md" />
-    </Card>
-    <Card>
-      <StatNumber value="24:30" label="5K time" size="md" />
-    </Card>
-    <Card>
-      <StatNumber value="275" label="Deadlift (lbs)" size="md" />
-    </Card>
-  </div>
-</section>
+<!-- In-progress Sessions -->
+{#if inProgressLogs.length > 0}
+  <section class="section">
+    <h2 class="section-title">In Progress</h2>
+    {#each inProgressLogs as log (log.id)}
+      <Card>
+        <div class="log-card">
+          <div class="log-info">
+            <strong class="log-session-name">{log.planSnapshot?.sessionName ?? "Workout"}</strong>
+            <span class="log-plan-name">{log.planSnapshot?.planName ?? ""}</span>
+            <span class="log-date">{formatDate(log.startedAt)} at {formatTime(log.startedAt)}</span>
+          </div>
+          <Button variant="primary" href="/dojo/session/{log.id}">Resume</Button>
+        </div>
+      </Card>
+    {/each}
+  </section>
+{/if}
+
+<!-- Quick Start -->
+{#if plans.length > 0}
+  <section class="section">
+    <h2 class="section-title">Start Workout</h2>
+    {#each plans as plan (plan.id)}
+      <Card>
+        <div class="quick-start-plan">
+          <span class="plan-name">{plan.name}</span>
+          <div class="quick-start-sessions">
+            {#each plan.sessions as session}
+              <Button variant="secondary" onclick={() => startSession(plan.id, session.id)}>
+                {session.name}
+              </Button>
+            {/each}
+          </div>
+        </div>
+      </Card>
+    {/each}
+  </section>
+{:else}
+  <section class="section">
+    <div class="empty-state">
+      <p>Create a workout plan to get started.</p>
+      <Button variant="primary" href="/dojo/plans">Create Plan</Button>
+    </div>
+  </section>
+{/if}
+
+<!-- Recent Completed -->
+{#if completedLogs.length > 0}
+  <section class="section">
+    <h2 class="section-title">Recent Sessions</h2>
+    {#each completedLogs.slice(0, 10) as log (log.id)}
+      <Card>
+        <a href="/dojo/session/{log.id}" class="log-card log-link">
+          <div class="log-info">
+            <strong class="log-session-name">{log.planSnapshot?.sessionName ?? "Workout"}</strong>
+            <span class="log-plan-name">{log.planSnapshot?.planName ?? ""}</span>
+          </div>
+          <div class="log-meta">
+            <span class="log-date">{formatDate(log.startedAt)}</span>
+            <span class="log-duration">{duration(log.startedAt, log.completedAt)}</span>
+            <span class="log-sets">{log.sets.length} sets</span>
+          </div>
+        </a>
+      </Card>
+    {/each}
+  </section>
+{/if}
+
+<div class="nav-links">
+  <Button variant="ghost" href="/dojo/plans">Manage Plans</Button>
+</div>
 
 <style>
+  .stats-row {
+    display: flex;
+    gap: var(--space-6);
+    margin-bottom: var(--space-6);
+  }
+
   .section {
-    margin-bottom: var(--space-8);
+    margin-bottom: var(--space-6);
   }
 
-  .section h3 {
-    margin-bottom: var(--space-4);
+  .section-title {
+    font-family: var(--font-display);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--ink-light);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    margin-bottom: var(--space-3);
   }
 
-  .workout-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: var(--space-4);
+  .log-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
   }
 
-  @media (min-width: 640px) {
-    .workout-grid {
-      grid-template-columns: repeat(2, 1fr);
-    }
+  .log-link {
+    text-decoration: none;
+    transition: opacity var(--transition-fast);
   }
 
-  .workout-label {
+  .log-link:hover {
+    opacity: 0.8;
+  }
+
+  .log-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .log-session-name {
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  .log-plan-name {
     font-family: var(--font-body);
     font-size: var(--text-xs);
+    color: var(--ink-faint);
+  }
+
+  .log-date {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+  }
+
+  .log-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+  }
+
+  .log-duration {
+    color: var(--ink-light);
+  }
+
+  .log-sets {
+    color: var(--ink-light);
+  }
+
+  .quick-start-plan {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .plan-name {
+    font-family: var(--font-body);
+    font-size: var(--text-base);
     font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.2em;
-    color: var(--accent);
+    color: var(--ink);
   }
 
-  .workout-name {
-    font-size: var(--text-lg);
-    margin-top: var(--space-2);
+  .quick-start-sessions {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
   }
 
-  .workout-detail {
+  .empty-state {
+    text-align: center;
+    padding: var(--space-6);
+    color: var(--ink-faint);
+    font-family: var(--font-body);
     font-size: var(--text-sm);
-    margin-top: var(--space-1);
-  }
-
-  .workout-meta {
-    margin-top: var(--space-4);
-    padding-top: var(--space-3);
-    border-top: 0.5px solid var(--border);
-  }
-
-  .records-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     gap: var(--space-4);
   }
 
-  @media (max-width: 639px) {
-    .records-grid {
-      grid-template-columns: 1fr;
-    }
+  .nav-links {
+    text-align: center;
+    margin-top: var(--space-4);
   }
 </style>

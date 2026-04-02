@@ -201,6 +201,21 @@
               </svg>
               <span>Food Library</span>
             </a>
+            <a href="/dojo/library" class="settings-link" onclick={() => (settingsOpen = false)}>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M6.5 6.5a3.5 3.5 0 1 0 7 0 3.5 3.5 0 1 0-7 0" /><line x1="10" y1="10" x2="10" y2="21" /><line x1="4" y1="15" x2="16" y2="15" />
+              </svg>
+              <span>Exercise Library</span>
+            </a>
           </div>
         {/if}
       </div>
