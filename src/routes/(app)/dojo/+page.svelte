@@ -3,32 +3,12 @@
   import { page } from "$app/state"
   import { Button, Card, PageHeader, StatNumber } from "$lib/components"
   import { icons } from "$lib/icons"
-  import { journeyLens } from "$lib/stores/journeyLens.svelte"
 
   let plans = $state(page.data.plans ?? [])
   let logs = $state(page.data.logs ?? [])
   $effect(() => {
     plans = page.data.plans ?? []
     logs = page.data.logs ?? []
-  })
-
-  // If a new log was just created, redirect to its session page
-  $effect(() => {
-    const newLog = page.data.newLog
-    if (newLog) {
-      goto(`/dojo/session/${newLog.id}`, { replaceState: true })
-    }
-  })
-
-  // Journey lens re-navigation
-  $effect(() => {
-    const jid = journeyLens.selectedId
-    const current = page.url.searchParams.get("journeyId")
-    if (jid !== current) {
-      const params = new URLSearchParams()
-      if (jid) params.set("journeyId", jid)
-      goto(`/dojo${params.toString() ? "?" + params.toString() : ""}`, { invalidateAll: true })
-    }
   })
 
   const inProgressLogs = $derived(logs.filter((l: any) => l.status === "in_progress"))
@@ -61,7 +41,15 @@
   }
 
   async function startSession(planId: string, sessionId: string) {
-    goto(`/dojo?startPlan=${planId}&startSession=${sessionId}`)
+    const res = await fetch("/api/dojo/logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ planId, sessionId }),
+    })
+    if (res.ok) {
+      const log = await res.json()
+      goto(`/dojo/session/${log.id}`)
+    }
   }
 
   let deletingLogId = $state<string | null>(null)

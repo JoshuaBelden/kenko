@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { goto, invalidateAll } from "$app/navigation"
+  import { goto } from "$app/navigation"
   import { page } from "$app/state"
   import { Button, Card, PageHeader } from "$lib/components"
   import { icons } from "$lib/icons"
@@ -13,13 +13,30 @@
 
   // Sets state — mirrors the log's sets array, editable locally
   let sets = $state<any[]>(log?.sets ?? [])
+  let setsInitialized = false
   $effect(() => {
-    sets = log?.sets ?? []
+    if (!setsInitialized) {
+      sets = log?.sets ?? []
+      setsInitialized = true
+    }
   })
 
   let notes = $state(log?.notes ?? "")
-  let saving = $state(false)
+  let saving = false
   let completing = $state(false)
+
+  // Auto-save sets whenever they change
+  let saveTimeout: ReturnType<typeof setTimeout> | null = null
+  $effect(() => {
+    // Read sets to establish reactive dependency
+    void sets
+    if (!setsInitialized || isCompleted || !log) return
+    // Debounce saves to avoid hammering the API
+    if (saveTimeout) clearTimeout(saveTimeout)
+    saveTimeout = setTimeout(() => {
+      saveSets()
+    }, 500)
+  })
 
   // RPE prompt state
   let rpePromptExerciseId = $state<string | null>(null)
@@ -132,13 +149,11 @@
     }
     rpePromptExerciseId = null
     rpeValue = null
-    saveSets()
   }
 
   function skipRpe() {
     rpePromptExerciseId = null
     rpeValue = null
-    saveSets()
   }
 
   function startRestTimer(exerciseId: string) {
@@ -154,8 +169,6 @@
         dismissRestTimer()
       }
     }, 1000)
-
-    saveSets()
   }
 
   function dismissRestTimer() {
@@ -175,16 +188,30 @@
   async function saveSets() {
     if (isCompleted) return
     saving = true
-    await fetch(`/api/dojo/logs/${log.id}/sets`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sets }),
-    })
+    try {
+      const res = await fetch(`/api/dojo/logs/${log.id}/sets`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sets }),
+      })
+      if (!res.ok) {
+        console.error("Failed to save sets:", res.status, await res.text())
+      }
+    } catch (err) {
+      console.error("Failed to save sets:", err)
+    }
     saving = false
+  }
+
+  async function handleBackToDojo() {
+    if (saveTimeout) clearTimeout(saveTimeout)
+    await saveSets()
+    goto("/dojo")
   }
 
   async function handleComplete() {
     completing = true
+    if (saveTimeout) clearTimeout(saveTimeout)
     await saveSets()
     const res = await fetch(`/api/dojo/logs/${log.id}/complete`, {
       method: "PUT",
@@ -207,7 +234,6 @@
     if (!addExerciseId) return
     addSet(addExerciseId, true)
     addExerciseOpen = false
-    saveSets()
   }
 
   function muscleLabel(muscle: string): string {
@@ -316,7 +342,6 @@
                     class="set-input"
                     value={s.weight}
                     onchange={e => updateSet(exerciseId, s.setNumber, "weight", parseFloat(e.currentTarget.value) || 0)}
-                    onblur={() => saveSets()}
                   />
                 {/if}
               </span>
@@ -329,7 +354,6 @@
                     class="set-input"
                     value={s.reps}
                     onchange={e => updateSet(exerciseId, s.setNumber, "reps", parseInt(e.currentTarget.value) || 0)}
-                    onblur={() => saveSets()}
                   />
                 {/if}
               </span>
@@ -346,7 +370,7 @@
                   <button
                     class="remove-btn"
                     title="Remove set"
-                    onclick={() => { removeSet(exerciseId, s.setNumber); saveSets() }}
+                    onclick={() => removeSet(exerciseId, s.setNumber)}
                   >&#x2715;</button>
                 {/if}
               </span>
@@ -355,7 +379,7 @@
         </div>
 
         {#if !isCompleted}
-          <button class="add-set-btn" onclick={() => { addSet(exerciseId, !target); saveSets() }}>+ Add Set</button>
+          <button class="add-set-btn" onclick={() => addSet(exerciseId, !target)}>+ Add Set</button>
         {/if}
       </div>
     </Card>
@@ -408,7 +432,7 @@
   {/if}
 
   <div class="back-link">
-    <Button variant="ghost" href="/dojo">Back to Dojo</Button>
+    <Button variant="ghost" onclick={handleBackToDojo}>Back to Dojo</Button>
   </div>
 {/if}
 
