@@ -2,6 +2,7 @@ import {
   getCommitmentsCollection,
   serializeCommitment,
   calculatePeriodProgress,
+  getTaperProgress,
   VALID_DIRECTIONS,
   VALID_PERIODS,
   VALID_LOGGING_STYLES,
@@ -23,6 +24,18 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 
   if (!commitment) return json({ error: "Not found" }, { status: 404 })
 
+  // Taper commitments return taper progress instead of period progress
+  if (commitment.type === "taper") {
+    const taperProgress = await getTaperProgress(
+      commitment._id,
+      userId,
+      commitment.startDate,
+      commitment.taperPhases ?? [],
+      commitment.status ?? "active",
+    )
+    return json({ ...serializeCommitment(commitment), progress: null, taperProgress })
+  }
+
   // Resolve journey start date if journey-scoped
   let journeyStartDate: Date | null = null
   if (commitment.journeyId) {
@@ -39,13 +52,20 @@ export const GET: RequestHandler = async ({ locals, params }) => {
     journeyStartDate,
   )
 
-  return json({ ...serializeCommitment(commitment), progress })
+  return json({ ...serializeCommitment(commitment), progress, taperProgress: null })
 }
 
 export const PUT: RequestHandler = async ({ locals, params, request }) => {
   if (!locals.userId) return json({ error: "Unauthorized" }, { status: 401 })
 
   const body = await request.json()
+  const userId = new ObjectId(locals.userId)
+  const commitments = await getCommitmentsCollection()
+
+  // Load existing commitment to check type
+  const existing = await commitments.findOne({ _id: new ObjectId(params.id), userId })
+  if (!existing) return json({ error: "Not found" }, { status: 404 })
+
   const updates: Record<string, unknown> = { updatedAt: new Date() }
 
   if (body.name !== undefined) {
@@ -55,6 +75,46 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
   if (body.description !== undefined) {
     updates.description = body.description?.trim() || null
   }
+  if (body.unit !== undefined) {
+    updates.unit = body.unit?.trim() || null
+  }
+  if (body.journeyId !== undefined) {
+    updates.journeyId = body.journeyId ? new ObjectId(body.journeyId) : null
+  }
+
+  // Taper-specific fields
+  if (existing.type === "taper" || body.type === "taper") {
+    if (body.startDate !== undefined) {
+      updates.startDate = new Date(body.startDate)
+    }
+    if (body.status !== undefined) {
+      if (!["scheduled", "active", "completed"].includes(body.status)) {
+        return json({ error: "status must be 'scheduled', 'active', or 'completed'" }, { status: 400 })
+      }
+      updates.status = body.status
+    }
+    if (body.taperPhases !== undefined) {
+      if (!Array.isArray(body.taperPhases) || body.taperPhases.length === 0) {
+        return json({ error: "at least one taper phase is required" }, { status: 400 })
+      }
+      for (const phase of body.taperPhases) {
+        if (typeof phase.weekNumber !== "number" || phase.weekNumber < 1) {
+          return json({ error: "each phase must have a valid weekNumber (>= 1)" }, { status: 400 })
+        }
+        if (typeof phase.dailyLimit !== "number" || phase.dailyLimit < 0) {
+          return json({ error: "each phase must have a valid dailyLimit (>= 0)" }, { status: 400 })
+        }
+      }
+      updates.taperPhases = body.taperPhases.map((p: { id?: string; weekNumber: number; label?: string; dailyLimit: number }) => ({
+        _id: p.id ? new ObjectId(p.id) : new ObjectId(),
+        weekNumber: p.weekNumber,
+        label: p.label?.trim() || `Week ${p.weekNumber}`,
+        dailyLimit: p.dailyLimit,
+      }))
+    }
+  }
+
+  // Non-taper fields
   if (body.direction !== undefined) {
     if (!VALID_DIRECTIONS.includes(body.direction as Direction)) {
       return json({ error: "direction must be 'achieve' or 'limit'" }, { status: 400 })
@@ -79,15 +139,7 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
     }
     updates.targetValue = body.targetValue
   }
-  if (body.unit !== undefined) {
-    updates.unit = body.unit?.trim() || null
-  }
-  if (body.journeyId !== undefined) {
-    updates.journeyId = body.journeyId ? new ObjectId(body.journeyId) : null
-  }
 
-  const userId = new ObjectId(locals.userId)
-  const commitments = await getCommitmentsCollection()
   const result = await commitments.findOneAndUpdate(
     { _id: new ObjectId(params.id), userId },
     { $set: updates },

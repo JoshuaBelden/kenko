@@ -3,6 +3,7 @@ import {
   getCommitmentLogsCollection,
   serializeCommitment,
   calculatePeriodProgress,
+  getTaperProgress,
 } from "$lib/server/kata"
 import { getJourneysCollection } from "$lib/server/collections"
 import { ObjectId } from "mongodb"
@@ -57,13 +58,32 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
   const enriched = await Promise.all(
     commitments.map(async (c) => {
+      const todayLog = todayLogMap.get(c._id.toString())
+
+      // Taper commitments get taper progress instead of period progress
+      if (c.type === "taper") {
+        const taperProgress = await getTaperProgress(
+          c._id,
+          userId,
+          c.startDate,
+          c.taperPhases ?? [],
+          c.status ?? "active",
+        )
+        return {
+          ...serializeCommitment(c),
+          progress: null,
+          taperProgress,
+          todayLog: todayLog ? { value: todayLog.value } : null,
+        }
+      }
+
       const journeyStartDate = c.journeyId ? journeyStartDates.get(c.journeyId.toString()) ?? null : null
       const progress = await calculatePeriodProgress(c._id, userId, c.period, c.targetValue, journeyStartDate)
-      const todayLog = todayLogMap.get(c._id.toString())
 
       return {
         ...serializeCommitment(c),
         progress,
+        taperProgress: null,
         todayLog: todayLog ? { value: todayLog.value } : null,
       }
     }),

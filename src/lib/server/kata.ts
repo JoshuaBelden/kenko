@@ -22,10 +22,21 @@ export async function getCommitmentLogsCollection() {
 export type Direction = "achieve" | "limit"
 export type Period = "daily" | "weekly" | "monthly" | "journey_total"
 export type LoggingStyle = "checkbox" | "quantity"
+export type CommitmentType = "frequency" | "quantity" | "limit" | "recurring" | "taper"
+export type CommitmentStatus = "scheduled" | "active" | "completed"
+
+export interface TaperPhase {
+  _id: ObjectId
+  weekNumber: number
+  label: string
+  dailyLimit: number
+}
 
 export const VALID_DIRECTIONS: Direction[] = ["achieve", "limit"]
 export const VALID_PERIODS: Period[] = ["daily", "weekly", "monthly", "journey_total"]
 export const VALID_LOGGING_STYLES: LoggingStyle[] = ["checkbox", "quantity"]
+export const VALID_COMMITMENT_TYPES: CommitmentType[] = ["frequency", "quantity", "limit", "recurring", "taper"]
+export const VALID_COMMITMENT_STATUSES: CommitmentStatus[] = ["scheduled", "active", "completed"]
 
 // ========================================
 // Serializers
@@ -38,12 +49,23 @@ export function serializeCommitment(doc: WithId<Document>) {
     journeyId: doc.journeyId ? doc.journeyId.toString() : null,
     name: doc.name,
     description: doc.description ?? null,
-    direction: doc.direction,
-    period: doc.period,
-    loggingStyle: doc.loggingStyle,
-    targetValue: doc.targetValue,
+    type: doc.type ?? null,
+    direction: doc.direction ?? null,
+    period: doc.period ?? null,
+    loggingStyle: doc.loggingStyle ?? null,
+    targetValue: doc.targetValue ?? null,
     unit: doc.unit ?? null,
+    startDate: doc.startDate instanceof Date ? doc.startDate.toISOString() : doc.startDate ?? null,
+    status: doc.status ?? null,
     isActive: doc.isActive,
+    taperPhases: doc.taperPhases
+      ? doc.taperPhases.map((p: TaperPhase) => ({
+          id: p._id.toString(),
+          weekNumber: p.weekNumber,
+          label: p.label,
+          dailyLimit: p.dailyLimit,
+        }))
+      : null,
     createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
     updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
   }
@@ -280,4 +302,184 @@ export async function getTodayLog(commitmentId: ObjectId, userId: ObjectId) {
     userId,
     date: { $gte: startOfDay(now), $lte: endOfDay(now) },
   })
+}
+
+// ========================================
+// Taper helpers
+// ========================================
+
+export interface TaperPhaseStatus {
+  id: string
+  weekNumber: number
+  label: string
+  dailyLimit: number
+  status: "upcoming" | "active" | "past"
+}
+
+export interface TaperProgress {
+  currentPhase: { label: string; weekNumber: number; dailyLimit: number } | null
+  todayValue: number
+  todayLimit: number | null
+  overallProgress: { currentWeek: number; totalWeeks: number }
+  nextPhase: { label: string; weekNumber: number; dailyLimit: number; daysUntilStart: number } | null
+  phaseSchedule: TaperPhaseStatus[]
+  status: "scheduled" | "active" | "completed" | "beyond_phases"
+  daysUntilStart: number | null
+}
+
+export function calculateTaperPhaseInfo(
+  startDate: Date,
+  taperPhases: TaperPhase[],
+  commitmentStatus: string,
+): { weeksElapsed: number; activePhase: TaperPhase | null; status: string } {
+  const now = startOfDay(new Date())
+  const start = startOfDay(startDate)
+  const diffMs = now.getTime() - start.getTime()
+  const diffDays = diffMs / (1000 * 60 * 60 * 24)
+
+  if (diffDays < 0) {
+    return { weeksElapsed: 0, activePhase: null, status: "scheduled" }
+  }
+
+  if (commitmentStatus === "completed") {
+    return { weeksElapsed: Math.floor(diffDays / 7), activePhase: null, status: "completed" }
+  }
+
+  const weeksElapsed = Math.floor(diffDays / 7)
+  const activePhase = taperPhases.find((p) => p.weekNumber === weeksElapsed + 1) ?? null
+
+  if (!activePhase) {
+    return { weeksElapsed, activePhase: null, status: "beyond_phases" }
+  }
+
+  return { weeksElapsed, activePhase, status: "active" }
+}
+
+export async function getTaperProgress(
+  commitmentId: ObjectId,
+  userId: ObjectId,
+  startDate: Date,
+  taperPhases: TaperPhase[],
+  commitmentStatus: string,
+): Promise<TaperProgress> {
+  const sortedPhases = [...taperPhases].sort((a, b) => a.weekNumber - b.weekNumber)
+  const totalWeeks = sortedPhases.length > 0 ? sortedPhases[sortedPhases.length - 1].weekNumber : 0
+
+  const { weeksElapsed, activePhase, status } = calculateTaperPhaseInfo(startDate, sortedPhases, commitmentStatus)
+
+  // Get today's log
+  const todayLog = await getTodayLog(commitmentId, userId)
+  const todayValue = todayLog?.value ?? 0
+
+  // Days until start (if scheduled)
+  const now = startOfDay(new Date())
+  const start = startOfDay(startDate)
+  const daysUntilStart = status === "scheduled"
+    ? Math.ceil((start.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+    : null
+
+  // Current week number (1-based)
+  const currentWeek = Math.min(weeksElapsed + 1, totalWeeks || 1)
+
+  // Next phase
+  let nextPhase: TaperProgress["nextPhase"] = null
+  if (activePhase) {
+    const next = sortedPhases.find((p) => p.weekNumber === activePhase.weekNumber + 1)
+    if (next) {
+      const daysIntoCurrentWeek = Math.floor(
+        ((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) % 7,
+      )
+      nextPhase = {
+        label: next.label,
+        weekNumber: next.weekNumber,
+        dailyLimit: next.dailyLimit,
+        daysUntilStart: 7 - daysIntoCurrentWeek,
+      }
+    }
+  }
+
+  // Phase schedule with statuses
+  const phaseSchedule: TaperPhaseStatus[] = sortedPhases.map((p) => ({
+    id: p._id.toString(),
+    weekNumber: p.weekNumber,
+    label: p.label,
+    dailyLimit: p.dailyLimit,
+    status:
+      status === "completed"
+        ? "past"
+        : p.weekNumber < weeksElapsed + 1
+          ? "past"
+          : p.weekNumber === weeksElapsed + 1
+            ? "active"
+            : "upcoming",
+  }))
+
+  return {
+    currentPhase: activePhase
+      ? { label: activePhase.label, weekNumber: activePhase.weekNumber, dailyLimit: activePhase.dailyLimit }
+      : null,
+    todayValue,
+    todayLimit: activePhase?.dailyLimit ?? null,
+    overallProgress: { currentWeek, totalWeeks },
+    nextPhase,
+    phaseSchedule,
+    status: status as TaperProgress["status"],
+    daysUntilStart,
+  }
+}
+
+export async function getTaperDailyHistory(
+  commitmentId: ObjectId,
+  userId: ObjectId,
+  startDate: Date,
+  taperPhases: TaperPhase[],
+): Promise<Array<{ date: string; value: number; dailyLimit: number; met: boolean }>> {
+  const logsCol = await getCommitmentLogsCollection()
+  const now = new Date()
+  const thirtyDaysAgo = new Date(now)
+  thirtyDaysAgo.setUTCDate(thirtyDaysAgo.getUTCDate() - 29)
+
+  const rangeStart = startOfDay(thirtyDaysAgo)
+  const rangeEnd = endOfDay(now)
+
+  const allLogs = await logsCol
+    .find({ commitmentId, userId, date: { $gte: rangeStart, $lte: rangeEnd } })
+    .sort({ date: 1 })
+    .toArray()
+
+  const logMap = new Map(
+    allLogs.map((log) => [
+      (log.date instanceof Date ? log.date : new Date(log.date)).toISOString().slice(0, 10),
+      log.value,
+    ]),
+  )
+
+  const sortedPhases = [...taperPhases].sort((a, b) => a.weekNumber - b.weekNumber)
+  const start = startOfDay(startDate)
+  const days: Array<{ date: string; value: number; dailyLimit: number; met: boolean }> = []
+
+  for (let i = 0; i < 30; i++) {
+    const d = new Date(rangeStart)
+    d.setUTCDate(d.getUTCDate() + i)
+    const dateStr = d.toISOString().slice(0, 10)
+    const value = logMap.get(dateStr) ?? 0
+
+    // Determine which phase this day falls in
+    const diffDays = (d.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
+    let dailyLimit = 0
+    if (diffDays >= 0) {
+      const weekNum = Math.floor(diffDays / 7) + 1
+      const phase = sortedPhases.find((p) => p.weekNumber === weekNum)
+      dailyLimit = phase?.dailyLimit ?? sortedPhases[sortedPhases.length - 1]?.dailyLimit ?? 0
+    }
+
+    days.push({
+      date: dateStr,
+      value,
+      dailyLimit,
+      met: value <= dailyLimit,
+    })
+  }
+
+  return days
 }

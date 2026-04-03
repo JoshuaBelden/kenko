@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { invalidateAll } from "$app/navigation"
   import { page } from "$app/state"
   import { Button, Card, PageHeader, StatNumber } from "$lib/components"
   import { icons } from "$lib/icons"
@@ -8,6 +9,10 @@
   const history = $derived(page.data.history ?? [])
   const journeyTotal = $derived(page.data.journeyTotal)
   const allTimeTotal = $derived(page.data.allTimeTotal ?? 0)
+  const taperProgress = $derived(page.data.taperProgress)
+  const taperHistory = $derived(page.data.taperHistory ?? [])
+
+  let confirmingComplete = $state(false)
 
   function periodLabel(period: string): string {
     switch (period) {
@@ -35,11 +40,6 @@
     return direction === "achieve" ? value >= target : value <= target
   }
 
-  function dayOfWeek(dateStr: string): string {
-    const d = new Date(dateStr + "T00:00:00Z")
-    return d.toLocaleDateString("en-US", { weekday: "narrow", timeZone: "UTC" })
-  }
-
   function dayOfMonth(dateStr: string): string {
     return dateStr.slice(8, 10).replace(/^0/, "")
   }
@@ -60,7 +60,16 @@
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
   }
 
-
+  async function markTaperComplete() {
+    if (!commitment) return
+    await fetch(`/api/kata/commitments/${commitment.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "completed" }),
+    })
+    confirmingComplete = false
+    await invalidateAll()
+  }
 </script>
 
 {#if !commitment}
@@ -69,7 +78,123 @@
     <p>This commitment doesn't exist.</p>
     <Button variant="primary" href="/kata">Back to Kata</Button>
   </div>
+{:else if commitment.type === "taper"}
+  <!-- TAPER DETAIL VIEW -->
+  <PageHeader icon={icons.kata} title={commitment.name} subtitle={commitment.unit} />
+
+  <!-- Taper Summary -->
+  <div class="stats-row">
+    {#if taperProgress?.status === "scheduled"}
+      <StatNumber value={taperProgress.daysUntilStart ?? 0} label="days until start" size="lg" />
+    {:else if taperProgress?.status === "active" && taperProgress.currentPhase}
+      <StatNumber value={taperProgress.todayValue} label="today" size="lg" />
+      <StatNumber value={taperProgress.todayLimit ?? 0} label="limit" size="md" />
+    {:else if taperProgress?.status === "completed"}
+      <StatNumber value={taperProgress.overallProgress.totalWeeks} label="weeks completed" size="lg" />
+    {/if}
+    <StatNumber value={allTimeTotal} label="all time" size="md" />
+  </div>
+
+  <!-- Current phase progress -->
+  {#if taperProgress?.status === "active" && taperProgress.currentPhase}
+    <Card>
+      <div class="progress-section">
+        <div class="progress-meta">
+          <span class="meta-label">{taperProgress.currentPhase.label}</span>
+          <span class="meta-value">
+            {taperProgress.todayValue} / {taperProgress.todayLimit} {commitment.unit}
+          </span>
+        </div>
+        <div class="progress-track">
+          <div
+            class="progress-fill"
+            style:width="{taperProgress.todayLimit ? Math.min((taperProgress.todayValue / taperProgress.todayLimit) * 100, 100) : 100}%"
+            style:background={taperProgress.todayValue <= (taperProgress.todayLimit ?? 0) ? "var(--accent-green)" : "#c49a3a"}
+          ></div>
+        </div>
+        <div class="taper-detail-meta">
+          <span class="meta-label">Week {taperProgress.overallProgress.currentWeek} of {taperProgress.overallProgress.totalWeeks}</span>
+          {#if taperProgress.nextPhase}
+            <span class="meta-value taper-next-hint">In {taperProgress.nextPhase.daysUntilStart}d: {taperProgress.nextPhase.label} &middot; {taperProgress.nextPhase.dailyLimit}/day</span>
+          {/if}
+        </div>
+      </div>
+    </Card>
+  {/if}
+
+  <!-- Phase Timeline -->
+  <section class="section">
+    <h2 class="section-title">Phase Schedule</h2>
+    <Card>
+      <div class="taper-timeline">
+        {#each taperProgress?.phaseSchedule ?? [] as phase}
+          <div class="timeline-phase" class:timeline-active={phase.status === "active"} class:timeline-past={phase.status === "past"} class:timeline-upcoming={phase.status === "upcoming"}>
+            <div class="timeline-indicator">
+              <div class="timeline-dot"></div>
+              <div class="timeline-line"></div>
+            </div>
+            <div class="timeline-content">
+              <div class="timeline-header">
+                <strong class="timeline-label">{phase.label}</strong>
+                <span class="timeline-limit">{phase.dailyLimit} {commitment.unit}/day</span>
+              </div>
+              {#if phase.status === "active"}
+                <span class="timeline-badge">Active</span>
+              {/if}
+            </div>
+          </div>
+        {/each}
+      </div>
+    </Card>
+  </section>
+
+  <!-- History — 30-day grid -->
+  <section class="section">
+    <h2 class="section-title">History</h2>
+    {#if taperHistory.length > 0}
+      <Card>
+        <div class="day-grid">
+          {#each taperHistory as day}
+            <div
+              class="day-cell"
+              class:met={day.value > 0 && day.met}
+              class:not-met={day.value > 0 && !day.met}
+              class:empty={day.value === 0}
+              title="{day.date}: {day.value} / {day.dailyLimit} {commitment.unit}"
+            >
+              <span class="day-num">{dayOfMonth(day.date)}</span>
+            </div>
+          {/each}
+        </div>
+      </Card>
+    {:else}
+      <Card>
+        <p class="no-history">No history yet. Start logging to see your progress over time.</p>
+      </Card>
+    {/if}
+  </section>
+
+  <!-- Actions -->
+  <div class="actions">
+    <Button variant="ghost" href="/kata">Close</Button>
+    <div class="actions-right">
+      {#if taperProgress?.status !== "completed"}
+        {#if confirmingComplete}
+          <div class="confirm-complete-inline">
+            <span class="confirm-text">Mark complete?</span>
+            <button type="button" class="confirm-btn yes" onclick={markTaperComplete}>Yes</button>
+            <button type="button" class="confirm-btn no" onclick={() => (confirmingComplete = false)}>No</button>
+          </div>
+        {:else}
+          <button type="button" class="complete-btn" onclick={() => (confirmingComplete = true)}>Mark Complete</button>
+        {/if}
+      {/if}
+      <Button variant="secondary" href="/kata/{commitment.id}/edit">Edit</Button>
+    </div>
+  </div>
+
 {:else}
+  <!-- STANDARD DETAIL VIEW -->
   <PageHeader icon={icons.kata} title={commitment.name} subtitle={periodLabel(commitment.period)} />
 
   <!-- Summary -->
@@ -509,5 +634,171 @@
     flex-direction: column;
     align-items: center;
     gap: var(--space-4);
+  }
+
+  /* Taper detail styles */
+  .taper-detail-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-top: var(--space-1);
+  }
+
+  .taper-next-hint {
+    font-style: italic;
+    color: var(--ink-faint) !important;
+    font-size: var(--text-xs) !important;
+  }
+
+  /* Phase timeline */
+  .taper-timeline {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .timeline-phase {
+    display: flex;
+    gap: var(--space-3);
+    min-height: 44px;
+  }
+
+  .timeline-phase:last-child .timeline-line {
+    display: none;
+  }
+
+  .timeline-indicator {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 16px;
+    flex-shrink: 0;
+  }
+
+  .timeline-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--border);
+    flex-shrink: 0;
+    margin-top: 6px;
+  }
+
+  .timeline-phase.timeline-active .timeline-dot {
+    background: var(--accent-green);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-green) 25%, transparent);
+  }
+
+  .timeline-phase.timeline-past .timeline-dot {
+    background: var(--ink-faint);
+  }
+
+  .timeline-line {
+    width: 1px;
+    flex: 1;
+    background: var(--border);
+    margin: 4px 0;
+  }
+
+  .timeline-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-bottom: var(--space-2);
+  }
+
+  .timeline-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  .timeline-label {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink);
+  }
+
+  .timeline-phase.timeline-upcoming .timeline-label {
+    color: var(--ink-faint);
+  }
+
+  .timeline-limit {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+  }
+
+  .timeline-badge {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--accent-green);
+    font-weight: 500;
+  }
+
+  /* Mark complete */
+  .actions-right {
+    display: flex;
+    gap: var(--space-3);
+    align-items: center;
+  }
+
+  .complete-btn {
+    padding: var(--space-2) var(--space-4);
+    border: 0.5px solid var(--accent-green);
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--accent-green);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .complete-btn:hover {
+    background: var(--accent-green);
+    color: white;
+  }
+
+  .confirm-complete-inline {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .confirm-text {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-light);
+  }
+
+  .confirm-btn {
+    padding: var(--space-1) var(--space-3);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: none;
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .confirm-btn.yes {
+    border-color: var(--accent-green);
+    color: var(--accent-green);
+  }
+
+  .confirm-btn.yes:hover {
+    background: var(--accent-green);
+    color: white;
+  }
+
+  .confirm-btn.no {
+    color: var(--ink-light);
+  }
+
+  .confirm-btn.no:hover {
+    border-color: var(--ink-light);
   }
 </style>

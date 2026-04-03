@@ -36,6 +36,10 @@
   const totalActive = $derived(commitments.length)
   const metToday = $derived(
     commitments.filter((c: any) => {
+      if (c.type === "taper") {
+        if (!c.taperProgress || c.taperProgress.status !== "active") return false
+        return c.taperProgress.todayValue <= (c.taperProgress.todayLimit ?? 0)
+      }
       if (!c.todayLog) return false
       if (c.direction === "achieve") return c.progress.current >= c.progress.target
       return c.progress.current <= c.progress.target
@@ -48,6 +52,13 @@
     if (c.progress.percentage > 100) return "var(--accent)"
     if (c.progress.percentage >= 80) return "#c49a3a"
     return "var(--accent-green)"
+  }
+
+  function taperProgressColor(c: any): string {
+    if (!c.taperProgress?.currentPhase) return "var(--ink-faint)"
+    return c.taperProgress.todayValue <= c.taperProgress.todayLimit
+      ? "var(--accent-green)"
+      : "#c49a3a"
   }
 
   async function toggleCheckbox(c: any) {
@@ -146,44 +157,122 @@
 
 {#snippet commitmentCard(c: any)}
   <Card>
-    <div class="commitment-card">
-      <a href="/kata/{c.id}" class="commitment-info">
-        <div class="commitment-header">
-          <strong class="commitment-name">{c.name}</strong>
-          <span class="commitment-period">{periodLabel(c.period)}</span>
-        </div>
-        {#if c.loggingStyle !== "checkbox"}
-          <div class="commitment-progress">
-            <div class="progress-bar-wrapper">
-              <div class="progress-track">
-                <div
-                  class="progress-fill"
-                  style:width="{Math.min(c.progress.percentage, 100)}%"
-                  style:background={progressColor(c)}
-                ></div>
-              </div>
-            </div>
-            <span class="progress-text">{formatProgress(c)}</span>
+    {#if c.type === "taper"}
+      {@render taperCard(c)}
+    {:else}
+      <div class="commitment-card">
+        <a href="/kata/{c.id}" class="commitment-info">
+          <div class="commitment-header">
+            <strong class="commitment-name">{c.name}</strong>
+            <span class="commitment-period">{periodLabel(c.period)}</span>
           </div>
-        {/if}
-      </a>
-      <div class="commitment-action">
-        {#if c.loggingStyle === "checkbox"}
-          <button
-            class="checkbox-btn"
-            class:checked={c.todayLog && c.todayLog.value > 0}
-            onclick={() => toggleCheckbox(c)}
-            aria-label={c.todayLog && c.todayLog.value > 0 ? "Unmark done" : "Mark done"}
-          >
-            {#if c.todayLog && c.todayLog.value > 0}
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="20 6 9 17 4 12"/>
-              </svg>
-            {:else}
-              <div class="checkbox-empty"></div>
-            {/if}
-          </button>
-        {:else if loggingId === c.id}
+          {#if c.description}
+            <span class="commitment-description">{c.description}</span>
+          {/if}
+          {#if c.loggingStyle !== "checkbox"}
+            <div class="commitment-progress">
+              <div class="progress-bar-wrapper">
+                <div class="progress-track">
+                  <div
+                    class="progress-fill"
+                    style:width="{Math.min(c.progress.percentage, 100)}%"
+                    style:background={progressColor(c)}
+                  ></div>
+                </div>
+              </div>
+              <span class="progress-text">{formatProgress(c)}</span>
+            </div>
+          {/if}
+        </a>
+        <div class="commitment-action">
+          {#if c.loggingStyle === "checkbox"}
+            <button
+              class="checkbox-btn"
+              class:checked={c.todayLog && c.todayLog.value > 0}
+              onclick={() => toggleCheckbox(c)}
+              aria-label={c.todayLog && c.todayLog.value > 0 ? "Unmark done" : "Mark done"}
+            >
+              {#if c.todayLog && c.todayLog.value > 0}
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              {:else}
+                <div class="checkbox-empty"></div>
+              {/if}
+            </button>
+          {:else if loggingId === c.id}
+            <div class="quantity-input-row">
+              <input
+                type="number"
+                class="quantity-input"
+                bind:value={loggingValue}
+                placeholder="0"
+                min="0"
+                step="any"
+                onkeydown={(e) => { if (e.key === "Enter") submitQuantityLog(c.id); if (e.key === "Escape") cancelLog() }}
+              />
+              {#if c.unit}<span class="quantity-unit">{c.unit}</span>{/if}
+              <button class="quantity-confirm" onclick={() => submitQuantityLog(c.id)} aria-label="Confirm log">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </button>
+              <button class="quantity-cancel" onclick={cancelLog} aria-label="Cancel log">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+          {:else}
+            <button class="log-btn" onclick={() => startQuantityLog(c)}>
+              {#if c.todayLog}
+                <span class="logged-value">{c.todayLog.value}</span>
+              {:else}
+                Log
+              {/if}
+            </button>
+          {/if}
+        </div>
+      </div>
+    {/if}
+  </Card>
+{/snippet}
+
+{#snippet taperCard(c: any)}
+  {@const tp = c.taperProgress}
+  <div class="commitment-card">
+    <a href="/kata/{c.id}" class="commitment-info">
+      <div class="commitment-header">
+        <strong class="commitment-name">{c.name}</strong>
+        <span class="commitment-period">{c.unit}</span>
+      </div>
+      {#if c.description}
+        <span class="commitment-description">{c.description}</span>
+      {/if}
+      {#if tp?.status === "scheduled"}
+        <span class="taper-status-text">Starts in {tp.daysUntilStart} day{tp.daysUntilStart === 1 ? "" : "s"}</span>
+      {:else if tp?.status === "completed"}
+        <span class="taper-status-text taper-completed">Completed &middot; {tp.overallProgress.totalWeeks} weeks</span>
+      {:else if tp?.status === "active" && tp.currentPhase}
+        <div class="taper-active-info">
+          <span class="taper-phase-label">{tp.currentPhase.label} &middot; Limit: {tp.currentPhase.dailyLimit} {c.unit}/day</span>
+          <div class="taper-today-row">
+            <span class="taper-today-value" style:color={taperProgressColor(c)}>{tp.todayValue}</span>
+            <span class="taper-today-sep">/</span>
+            <span class="taper-today-limit">{tp.todayLimit}</span>
+            <span class="taper-week-progress">Week {tp.overallProgress.currentWeek} of {tp.overallProgress.totalWeeks}</span>
+          </div>
+          {#if tp.nextPhase}
+            <span class="taper-next-preview">In {tp.nextPhase.daysUntilStart}d: {tp.nextPhase.label} &middot; {tp.nextPhase.dailyLimit}/day</span>
+          {/if}
+        </div>
+      {:else if tp?.status === "beyond_phases"}
+        <span class="taper-status-text taper-greyed">Past all phases</span>
+      {/if}
+    </a>
+    <div class="commitment-action">
+      {#if tp?.status === "active" || tp?.status === "beyond_phases"}
+        {#if loggingId === c.id}
           <div class="quantity-input-row">
             <input
               type="number"
@@ -215,9 +304,9 @@
             {/if}
           </button>
         {/if}
-      </div>
+      {/if}
     </div>
-  </Card>
+  </div>
 {/snippet}
 
 <style>
@@ -282,6 +371,12 @@
     font-family: var(--font-body);
     font-size: var(--text-xs);
     color: var(--ink-faint);
+  }
+
+  .commitment-description {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink-light);
   }
 
   .commitment-progress {
@@ -443,5 +538,70 @@
   .nav-links {
     text-align: center;
     margin-top: var(--space-4);
+  }
+
+  /* Taper card styles */
+  .taper-status-text {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+  }
+
+  .taper-completed {
+    color: var(--accent-green);
+  }
+
+  .taper-greyed {
+    color: var(--ink-faint);
+  }
+
+  .taper-active-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .taper-phase-label {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink-light);
+  }
+
+  .taper-today-row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-1);
+  }
+
+  .taper-today-value {
+    font-family: var(--font-display);
+    font-size: var(--text-base);
+    font-weight: 500;
+  }
+
+  .taper-today-sep {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+  }
+
+  .taper-today-limit {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-faint);
+  }
+
+  .taper-week-progress {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+    margin-left: var(--space-2);
+  }
+
+  .taper-next-preview {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+    font-style: italic;
   }
 </style>
