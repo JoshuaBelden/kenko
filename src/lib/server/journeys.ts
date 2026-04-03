@@ -59,6 +59,7 @@ export function serializeJourney(doc: WithId<Document>) {
     userId: doc.userId.toString(),
     name: doc.name,
     description: doc.description ?? "",
+    statement: doc.statement ?? null,
     startDate: doc.startDate instanceof Date ? doc.startDate.toISOString() : doc.startDate,
     endDate: doc.endDate instanceof Date ? doc.endDate.toISOString() : doc.endDate,
     status: doc.status,

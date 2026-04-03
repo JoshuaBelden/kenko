@@ -14,3 +14,13 @@ export async function getJourneysCollection() {
   const db = await getDb()
   return db.collection("journeys")
 }
+
+export async function getJournalEntriesCollection() {
+  const db = await getDb()
+  return db.collection("journalEntries")
+}
+
+export async function getWeightLogCollection() {
+  const db = await getDb()
+  return db.collection("weightLog")
+}

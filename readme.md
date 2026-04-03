@@ -133,6 +133,8 @@ kenko/
 | `fasts` | Fasting sessions with target duration, actual duration, and notes |
 | `commitments` | User commitments with targets, periods, and direction |
 | `commitmentLogs` | Daily logs against commitments |
+| `journalEntries` | Daily morning and evening journal entries scoped to a journey |
+| `weightLog` | Daily body weight records for progress charting |
 
 ---
 

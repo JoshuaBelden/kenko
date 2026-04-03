@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto, invalidateAll } from "$app/navigation"
   import { page } from "$app/state"
-  import { Button, Card, ProgressBar } from "$lib/components"
+  import { Button, Card, ProgressBar, StarRating, DotRating, TipTapEditor } from "$lib/components"
   import { icons } from "$lib/icons"
   import { formatDate } from "$lib/format"
 
@@ -20,9 +20,11 @@
   let activeTab = $state<Tab>("overview")
   let showSettings = $state(false)
 
-  // Show settings by default if no targets configured
+  // Show settings by default only if no targets and no description configured
+  let settingsAutoShown = $state(false)
   $effect(() => {
-    if (journey && !hasAnyTargets) {
+    if (journey && !hasAnyTargets && !journey.description && !settingsAutoShown) {
+      settingsAutoShown = true
       showSettings = true
     }
   })
@@ -34,6 +36,7 @@
   // ── Settings state ──
   let settingsName = $state("")
   let settingsDesc = $state("")
+  let settingsStatement = $state<string | null>(null)
   let settingsStartDate = $state("")
   let settingsEndDate = $state("")
   let saving = $state(false)
@@ -142,6 +145,7 @@
 
     settingsName = j.name ?? ""
     settingsDesc = j.description ?? ""
+    settingsStatement = j.statement ?? null
     settingsStartDate = j.startDate ? j.startDate.split("T")[0] : ""
     settingsEndDate = j.endDate ? j.endDate.split("T")[0] : ""
 
@@ -245,6 +249,7 @@
       body: JSON.stringify({
         name: settingsName.trim(),
         description: settingsDesc.trim(),
+        statement: settingsStatement,
         startDate: settingsStartDate,
         endDate: settingsEndDate,
         shokuTargets,
@@ -300,6 +305,133 @@
     }
   })
 
+  // ── Journal state ──
+  let journalDate = $state(new Date().toISOString().split("T")[0])
+  let journalEntry = $state<any>(null)
+  let journalLoading = $state(false)
+  let journalTab = $state<"morning" | "evening">("morning")
+  let yesterdayIntention = $state<string | null>(null)
+
+  // Journal field states
+  let jBodyWeight = $state("")
+  let jSleepDuration = $state("")
+  let jSleepQuality = $state<number | null>(null)
+  let jMorningNotes = $state<string | null>(null)
+  let jMood = $state<number | null>(null)
+  let jEnergy = $state<number | null>(null)
+  let jHighlights = $state("")
+  let jChallenges = $state("")
+  let jIntention = $state("")
+  let jDayRating = $state<number | null>(null)
+  let jEveningNotes = $state<string | null>(null)
+
+  const todayStr = new Date().toISOString().split("T")[0]
+  const isJournalFuture = $derived(journalDate > todayStr)
+
+  function syncJournalFields(entry: any) {
+    if (!entry) {
+      jBodyWeight = ""
+      jSleepDuration = ""
+      jSleepQuality = null
+      jMorningNotes = null
+      jMood = null
+      jEnergy = null
+      jHighlights = ""
+      jChallenges = ""
+      jIntention = ""
+      jDayRating = null
+      jEveningNotes = null
+      return
+    }
+    const m = entry.morning ?? {}
+    const e = entry.evening ?? {}
+    jBodyWeight = m.bodyWeight?.toString() ?? ""
+    jSleepDuration = m.sleepDuration?.toString() ?? ""
+    jSleepQuality = m.sleepQuality ?? null
+    jMorningNotes = m.notes ?? null
+    jMood = e.mood ?? null
+    jEnergy = e.energy ?? null
+    jHighlights = e.highlights ?? ""
+    jChallenges = e.challenges ?? ""
+    jIntention = e.intention ?? ""
+    jDayRating = e.dayRating ?? null
+    jEveningNotes = e.notes ?? null
+  }
+
+  async function loadJournalEntry() {
+    if (!journey) return
+    journalLoading = true
+    const [entryRes, intentionRes] = await Promise.all([
+      fetch(`/api/journal?journeyId=${journey.id}&date=${journalDate}`),
+      fetch(`/api/journal/yesterday-intention?journeyId=${journey.id}&date=${journalDate}`),
+    ])
+    if (entryRes.ok) {
+      const data = await entryRes.json()
+      journalEntry = data
+      syncJournalFields(data)
+    }
+    if (intentionRes.ok) {
+      const data = await intentionRes.json()
+      yesterdayIntention = data.intention
+    }
+    journalLoading = false
+  }
+
+  $effect(() => {
+    if (journey && activeTab === "journal") {
+      loadJournalEntry()
+    }
+  })
+
+  function journalPrevDay() {
+    const d = new Date(journalDate + "T00:00:00")
+    d.setDate(d.getDate() - 1)
+    journalDate = d.toISOString().split("T")[0]
+  }
+
+  function journalNextDay() {
+    const d = new Date(journalDate + "T00:00:00")
+    d.setDate(d.getDate() + 1)
+    const next = d.toISOString().split("T")[0]
+    if (next <= todayStr) {
+      journalDate = next
+    }
+  }
+
+  async function ensureEntry(): Promise<any> {
+    if (journalEntry) return journalEntry
+    const res = await fetch("/api/journal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ journeyId: journey.id, date: journalDate }),
+    })
+    if (res.ok) {
+      journalEntry = await res.json()
+      syncJournalFields(journalEntry)
+    }
+    return journalEntry
+  }
+
+  async function saveMorningField(field: string, value: any) {
+    const entry = await ensureEntry()
+    if (!entry) return
+    await fetch(`/api/journal/${entry.id}/morning`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [field]: value }),
+    })
+  }
+
+  async function saveEveningField(field: string, value: any) {
+    const entry = await ensureEntry()
+    if (!entry) return
+    await fetch(`/api/journal/${entry.id}/evening`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [field]: value }),
+    })
+  }
+
   function pct(current: number, target: number): number {
     if (!target) return 0
     return Math.min(100, Math.round((current / target) * 100))
@@ -317,6 +449,9 @@
   <div class="header-left">
     <a href="/tabi" class="back-link">&larr; Tabi</a>
     <h1 class="journey-title">{journey?.name ?? "Journey"}</h1>
+    {#if journey?.description}
+      <p class="journey-desc">{journey.description}</p>
+    {/if}
     {#if journey}
       <p class="journey-dates">
         {formatDate(journey.startDate)} &mdash; {formatDate(journey.endDate)}
@@ -383,6 +518,14 @@
         <div class="field">
           <label class="field-label" for="s-desc">Description</label>
           <input id="s-desc" bind:value={settingsDesc} placeholder="Optional description" />
+        </div>
+        <div class="field">
+          <span class="field-label">Why this journey matters</span>
+          <TipTapEditor
+            content={settingsStatement}
+            onblur={(html) => { settingsStatement = html }}
+            placeholder="What drives this journey..."
+          />
         </div>
       </div>
     </Card>
@@ -821,12 +964,166 @@
 
   <!-- ════════════ JOURNAL TAB ════════════ -->
   {:else if activeTab === "journal"}
-    <div class="placeholder-tab">
-      <Card>
-        <div class="empty-content">
-          <p class="empty-message">Journal view is coming in a future phase.</p>
+    <div class="journal-section">
+      <!-- Date switcher + yesterday's intention -->
+      <section class="date-nav">
+        <div class="date-controls">
+          <button class="date-btn" onclick={journalPrevDay}>&larr;</button>
+          <input
+            type="date"
+            class="date-input"
+            value={journalDate}
+            max={todayStr}
+            onchange={e => { journalDate = (e.target as HTMLInputElement).value }}
+          />
+          <button class="date-btn" onclick={journalNextDay} disabled={journalDate >= todayStr}>&rarr;</button>
         </div>
-      </Card>
+        {#if yesterdayIntention}
+          <div class="intention-hint">
+            <span class="intention-label">Today's Intentions</span>
+            <span class="intention-text">{yesterdayIntention}</span>
+          </div>
+        {/if}
+      </section>
+
+      {#if journalLoading}
+        <p class="loading-text">Loading...</p>
+      {:else if !journalEntry}
+        <!-- Empty state -->
+        <Card>
+          <div class="journal-empty">
+            <p class="empty-message">No entry for this day. Start your morning check-in or evening reflection.</p>
+            <div class="journal-empty-actions">
+              <Button onclick={async () => { await ensureEntry(); journalTab = "morning" }}>Start Morning</Button>
+              <Button variant="secondary" onclick={async () => { await ensureEntry(); journalTab = "evening" }}>Start Evening</Button>
+            </div>
+          </div>
+        </Card>
+      {:else}
+        <!-- Morning / Evening tab toggle -->
+        <nav class="journal-tabs">
+          <button class="journal-tab" class:journal-tab-active={journalTab === "morning"} onclick={() => (journalTab = "morning")}>
+            Morning
+          </button>
+          <button class="journal-tab" class:journal-tab-active={journalTab === "evening"} onclick={() => (journalTab = "evening")}>
+            Evening
+          </button>
+        </nav>
+
+        {#if journalTab === "morning"}
+          <div class="journal-form">
+            <div class="journal-field">
+              <label class="field-label" for="j-weight">Body weight (lbs)</label>
+              <input
+                id="j-weight"
+                type="number"
+                step="0.1"
+                bind:value={jBodyWeight}
+                placeholder="Optional"
+                onblur={() => saveMorningField("bodyWeight", jBodyWeight ? Number(jBodyWeight) : null)}
+              />
+            </div>
+
+            <div class="journal-field">
+              <label class="field-label" for="j-sleep">Sleep duration (hours)</label>
+              <input
+                id="j-sleep"
+                type="number"
+                step="0.5"
+                bind:value={jSleepDuration}
+                placeholder="e.g. 7.5"
+                onblur={() => saveMorningField("sleepDuration", jSleepDuration ? Number(jSleepDuration) : null)}
+              />
+            </div>
+
+            <div class="journal-field">
+              <span class="field-label">Sleep quality</span>
+              <StarRating
+                value={jSleepQuality}
+                onchange={(v) => { jSleepQuality = v; saveMorningField("sleepQuality", v) }}
+              />
+            </div>
+
+            <div class="journal-field">
+              <span class="field-label">Morning notes</span>
+              <TipTapEditor
+                content={jMorningNotes}
+                onblur={(html) => { jMorningNotes = html; saveMorningField("notes", html) }}
+                placeholder="How are you feeling this morning..."
+              />
+            </div>
+          </div>
+
+        {:else}
+          <div class="journal-form">
+            <div class="journal-field">
+              <span class="field-label">Mood</span>
+              <StarRating
+                value={jMood}
+                onchange={(v) => { jMood = v; saveEveningField("mood", v) }}
+              />
+            </div>
+
+            <div class="journal-field">
+              <span class="field-label">Energy</span>
+              <StarRating
+                value={jEnergy}
+                onchange={(v) => { jEnergy = v; saveEveningField("energy", v) }}
+              />
+            </div>
+
+            <div class="journal-field">
+              <label class="field-label" for="j-highlights">Highlights</label>
+              <input
+                id="j-highlights"
+                type="text"
+                bind:value={jHighlights}
+                placeholder="What went well today"
+                onblur={() => saveEveningField("highlights", jHighlights || null)}
+              />
+            </div>
+
+            <div class="journal-field">
+              <label class="field-label" for="j-challenges">Challenges</label>
+              <input
+                id="j-challenges"
+                type="text"
+                bind:value={jChallenges}
+                placeholder="What was difficult"
+                onblur={() => saveEveningField("challenges", jChallenges || null)}
+              />
+            </div>
+
+            <div class="journal-field">
+              <label class="field-label" for="j-intention">Intention for tomorrow</label>
+              <input
+                id="j-intention"
+                type="text"
+                bind:value={jIntention}
+                placeholder="One thing you intend to do"
+                onblur={() => saveEveningField("intention", jIntention || null)}
+              />
+            </div>
+
+            <div class="journal-field">
+              <span class="field-label">Evening notes</span>
+              <TipTapEditor
+                content={jEveningNotes}
+                onblur={(html) => { jEveningNotes = html; saveEveningField("notes", html) }}
+                placeholder="Reflect on your day..."
+              />
+            </div>
+
+            <div class="journal-field">
+              <span class="field-label">Day rating</span>
+              <DotRating
+                value={jDayRating}
+                onchange={(v) => { jDayRating = v; saveEveningField("dayRating", v) }}
+              />
+            </div>
+          </div>
+        {/if}
+      {/if}
     </div>
   {/if}
 {/if}
@@ -863,6 +1160,13 @@
     font-size: var(--text-2xl);
     font-weight: 500;
     color: var(--ink);
+    margin: 0;
+  }
+
+  .journey-desc {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-light);
     margin: 0;
   }
 
@@ -1472,5 +1776,163 @@
 
   .btn-danger:hover {
     opacity: 0.9;
+  }
+
+  /* ── Journal ── */
+  .journal-section {
+    max-width: 640px;
+  }
+
+  .date-nav {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    margin-bottom: var(--space-6);
+    flex-wrap: wrap;
+  }
+
+  .date-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .date-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3);
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    color: var(--ink-light);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .date-btn:hover:not(:disabled) {
+    border-color: var(--border-strong);
+    color: var(--ink);
+  }
+
+  .date-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  .date-input {
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    color: var(--ink);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    padding: var(--space-2) 0;
+    outline: none;
+    transition: border-color var(--transition-fast);
+  }
+
+  .date-input:focus {
+    border-bottom-color: var(--border-strong);
+  }
+
+  .journal-empty {
+    text-align: center;
+    padding: var(--space-6) var(--space-4);
+  }
+
+  .journal-empty-actions {
+    display: flex;
+    justify-content: center;
+    gap: var(--space-3);
+  }
+
+  .journal-tabs {
+    display: flex;
+    gap: var(--space-1);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: var(--space-6);
+  }
+
+  .journal-tab {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: var(--space-2) var(--space-4);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--ink-faint);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .journal-tab:hover {
+    color: var(--ink-light);
+  }
+
+  .journal-tab-active {
+    color: var(--ink);
+    border-bottom-color: var(--accent);
+  }
+
+  .journal-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+  }
+
+  .journal-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .journal-field input[type="text"],
+  .journal-field input[type="number"] {
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    color: var(--ink);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    padding: var(--space-3) 0;
+    outline: none;
+    transition: border-color var(--transition-fast);
+    width: 100%;
+  }
+
+  .journal-field input:focus {
+    border-bottom-color: var(--border-strong);
+  }
+
+  .journal-field input::placeholder {
+    color: var(--ink-faint);
+  }
+
+  .intention-hint {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding: var(--space-2) var(--space-3);
+    background: var(--paper-warm);
+    border-radius: var(--radius-sm);
+  }
+
+  .intention-label {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-faint);
+    white-space: nowrap;
+  }
+
+  .intention-text {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-light);
+    font-style: italic;
+    margin: 0;
   }
 </style>

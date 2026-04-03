@@ -26,6 +26,7 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
 
   if (body.name !== undefined) updates.name = body.name
   if (body.description !== undefined) updates.description = body.description
+  if (body.statement !== undefined) updates.statement = body.statement
   if (body.startDate !== undefined) updates.startDate = new Date(body.startDate)
   if (body.endDate !== undefined) updates.endDate = new Date(body.endDate)
   if (body.status !== undefined) updates.status = body.status
