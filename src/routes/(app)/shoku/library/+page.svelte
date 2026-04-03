@@ -18,13 +18,12 @@
   let duplicateWarning = $state("")
   let scanning = $state(false)
   let scannerSupported = $state(false)
-  let scannerComponent = $state<BarcodeScanner | null>(null)
   let scanRawJson = $state<Record<string, unknown> | null>(null)
   let scanError = $state("")
   let fBarcode = $state<string | null>(null)
 
   $effect(() => {
-    scannerSupported = typeof window !== "undefined" && "BarcodeDetector" in window
+    scannerSupported = typeof window !== "undefined" && !!navigator.mediaDevices?.getUserMedia
   })
 
   // Form fields
@@ -283,7 +282,6 @@
         <h4>Scan Barcode</h4>
         <div class="scanner-container">
           <BarcodeScanner
-            bind:this={scannerComponent}
             onscanned={handleBarcodeScan}
             onerror={() => { scanError = "Camera access was denied"; scanning = false }}
             oncancelled={() => { scanning = false }}
@@ -887,7 +885,7 @@
   .scanner-container {
     border-radius: var(--radius-sm);
     overflow: hidden;
-    max-height: 300px;
+    height: 300px;
   }
 
   .scan-message {

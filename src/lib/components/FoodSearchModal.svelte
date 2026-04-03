@@ -48,7 +48,7 @@
   })
 
   $effect(() => {
-    scannerSupported = typeof window !== "undefined" && "BarcodeDetector" in window
+    scannerSupported = typeof window !== "undefined" && !!navigator.mediaDevices?.getUserMedia
   })
 
   let searchTimeout: ReturnType<typeof setTimeout> | undefined
@@ -535,6 +535,7 @@
 
   .scanner-wrap {
     flex: 1;
+    min-height: 250px;
     overflow: hidden;
   }
 

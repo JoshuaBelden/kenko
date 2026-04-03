@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { BarcodeDetector } from "barcode-detector"
+
   interface Props {
     onscanned: (barcode: string) => void
     onerror: () => void
@@ -92,8 +94,8 @@
     flex-direction: column;
     align-items: center;
     width: 100%;
-    height: 100%;
-    min-height: 300px;
+    min-height: 250px;
+    height: 300px;
     background: #000;
   }
 
@@ -101,6 +103,7 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
+    display: block;
   }
 
   .scanner-overlay {

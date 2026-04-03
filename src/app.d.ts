@@ -1,17 +1,4 @@
 declare global {
-  interface DetectedBarcode {
-    rawValue: string
-    format: string
-    boundingBox: DOMRectReadOnly
-    cornerPoints: { x: number; y: number }[]
-  }
-
-  class BarcodeDetector {
-    constructor(options?: { formats?: string[] })
-    static getSupportedFormats(): Promise<string[]>
-    detect(source: ImageBitmapSource): Promise<DetectedBarcode[]>
-  }
-
   namespace App {
     interface Locals {
       userId?: string
