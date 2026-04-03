@@ -275,6 +275,13 @@
     goto("/tabi")
   }
 
+  let confirmingDelete = $state(false)
+
+  async function deleteJourney() {
+    await fetch(`/api/journeys/${journey.id}`, { method: "DELETE" })
+    goto("/tabi")
+  }
+
   // ── Overview data ──
   let overviewData = $state<any>(null)
   let overviewLoading = $state(false)
@@ -577,6 +584,23 @@
         {saving ? "Saving..." : "Save settings"}
       </Button>
       <button class="btn-text" onclick={() => (showSettings = false)}>Close settings</button>
+    </div>
+
+    <!-- Delete journey -->
+    <div class="danger-zone">
+      {#if confirmingDelete}
+        <Card>
+          <div class="delete-confirm">
+            <p class="delete-message">Are you sure? This will not delete any logged data — only the journey and its targets will be removed.</p>
+            <div class="delete-actions">
+              <button class="btn-danger" onclick={deleteJourney}>Yes, delete</button>
+              <button class="btn-text" onclick={() => (confirmingDelete = false)}>Cancel</button>
+            </div>
+          </div>
+        </Card>
+      {:else}
+        <button class="btn-text btn-danger-text" onclick={() => (confirmingDelete = true)}>Delete this journey</button>
+      {/if}
     </div>
   </div>
 {:else}
@@ -1397,5 +1421,56 @@
 
   .btn-text:hover {
     color: var(--ink);
+  }
+
+  /* Danger zone */
+  .danger-zone {
+    padding-top: var(--space-4);
+    border-top: 0.5px solid var(--border);
+  }
+
+  .btn-danger-text {
+    color: var(--accent);
+  }
+
+  .btn-danger-text:hover {
+    opacity: 0.8;
+  }
+
+  .delete-confirm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .delete-message {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    line-height: 1.7;
+    color: var(--ink-light);
+    margin: 0;
+  }
+
+  .delete-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .btn-danger {
+    background: var(--accent);
+    color: #ffffff;
+    border: none;
+    cursor: pointer;
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius-sm);
+    transition: opacity var(--transition-fast);
+  }
+
+  .btn-danger:hover {
+    opacity: 0.9;
   }
 </style>
