@@ -6,13 +6,14 @@
     label: string
     kanji?: string
     active?: boolean
+    onclick?: () => void
     children?: Snippet
   }
 
-  let { href, label, kanji, active = false, children }: Props = $props()
+  let { href, label, kanji, active = false, onclick, children }: Props = $props()
 </script>
 
-<a {href} class="nav-item" class:active>
+<a {href} class="nav-item" class:active {onclick}>
   {#if children}
     <span class="nav-icon">
       {@render children()}
@@ -28,20 +29,13 @@
   .nav-item {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: var(--space-3);
-    padding: var(--space-3);
+    padding: var(--space-3) var(--space-4);
     border-radius: var(--radius-sm);
     text-decoration: none;
     color: var(--ink-light);
     transition: all var(--transition-fast);
-  }
-
-  @media (min-width: 768px) {
-    .nav-item {
-      justify-content: flex-start;
-      padding: var(--space-3) var(--space-4);
-    }
   }
 
   .nav-item:hover {
@@ -66,7 +60,7 @@
     font-size: var(--text-sm);
     font-weight: 400;
     letter-spacing: 0.05em;
-    display: none;
+    display: flex;
     align-items: baseline;
     gap: var(--space-2);
     white-space: nowrap;
@@ -76,11 +70,5 @@
     font-family: var(--font-display);
     font-size: var(--text-sm);
     opacity: 0.5;
-  }
-
-  @media (min-width: 768px) {
-    .nav-label {
-      display: flex;
-    }
   }
 </style>

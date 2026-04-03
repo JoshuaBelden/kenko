@@ -10,6 +10,12 @@
 
   let { children }: Props = $props()
   let settingsOpen = $state(false)
+  let mobileNavOpen = $state(false)
+
+  function closeMobileNav() {
+    mobileNavOpen = false
+    settingsOpen = false
+  }
 
   const user = $derived(page.data.user)
 
@@ -33,9 +39,20 @@
 </script>
 
 <div class="app-layout">
-  <aside class="sidebar">
+  <!-- Mobile: floating logo button -->
+  <button class="mobile-menu-btn" onclick={() => (mobileNavOpen = true)} aria-label="Open navigation">
+    <span class="logo-kanji">健</span>
+  </button>
+
+  <!-- Mobile: backdrop -->
+  {#if mobileNavOpen}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="sidebar-backdrop" onclick={closeMobileNav} onkeydown={closeMobileNav}></div>
+  {/if}
+
+  <aside class="sidebar" class:open={mobileNavOpen}>
     <div class="sidebar-header">
-      <a href="/" class="logo">
+      <a href="/" class="logo" onclick={closeMobileNav}>
         <span class="logo-kanji">健</span>
         <span class="logo-text">Kenkō</span>
       </a>
@@ -44,7 +61,7 @@
 
     <nav class="sidebar-nav">
       {#each navItems as item}
-        <NavItem href={item.href} label={item.label} active={isActive(item.href)}>
+        <NavItem href={item.href} label={item.label} active={isActive(item.href)} onclick={closeMobileNav}>
           {#snippet children()}
             <svg
               width="20"
@@ -65,7 +82,7 @@
 
     <div class="sidebar-footer">
       <!-- Profile link -->
-      <a href="/profile" class="footer-item" class:active={page.url.pathname === "/profile"}>
+      <a href="/profile" class="footer-item" class:active={page.url.pathname === "/profile"} onclick={closeMobileNav}>
         <span class="footer-icon">
           <svg
             width="20"
@@ -113,7 +130,7 @@
               <span class="settings-label">Theme</span>
               <ThemeToggle />
             </div>
-            <a href="/shoku/library" class="settings-link" onclick={() => (settingsOpen = false)}>
+            <a href="/shoku/library" class="settings-link" onclick={() => { settingsOpen = false; closeMobileNav() }}>
               <svg
                 width="16"
                 height="16"
@@ -128,7 +145,7 @@
               </svg>
               <span>Food Library</span>
             </a>
-            <a href="/dojo/library" class="settings-link" onclick={() => (settingsOpen = false)}>
+            <a href="/dojo/library" class="settings-link" onclick={() => { settingsOpen = false; closeMobileNav() }}>
               <svg
                 width="16"
                 height="16"
@@ -183,29 +200,68 @@
     min-height: 100dvh;
   }
 
+  /* ---- Mobile menu button ---- */
+  .mobile-menu-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    top: var(--space-3);
+    left: var(--space-3);
+    z-index: 20;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-sm);
+    border: 0.5px solid var(--border);
+    background: var(--paper);
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  }
+
+  .mobile-menu-btn .logo-kanji {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  /* ---- Backdrop ---- */
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
+    z-index: 29;
+  }
+
   /* ---- Sidebar ---- */
   .sidebar {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    width: 48px;
-    padding: var(--space-3) var(--space-2);
+    align-items: stretch;
+    width: 240px;
+    padding: var(--space-6);
     border-right: 0.5px solid var(--border);
     background: var(--paper);
     position: fixed;
     top: 0;
     left: 0;
     bottom: 0;
-    z-index: 10;
+    z-index: 30;
     overflow: hidden;
-    transition: width var(--transition-base);
+    transform: translateX(-100%);
+    transition: transform var(--transition-base);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
   }
 
   .sidebar-header {
     margin-bottom: var(--space-6);
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     min-height: 32px;
     width: 100%;
   }
@@ -213,7 +269,7 @@
   .sidebar-nav {
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: stretch;
     gap: var(--space-1);
     flex: 1;
     width: 100%;
@@ -224,7 +280,7 @@
     border-top: 0.5px solid var(--border);
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: stretch;
     gap: var(--space-1);
     width: 100%;
   }
@@ -233,7 +289,7 @@
   .footer-item {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: var(--space-3);
     padding: var(--space-3);
     border-radius: var(--radius-sm);
@@ -267,7 +323,7 @@
   }
 
   .footer-label {
-    display: none;
+    display: block;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -330,7 +386,7 @@
     text-decoration: none;
     display: flex;
     align-items: baseline;
-    justify-content: center;
+    justify-content: flex-start;
     gap: var(--space-2);
     white-space: nowrap;
   }
@@ -348,15 +404,16 @@
     font-size: var(--text-lg);
     font-weight: 400;
     color: var(--ink-light);
-    display: none;
+    display: inline;
   }
 
   /* ---- Main content ---- */
   .main-content {
     flex: 1;
-    margin-left: 48px;
+    margin-left: 0;
     padding: var(--space-6) var(--space-4);
-    max-width: calc(100% - 48px);
+    padding-top: calc(var(--space-6) + 48px);
+    max-width: 100%;
     transition:
       margin-left var(--transition-base),
       max-width var(--transition-base);
@@ -367,45 +424,24 @@
     width: 100%;
   }
 
-  /* ---- Desktop: expanded sidebar ---- */
+  /* ---- Desktop: persistent sidebar ---- */
   @media (min-width: 768px) {
+    .mobile-menu-btn {
+      display: none;
+    }
+
+    .sidebar-backdrop {
+      display: none;
+    }
+
     .sidebar {
-      width: 240px;
-      padding: var(--space-6);
-      align-items: stretch;
-    }
-
-    .sidebar-header {
-      justify-content: flex-start;
-    }
-
-    .sidebar-nav {
-      align-items: stretch;
-    }
-
-    .sidebar-footer {
-      align-items: stretch;
-    }
-
-    .footer-item {
-      justify-content: flex-start;
-    }
-
-    .footer-label {
-      display: block;
-    }
-
-    .logo {
-      justify-content: flex-start;
-    }
-
-    .logo-text {
-      display: inline;
+      transform: translateX(0);
     }
 
     .main-content {
       margin-left: 240px;
       padding: var(--space-8);
+      padding-top: var(--space-8);
       max-width: calc(100% - 240px);
     }
   }
