@@ -4,7 +4,6 @@
   import { Button, Card, PageHeader, StatNumber } from "$lib/components"
   import { icons } from "$lib/icons"
   import FoodSearchModal from "$lib/components/FoodSearchModal.svelte"
-  import { journeyLens } from "$lib/stores/journeyLens.svelte"
 
   let grouped = $state(page.data.grouped ?? {})
   let totals = $state(page.data.totals ?? { calories: 0, protein: 0, netCarbs: 0, fat: 0 })
@@ -81,10 +80,7 @@
   ]
 
   function navigateDate(dateStr: string) {
-    const params = new URLSearchParams()
-    params.set("date", dateStr)
-    if (journeyLens.selectedId) params.set("journeyId", journeyLens.selectedId)
-    goto(`/shoku?${params.toString()}`, { invalidateAll: true })
+    goto(`/shoku?date=${dateStr}`, { invalidateAll: true })
   }
 
   function prevDay() {
@@ -187,18 +183,6 @@
     expandedEmpty = next
   }
 
-  // Re-navigate when journey lens changes
-  $effect(() => {
-    const lensId = journeyLens.selectedId
-    const params = new URLSearchParams()
-    params.set("date", currentDate)
-    if (lensId) params.set("journeyId", lensId)
-    // Only re-navigate if the URL params actually differ
-    const currentJourneyId = page.url.searchParams.get("journeyId")
-    if ((lensId ?? null) !== (currentJourneyId ?? null)) {
-      goto(`/shoku?${params.toString()}`, { invalidateAll: true })
-    }
-  })
 </script>
 
 <PageHeader icon={icons.shoku} title="Shoku" subtitle="Nourish with intention" />

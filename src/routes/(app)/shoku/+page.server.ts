@@ -15,11 +15,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     date: { $gte: date, $lt: nextDate },
   }
 
-  const journeyId = url.searchParams.get("journeyId")
-  if (journeyId) {
-    filter.journeyIds = new ObjectId(journeyId)
-  }
-
   const diaryEntries = await getDiaryEntriesCollection()
   const entries = await diaryEntries.find(filter).sort({ loggedAt: 1 }).toArray()
   const serialized = entries.map(serializeDiaryEntry)
