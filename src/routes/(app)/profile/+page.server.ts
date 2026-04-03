@@ -1,8 +1,17 @@
 import { hashPassword, verifyPassword } from "$lib/server/auth"
 import { getUsersCollection } from "$lib/server/collections"
+import type { ActivityLevel } from "$lib/server/tdee"
 import { fail } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
 import type { Actions } from "./$types"
+
+const VALID_ACTIVITY_LEVELS: ActivityLevel[] = [
+  "sedentary",
+  "lightly_active",
+  "moderately_active",
+  "very_active",
+  "extremely_active",
+]
 
 export const actions: Actions = {
   updateProfile: async ({ request, locals }) => {
@@ -16,9 +25,30 @@ export const actions: Actions = {
     const sex = data.get("sex") as "male" | "female" | null
     const bmi = data.get("bmi") ? Number(data.get("bmi")) : undefined
     const bodyFatPercent = data.get("bodyFatPercent") ? Number(data.get("bodyFatPercent")) : undefined
+    const birthDate = (data.get("birthDate") as string)?.trim() || undefined
+    const activityLevel = data.get("activityLevel") as ActivityLevel | null
+    const tdeeOverrideRaw = data.get("tdeeOverride") as string | null
+    const useTdeeOverride = data.get("useTdeeOverride") === "on"
 
     if (!firstName || !lastName) {
       return fail(400, { profileError: "First and last name are required." })
+    }
+
+    if (birthDate && new Date(birthDate) > new Date()) {
+      return fail(400, { profileError: "Birth date cannot be in the future." })
+    }
+
+    if (activityLevel && !VALID_ACTIVITY_LEVELS.includes(activityLevel)) {
+      return fail(400, { profileError: "Invalid activity level." })
+    }
+
+    let tdeeOverride: number | null = null
+    if (useTdeeOverride && tdeeOverrideRaw) {
+      const parsed = Number(tdeeOverrideRaw)
+      if (isNaN(parsed) || parsed <= 0) {
+        return fail(400, { profileError: "TDEE override must be a positive number." })
+      }
+      tdeeOverride = parsed
     }
 
     const users = await getUsersCollection()
@@ -34,6 +64,9 @@ export const actions: Actions = {
             sex: sex || undefined,
             bmi: bmi || undefined,
             bodyFatPercent: bodyFatPercent || undefined,
+            birthDate: birthDate || undefined,
+            activityLevel: activityLevel || undefined,
+            tdeeOverride,
           },
           profileComplete: true,
           updatedAt: new Date(),

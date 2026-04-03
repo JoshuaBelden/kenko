@@ -16,6 +16,9 @@ declare global {
           sex?: "male" | "female"
           bmi?: number
           bodyFatPercent?: number
+          birthDate?: string
+          activityLevel?: "sedentary" | "lightly_active" | "moderately_active" | "very_active" | "extremely_active"
+          tdeeOverride?: number | null
         } | null
       } | null
       activeJourneys: Array<{
