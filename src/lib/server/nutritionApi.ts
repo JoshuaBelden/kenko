@@ -93,10 +93,10 @@ export async function lookupBarcodeWithRaw(barcode: string): Promise<BarcodeLook
 
 export async function searchByName(query: string): Promise<NutritionApiResult[]> {
   try {
-    const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=10`
+    const url = `https://world.openfoodfacts.net/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=10&lc=en&cc=us`
     const res = await fetch(url, {
       headers: { "User-Agent": "Kenko/1.0" },
-      signal: AbortSignal.timeout(3000),
+      signal: AbortSignal.timeout(5000),
     })
 
     if (!res.ok) return []
