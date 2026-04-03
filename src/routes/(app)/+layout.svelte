@@ -20,7 +20,6 @@
   const user = $derived(page.data.user)
 
   const navItems = [
-    { href: "/", label: "Dashboard", icon: "dashboard" },
     { href: "/tabi", label: "Tabi", icon: "tabi" },
     { href: "/shoku", label: "Shoku", icon: "shoku" },
     { href: "/danjiki", label: "Danjiki", icon: "danjiki" },
@@ -29,7 +28,6 @@
   ]
 
   function isActive(href: string): boolean {
-    if (href === "/") return page.url.pathname === "/"
     return page.url.pathname.startsWith(href)
   }
 
@@ -52,7 +50,7 @@
 
   <aside class="sidebar" class:open={mobileNavOpen}>
     <div class="sidebar-header">
-      <a href="/" class="logo" onclick={closeMobileNav}>
+      <a href="/tabi" class="logo" onclick={closeMobileNav}>
         <span class="logo-kanji">健</span>
         <span class="logo-text">Kenkō</span>
       </a>

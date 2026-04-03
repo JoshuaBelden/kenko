@@ -32,6 +32,6 @@ export const actions: Actions = {
       throw redirect(303, "/profile")
     }
 
-    throw redirect(303, "/")
+    throw redirect(303, "/tabi")
   },
 }

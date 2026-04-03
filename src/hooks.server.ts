@@ -26,7 +26,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 
       // Authenticated users shouldn't see auth pages
       if (PUBLIC_ROUTES.includes(event.url.pathname)) {
-        throw redirect(303, "/")
+        throw redirect(303, "/tabi")
       }
     }
   }

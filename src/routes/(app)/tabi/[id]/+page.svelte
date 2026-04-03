@@ -750,7 +750,7 @@
   <!-- ════════════ TAB NAVIGATION ════════════ -->
   <nav class="tab-nav">
     <button class="tab" class:tab-active={activeTab === "overview"} onclick={() => (activeTab = "overview")}>
-      Overview
+      Dashboard
     </button>
     <button class="tab" class:tab-active={activeTab === "history"} onclick={() => (activeTab = "history")}>
       History

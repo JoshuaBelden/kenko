@@ -50,7 +50,6 @@ export const GET: RequestHandler = async ({ locals, params }) => {
     const todayEntries = await diary
       .find({
         userId,
-        journeyIds: journeyId,
         date: { $gte: startOfDay(now), $lte: endOfDay(now) },
       })
       .toArray()
