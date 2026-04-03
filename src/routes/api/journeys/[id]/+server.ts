@@ -2,6 +2,7 @@ import { getJourneysCollection } from "$lib/server/collections"
 import { removeJourneyFromRecords, serializeJourney } from "$lib/server/journeys"
 import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
+import type { Document } from "mongodb"
 import type { RequestHandler } from "./$types"
 
 export const GET: RequestHandler = async ({ locals, params }) => {
@@ -28,6 +29,24 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
   if (body.startDate !== undefined) updates.startDate = new Date(body.startDate)
   if (body.endDate !== undefined) updates.endDate = new Date(body.endDate)
   if (body.status !== undefined) updates.status = body.status
+  if (body.shokuTargets !== undefined) updates.shokuTargets = body.shokuTargets
+  if (body.danjikiTargets !== undefined) updates.danjikiTargets = body.danjikiTargets
+  if (body.dojoTargets !== undefined) {
+    updates.dojoTargets = body.dojoTargets
+      ? {
+          planIds: (body.dojoTargets.planIds ?? []).map((id: string) => new ObjectId(id)),
+          sessionsPerWeek: body.dojoTargets.sessionsPerWeek ?? null,
+          weeklyCalorieBurn: body.dojoTargets.weeklyCalorieBurn ?? null,
+        }
+      : null
+  }
+  if (body.kataTargets !== undefined) {
+    updates.kataTargets = body.kataTargets
+      ? {
+          commitmentIds: (body.kataTargets.commitmentIds ?? []).map((id: string) => new ObjectId(id)),
+        }
+      : null
+  }
 
   const journeys = await getJourneysCollection()
   const result = await journeys.findOneAndUpdate(

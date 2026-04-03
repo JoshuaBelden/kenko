@@ -63,6 +63,20 @@ export function serializeJourney(doc: WithId<Document>) {
     endDate: doc.endDate instanceof Date ? doc.endDate.toISOString() : doc.endDate,
     status: doc.status,
     isDefault: doc.isDefault ?? false,
+    shokuTargets: doc.shokuTargets ?? null,
+    danjikiTargets: doc.danjikiTargets ?? null,
+    dojoTargets: doc.dojoTargets
+      ? {
+          planIds: (doc.dojoTargets.planIds ?? []).map((id: any) => id.toString()),
+          sessionsPerWeek: doc.dojoTargets.sessionsPerWeek ?? null,
+          weeklyCalorieBurn: doc.dojoTargets.weeklyCalorieBurn ?? null,
+        }
+      : null,
+    kataTargets: doc.kataTargets
+      ? {
+          commitmentIds: (doc.kataTargets.commitmentIds ?? []).map((id: any) => id.toString()),
+        }
+      : null,
     createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
     updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
   }

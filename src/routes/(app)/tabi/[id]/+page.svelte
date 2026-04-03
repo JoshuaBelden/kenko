@@ -1,0 +1,1401 @@
+<script lang="ts">
+  import { goto, invalidateAll } from "$app/navigation"
+  import { page } from "$app/state"
+  import { Button, Card, ProgressBar } from "$lib/components"
+  import { icons } from "$lib/icons"
+  import { formatDate } from "$lib/format"
+
+  const data = $derived(page.data as any)
+  const journey = $derived(data.journey)
+  const allPlans = $derived(data.allPlans ?? [])
+  const allCommitments = $derived(data.allCommitments ?? [])
+  const tdee = $derived(data.tdee as number | null)
+
+  // Determine if newly created (no targets configured)
+  const hasAnyTargets = $derived(
+    journey?.shokuTargets || journey?.danjikiTargets || journey?.dojoTargets || journey?.kataTargets,
+  )
+
+  type Tab = "overview" | "history" | "journal"
+  let activeTab = $state<Tab>("overview")
+  let showSettings = $state(false)
+
+  // Show settings by default if no targets configured
+  $effect(() => {
+    if (journey && !hasAnyTargets) {
+      showSettings = true
+    }
+  })
+
+  // Journey status helpers
+  const isEnded = $derived(journey && new Date(journey.endDate) < new Date())
+  const isArchived = $derived(journey?.status === "archived")
+
+  // ── Settings state ──
+  let settingsName = $state("")
+  let settingsDesc = $state("")
+  let settingsStartDate = $state("")
+  let settingsEndDate = $state("")
+  let saving = $state(false)
+  let saveError = $state("")
+  let saveSuccess = $state(false)
+
+  // Shoku settings
+  let weightGoalLbsPerWeek = $state("0")
+  let dailyCalorieOverride = $state(false)
+  let dailyCalorieTarget = $state("")
+  let macroMode = $state<"percentage" | "grams">("percentage")
+  let proteinValue = $state("")
+  let carbsValue = $state("")
+  let fatValue = $state("")
+  let dailyWaterTargetOz = $state("")
+
+  const WEIGHT_GOAL_OPTIONS = [
+    { value: "-2", label: "Lose 2 lb/week" },
+    { value: "-1.5", label: "Lose 1.5 lb/week" },
+    { value: "-1", label: "Lose 1 lb/week" },
+    { value: "-0.5", label: "Lose 0.5 lb/week" },
+    { value: "0", label: "Maintain weight" },
+    { value: "0.5", label: "Gain 0.5 lb/week" },
+    { value: "1", label: "Gain 1 lb/week" },
+    { value: "1.5", label: "Gain 1.5 lb/week" },
+    { value: "2", label: "Gain 2 lb/week" },
+  ] as const
+
+  // Danjiki settings
+  let weeklyFastingHours = $state("")
+
+  // Dojo settings
+  let selectedPlanIds = $state<string[]>([])
+  let dojoSessionsPerWeek = $state("")
+  let dojoWeeklyCalorieBurn = $state("")
+
+  // Kata settings
+  let selectedCommitmentIds = $state<string[]>([])
+
+  // Computed calorie target from weight goal + TDEE
+  const deficitPerDay = $derived(() => {
+    const goal = Number(weightGoalLbsPerWeek)
+    if (!goal) return 0
+    return Math.round(goal * 500) // 1lb = 3500 kcal / 7 days = 500
+  })
+
+  const calculatedCalorieTarget = $derived(() => {
+    if (!tdee) return null
+    const deficit = deficitPerDay()
+    return tdee + deficit // deficit is negative for loss
+  })
+
+  const effectiveCalorieTarget = $derived(() => {
+    if (dailyCalorieOverride && dailyCalorieTarget) return Number(dailyCalorieTarget)
+    return calculatedCalorieTarget()
+  })
+
+  // Macro conversions
+  function macroGramsFromPct(pct: number, caloriesPerGram: number): number | null {
+    const cal = effectiveCalorieTarget()
+    if (!cal) return null
+    return Math.round((cal * (pct / 100)) / caloriesPerGram)
+  }
+
+  function macroPctFromGrams(grams: number, caloriesPerGram: number): number | null {
+    const cal = effectiveCalorieTarget()
+    if (!cal) return null
+    return Math.round(((grams * caloriesPerGram) / cal) * 100)
+  }
+
+  const proteinRef = $derived(() => {
+    const v = Number(proteinValue)
+    if (!v) return null
+    return macroMode === "percentage"
+      ? `${macroGramsFromPct(v, 4) ?? "—"}g`
+      : `${macroPctFromGrams(v, 4) ?? "—"}%`
+  })
+
+  const carbsRef = $derived(() => {
+    const v = Number(carbsValue)
+    if (!v) return null
+    return macroMode === "percentage"
+      ? `${macroGramsFromPct(v, 4) ?? "—"}g`
+      : `${macroPctFromGrams(v, 4) ?? "—"}%`
+  })
+
+  const fatRef = $derived(() => {
+    const v = Number(fatValue)
+    if (!v) return null
+    return macroMode === "percentage"
+      ? `${macroGramsFromPct(v, 9) ?? "—"}g`
+      : `${macroPctFromGrams(v, 9) ?? "—"}%`
+  })
+
+  const macroPctTotal = $derived(() => {
+    if (macroMode !== "percentage") return null
+    return (Number(proteinValue) || 0) + (Number(carbsValue) || 0) + (Number(fatValue) || 0)
+  })
+
+  // Sync settings from journey data — only on load and after save
+  let syncVersion = $state(0)
+  $effect(() => {
+    const j = journey
+    void syncVersion // track version to re-run after save
+    if (!j) return
+
+    settingsName = j.name ?? ""
+    settingsDesc = j.description ?? ""
+    settingsStartDate = j.startDate ? j.startDate.split("T")[0] : ""
+    settingsEndDate = j.endDate ? j.endDate.split("T")[0] : ""
+
+    const s = j.shokuTargets
+    if (s) {
+      weightGoalLbsPerWeek = s.weightGoalLbsPerWeek?.toString() ?? "0"
+      dailyCalorieOverride = s.dailyCalorieOverride ?? false
+      dailyCalorieTarget = s.dailyCalorieTarget?.toString() ?? ""
+      // Determine macro mode from first macro that has a value
+      const firstMacro = s.macros?.protein ?? s.macros?.carbs ?? s.macros?.fat
+      const initialMode = firstMacro?.percentage != null ? "percentage" : "grams"
+      macroMode = initialMode
+      if (s.macros?.protein) {
+        proteinValue = (initialMode === "percentage" ? s.macros.protein.percentage : s.macros.protein.grams)?.toString() ?? ""
+      }
+      if (s.macros?.carbs) {
+        carbsValue = (initialMode === "percentage" ? s.macros.carbs.percentage : s.macros.carbs.grams)?.toString() ?? ""
+      }
+      if (s.macros?.fat) {
+        fatValue = (initialMode === "percentage" ? s.macros.fat.percentage : s.macros.fat.grams)?.toString() ?? ""
+      }
+      dailyWaterTargetOz = s.dailyWaterTargetOz?.toString() ?? ""
+    }
+
+    const d = j.danjikiTargets
+    if (d) {
+      weeklyFastingHours = d.weeklyFastingHours?.toString() ?? ""
+    }
+
+    const dj = j.dojoTargets
+    if (dj) {
+      selectedPlanIds = dj.planIds ?? []
+      dojoSessionsPerWeek = dj.sessionsPerWeek?.toString() ?? ""
+      dojoWeeklyCalorieBurn = dj.weeklyCalorieBurn?.toString() ?? ""
+    }
+
+    const k = j.kataTargets
+    if (k) {
+      selectedCommitmentIds = k.commitmentIds ?? []
+    }
+  })
+
+  async function saveSettings() {
+    saving = true
+    saveError = ""
+    saveSuccess = false
+
+    if (!settingsName.trim()) {
+      saveError = "Journey name is required."
+      saving = false
+      return
+    }
+
+    const calTarget = effectiveCalorieTarget()
+
+    const hasShoku =
+      Number(weightGoalLbsPerWeek) !== 0 || dailyCalorieTarget || proteinValue || carbsValue || fatValue || dailyWaterTargetOz
+    const shokuTargets = hasShoku
+        ? {
+            weightGoalLbsPerWeek: Number(weightGoalLbsPerWeek) || null,
+            dailyCalorieTarget: dailyCalorieOverride && dailyCalorieTarget ? Number(dailyCalorieTarget) : (calTarget ?? null),
+            dailyCalorieOverride,
+            macros: {
+              protein: {
+                percentage: macroMode === "percentage" && proteinValue ? Number(proteinValue) : null,
+                grams: macroMode === "grams" && proteinValue ? Number(proteinValue) : null,
+              },
+              carbs: {
+                percentage: macroMode === "percentage" && carbsValue ? Number(carbsValue) : null,
+                grams: macroMode === "grams" && carbsValue ? Number(carbsValue) : null,
+              },
+              fat: {
+                percentage: macroMode === "percentage" && fatValue ? Number(fatValue) : null,
+                grams: macroMode === "grams" && fatValue ? Number(fatValue) : null,
+              },
+            },
+            dailyWaterTargetOz: dailyWaterTargetOz ? Number(dailyWaterTargetOz) : null,
+          }
+        : null
+
+    const danjikiTargets = weeklyFastingHours
+      ? { weeklyFastingHours: Number(weeklyFastingHours) }
+      : null
+
+    const dojoTargets =
+      selectedPlanIds.length > 0 || dojoSessionsPerWeek || dojoWeeklyCalorieBurn
+        ? {
+            planIds: selectedPlanIds,
+            sessionsPerWeek: dojoSessionsPerWeek ? Number(dojoSessionsPerWeek) : null,
+            weeklyCalorieBurn: dojoWeeklyCalorieBurn ? Number(dojoWeeklyCalorieBurn) : null,
+          }
+        : null
+
+    const kataTargets = selectedCommitmentIds.length > 0
+      ? { commitmentIds: selectedCommitmentIds }
+      : null
+
+    const res = await fetch(`/api/journeys/${journey.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: settingsName.trim(),
+        description: settingsDesc.trim(),
+        startDate: settingsStartDate,
+        endDate: settingsEndDate,
+        shokuTargets,
+        danjikiTargets,
+        dojoTargets,
+        kataTargets,
+      }),
+    })
+
+    if (!res.ok) {
+      const err = await res.json()
+      saveError = err.error ?? "Failed to save."
+    } else {
+      saveSuccess = true
+      await invalidateAll()
+      syncVersion++
+      setTimeout(() => (saveSuccess = false), 2000)
+    }
+    saving = false
+  }
+
+  async function archiveJourney() {
+    await fetch(`/api/journeys/${journey.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "archived" }),
+    })
+    goto("/tabi")
+  }
+
+  // ── Overview data ──
+  let overviewData = $state<any>(null)
+  let overviewLoading = $state(false)
+
+  async function loadOverview() {
+    if (!hasAnyTargets) return
+    overviewLoading = true
+    const res = await fetch(`/api/journeys/${journey.id}/overview`)
+    if (res.ok) overviewData = await res.json()
+    overviewLoading = false
+  }
+
+  $effect(() => {
+    if (journey && hasAnyTargets && activeTab === "overview" && !showSettings) {
+      loadOverview()
+    }
+  })
+
+  function pct(current: number, target: number): number {
+    if (!target) return 0
+    return Math.min(100, Math.round((current / target) * 100))
+  }
+
+  const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+
+  function toggleArrayItem(arr: string[], item: string): string[] {
+    return arr.includes(item) ? arr.filter((i) => i !== item) : [...arr, item]
+  }
+</script>
+
+<!-- Page header -->
+<div class="journey-header">
+  <div class="header-left">
+    <a href="/tabi" class="back-link">&larr; Tabi</a>
+    <h1 class="journey-title">{journey?.name ?? "Journey"}</h1>
+    {#if journey}
+      <p class="journey-dates">
+        {formatDate(journey.startDate)} &mdash; {formatDate(journey.endDate)}
+      </p>
+    {/if}
+  </div>
+  {#if !showSettings}
+    <button class="settings-link" onclick={() => (showSettings = true)}>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="3" />
+        <path
+          d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+        />
+      </svg>
+      Settings
+    </button>
+  {/if}
+</div>
+
+<!-- Ended banner -->
+{#if isEnded && !isArchived}
+  <div class="ended-banner">
+    <span>This journey ended on {formatDate(journey.endDate)}.</span>
+    <button class="btn-archive" onclick={archiveJourney}>Archive</button>
+  </div>
+{/if}
+
+{#if isArchived}
+  <div class="ended-banner">
+    <span>This journey has been archived.</span>
+  </div>
+{/if}
+
+{#if showSettings}
+  <!-- ════════════ SETTINGS ════════════ -->
+  <div class="settings-panel">
+    <h2 class="section-title">Journey Settings</h2>
+
+    {#if saveError}
+      <p class="form-error">{saveError}</p>
+    {/if}
+    {#if saveSuccess}
+      <p class="form-success">Settings saved.</p>
+    {/if}
+
+    <!-- General -->
+    <Card>
+      <h3 class="card-title">General</h3>
+      <div class="settings-fields">
+        <div class="field">
+          <label class="field-label" for="s-name">Journey name</label>
+          <input id="s-name" bind:value={settingsName} placeholder="Journey name" />
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label class="field-label" for="s-start">Start date</label>
+            <input id="s-start" type="date" bind:value={settingsStartDate} />
+          </div>
+          <div class="field">
+            <label class="field-label" for="s-end">End date</label>
+            <input id="s-end" type="date" bind:value={settingsEndDate} />
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label" for="s-desc">Description</label>
+          <input id="s-desc" bind:value={settingsDesc} placeholder="Optional description" />
+        </div>
+      </div>
+    </Card>
+
+    <!-- Shoku -->
+    <Card>
+      <h3 class="card-title">Shoku — Nutrition</h3>
+      {#if !tdee}
+        <p class="module-hint">
+          Set up your <a href="/profile">profile</a> with body metrics to enable TDEE-based calorie
+          targets.
+        </p>
+      {/if}
+      <div class="settings-fields">
+        <div class="field">
+          <label class="field-label" for="s-weight-goal">Weight goal</label>
+          <select id="s-weight-goal" bind:value={weightGoalLbsPerWeek}>
+            {#each WEIGHT_GOAL_OPTIONS as opt}
+              <option value={opt.value}>{opt.label}</option>
+            {/each}
+          </select>
+          {#if Number(weightGoalLbsPerWeek) !== 0 && tdee}
+            <p class="field-hint">
+              {Number(weightGoalLbsPerWeek) < 0 ? "To lose" : "To gain"}
+              {Math.abs(Number(weightGoalLbsPerWeek))}lb/week you need a
+              {Math.abs(deficitPerDay())} kcal/day {Number(weightGoalLbsPerWeek) < 0 ? "deficit" : "surplus"}.
+              Your TDEE is {tdee.toLocaleString()} kcal so your daily target is
+              {calculatedCalorieTarget()?.toLocaleString() ?? "—"} kcal.
+            </p>
+          {/if}
+        </div>
+
+        <div class="field">
+          <label class="override-toggle">
+            <input type="checkbox" bind:checked={dailyCalorieOverride} />
+            <span>Override daily calorie target</span>
+          </label>
+          {#if dailyCalorieOverride}
+            <input
+              type="number"
+              bind:value={dailyCalorieTarget}
+              placeholder="Custom daily calories"
+            />
+          {/if}
+        </div>
+
+        <!-- Macros -->
+        <div class="macro-section">
+          <div class="macro-header">
+            <span class="field-label">Macro targets</span>
+            <div class="macro-mode-toggle">
+              <button
+                class="macro-mode-btn"
+                class:macro-mode-btn-active={macroMode === "percentage"}
+                onclick={() => (macroMode = "percentage")}
+              >Percentage</button>
+              <button
+                class="macro-mode-btn"
+                class:macro-mode-btn-active={macroMode === "grams"}
+                onclick={() => (macroMode = "grams")}
+              >Grams</button>
+            </div>
+          </div>
+          {#each [
+            { name: "Protein", value: proteinValue, ref: proteinRef, setValue: (v: string) => (proteinValue = v) },
+            { name: "Carbs", value: carbsValue, ref: carbsRef, setValue: (v: string) => (carbsValue = v) },
+            { name: "Fat", value: fatValue, ref: fatRef, setValue: (v: string) => (fatValue = v) },
+          ] as macro}
+            <div class="macro-row">
+              <span class="macro-name">{macro.name}</span>
+              <input
+                type="number"
+                class="macro-input"
+                value={macro.value}
+                oninput={(e) => macro.setValue(e.currentTarget.value)}
+                placeholder={macroMode === "percentage" ? "%" : "g"}
+              />
+              <span class="macro-unit">{macroMode === "percentage" ? "%" : "g"}</span>
+              {#if macro.ref()}
+                <span class="macro-ref">= {macro.ref()}</span>
+              {/if}
+            </div>
+          {/each}
+          {#if macroMode === "percentage"}
+            {@const total = macroPctTotal()}
+            <div class="macro-total" class:macro-total-ok={total === 100} class:macro-total-warn={total !== null && total !== 0 && total !== 100}>
+              <span>Total: {total ?? 0}%</span>
+              {#if total !== null && total !== 0 && total !== 100}
+                <span class="macro-total-hint">({total < 100 ? `${100 - total}% remaining` : `${total - 100}% over`})</span>
+              {/if}
+            </div>
+          {/if}
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="s-water">Daily water target (oz)</label>
+          <input id="s-water" type="number" bind:value={dailyWaterTargetOz} placeholder="e.g. 64" />
+        </div>
+      </div>
+    </Card>
+
+    <!-- Danjiki -->
+    <Card>
+      <h3 class="card-title">Danjiki — Fasting</h3>
+      <div class="settings-fields">
+        <div class="field">
+          <label class="field-label" for="s-fasting">Weekly fasting hours target</label>
+          <input
+            id="s-fasting"
+            type="number"
+            bind:value={weeklyFastingHours}
+            placeholder="e.g. 16"
+          />
+        </div>
+      </div>
+    </Card>
+
+    <!-- Dojo -->
+    <Card>
+      <h3 class="card-title">Dojo — Training</h3>
+      {#if allPlans.length === 0}
+        <p class="module-hint">
+          <a href="/dojo/plans">Add workout plans</a> to configure training targets.
+        </p>
+      {:else}
+        <div class="settings-fields">
+          <div class="field">
+            <span class="field-label">Workout plans</span>
+            <div class="checkbox-list">
+              {#each allPlans as plan}
+                <label class="checkbox-item">
+                  <input
+                    type="checkbox"
+                    checked={selectedPlanIds.includes(plan.id)}
+                    onchange={() => (selectedPlanIds = toggleArrayItem(selectedPlanIds, plan.id))}
+                  />
+                  <span>{plan.name}</span>
+                </label>
+              {/each}
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label class="field-label" for="s-sessions">Sessions/week</label>
+              <input
+                id="s-sessions"
+                type="number"
+                bind:value={dojoSessionsPerWeek}
+                placeholder="Optional"
+              />
+            </div>
+            <div class="field">
+              <label class="field-label" for="s-burn">Weekly calorie burn target</label>
+              <input
+                id="s-burn"
+                type="number"
+                bind:value={dojoWeeklyCalorieBurn}
+                placeholder="Optional"
+              />
+            </div>
+          </div>
+        </div>
+      {/if}
+    </Card>
+
+    <!-- Kata -->
+    <Card>
+      <h3 class="card-title">Kata — Commitments</h3>
+      {#if allCommitments.length === 0}
+        <p class="module-hint">
+          <a href="/kata">Add commitments</a> to track habits within this journey.
+        </p>
+      {:else}
+        <div class="settings-fields">
+          <div class="field">
+            <span class="field-label">Commitments</span>
+            <div class="checkbox-list">
+              {#each allCommitments as commitment}
+                <label class="checkbox-item">
+                  <input
+                    type="checkbox"
+                    checked={selectedCommitmentIds.includes(commitment.id)}
+                    onchange={() => (selectedCommitmentIds = toggleArrayItem(selectedCommitmentIds, commitment.id))}
+                  />
+                  <div class="commitment-info">
+                    <span>{commitment.name}</span>
+                    <span class="commitment-meta">{commitment.period} &middot; target: {commitment.targetValue}{commitment.unit ? ` ${commitment.unit}` : ""}</span>
+                  </div>
+                </label>
+              {/each}
+            </div>
+          </div>
+        </div>
+      {/if}
+    </Card>
+
+    <div class="settings-actions">
+      <Button variant="primary" onclick={saveSettings} disabled={saving}>
+        {saving ? "Saving..." : "Save settings"}
+      </Button>
+      <button class="btn-text" onclick={() => (showSettings = false)}>Close settings</button>
+    </div>
+  </div>
+{:else}
+  <!-- ════════════ TAB NAVIGATION ════════════ -->
+  <nav class="tab-nav">
+    <button class="tab" class:tab-active={activeTab === "overview"} onclick={() => (activeTab = "overview")}>
+      Overview
+    </button>
+    <button class="tab" class:tab-active={activeTab === "history"} onclick={() => (activeTab = "history")}>
+      History
+    </button>
+    <button class="tab" class:tab-active={activeTab === "journal"} onclick={() => (activeTab = "journal")}>
+      Journal
+    </button>
+  </nav>
+
+  <!-- ════════════ OVERVIEW TAB ════════════ -->
+  {#if activeTab === "overview"}
+    {#if !hasAnyTargets}
+      <div class="empty-overview">
+        <Card>
+          <div class="empty-content">
+            <p class="empty-message">
+              Your journey has no targets yet — open settings to get started.
+            </p>
+            <Button onclick={() => (showSettings = true)}>Open settings</Button>
+          </div>
+        </Card>
+      </div>
+    {:else if overviewLoading}
+      <p class="loading-text">Loading...</p>
+    {:else if overviewData}
+      <div class="widget-grid">
+        <!-- Shoku Widget -->
+        {#if journey.shokuTargets && overviewData.shoku}
+          {@const shoku = overviewData.shoku}
+          {@const targets = journey.shokuTargets}
+          <Card>
+            <div class="widget">
+              <div class="widget-header">
+                <h3 class="widget-title">
+                  <svg class="widget-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">{@html icons.shoku}</svg>
+                  Shoku
+                </h3>
+                <a href="/shoku" class="widget-link">View &rarr;</a>
+              </div>
+
+              {#if targets.dailyCalorieTarget}
+                <div class="widget-stat">
+                  <div class="stat-header">
+                    <span class="stat-label">Calories</span>
+                    <span class="stat-values">{Math.round(shoku.totals.calories)} / {targets.dailyCalorieTarget} kcal</span>
+                  </div>
+                  <ProgressBar value={pct(shoku.totals.calories, targets.dailyCalorieTarget)} />
+                </div>
+              {/if}
+
+              {#if targets.macros}
+                {@const calTarget = targets.dailyCalorieTarget ?? 2000}
+                {#each [
+                  { label: "Protein", current: shoku.totals.protein, macro: targets.macros.protein, calPerGram: 4 },
+                  { label: "Carbs", current: shoku.totals.carbs, macro: targets.macros.carbs, calPerGram: 4 },
+                  { label: "Fat", current: shoku.totals.fat, macro: targets.macros.fat, calPerGram: 9 },
+                ] as m}
+                  {@const targetGrams = m.macro?.grams ?? (m.macro?.percentage ? Math.round((calTarget * (m.macro.percentage / 100)) / m.calPerGram) : null)}
+                  {#if targetGrams}
+                    <div class="widget-stat">
+                      <div class="stat-header">
+                        <span class="stat-label">{m.label}</span>
+                        <span class="stat-values">{Math.round(m.current)}g / {targetGrams}g</span>
+                      </div>
+                      <ProgressBar value={pct(m.current, targetGrams)} />
+                    </div>
+                  {/if}
+                {/each}
+              {/if}
+
+              {#if targets.dailyWaterTargetOz}
+                <div class="widget-stat">
+                  <div class="stat-header">
+                    <span class="stat-label">Water</span>
+                    <span class="stat-values">{shoku.waterOz} / {targets.dailyWaterTargetOz} oz</span>
+                  </div>
+                  <ProgressBar value={pct(shoku.waterOz, targets.dailyWaterTargetOz)} />
+                </div>
+              {/if}
+            </div>
+          </Card>
+        {/if}
+
+        <!-- Danjiki Widget -->
+        {#if journey.danjikiTargets && overviewData.danjiki}
+          {@const danjiki = overviewData.danjiki}
+          {@const target = journey.danjikiTargets.weeklyFastingHours}
+          <Card>
+            <div class="widget">
+              <div class="widget-header">
+                <h3 class="widget-title">
+                  <svg class="widget-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">{@html icons.danjiki}</svg>
+                  Danjiki
+                </h3>
+                <a href="/danjiki" class="widget-link">View &rarr;</a>
+              </div>
+
+              {#if target}
+                <div class="widget-stat">
+                  <div class="stat-header">
+                    <span class="stat-label">Weekly fasting</span>
+                    <span class="stat-values">{danjiki.weeklyHoursFasted}h / {target}h</span>
+                  </div>
+                  <ProgressBar value={pct(danjiki.weeklyHoursFasted, target)} />
+                </div>
+              {:else}
+                <p class="widget-text">{danjiki.weeklyHoursFasted}h fasted this week</p>
+              {/if}
+
+              {#if danjiki.activeFast}
+                {@const elapsed = Math.round((Date.now() - new Date(danjiki.activeFast.startedAt).getTime()) / 3600000 * 10) / 10}
+                <div class="active-fast">
+                  <span class="active-fast-badge">Active fast</span>
+                  <span>{elapsed}h elapsed of {danjiki.activeFast.targetDuration}h target</span>
+                </div>
+              {/if}
+            </div>
+          </Card>
+        {/if}
+
+        <!-- Dojo Widget -->
+        {#if journey.dojoTargets && overviewData.dojo}
+          {@const dojo = overviewData.dojo}
+          {@const targets = journey.dojoTargets}
+          <Card>
+            <div class="widget">
+              <div class="widget-header">
+                <h3 class="widget-title">
+                  <svg class="widget-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">{@html icons.dojo}</svg>
+                  Dojo
+                </h3>
+                <a href="/dojo" class="widget-link">View &rarr;</a>
+              </div>
+
+              {#if targets.sessionsPerWeek}
+                <div class="widget-stat">
+                  <div class="stat-header">
+                    <span class="stat-label">Sessions this week</span>
+                    <span class="stat-values">{dojo.sessionsThisWeek} / {targets.sessionsPerWeek}</span>
+                  </div>
+                  <ProgressBar value={pct(dojo.sessionsThisWeek, targets.sessionsPerWeek)} />
+                </div>
+              {/if}
+
+              {#if targets.weeklyCalorieBurn}
+                <div class="widget-stat">
+                  <div class="stat-header">
+                    <span class="stat-label">Calories burned</span>
+                    <span class="stat-values">{dojo.weeklyCaloriesBurned} / {targets.weeklyCalorieBurn} kcal</span>
+                  </div>
+                  <ProgressBar value={pct(dojo.weeklyCaloriesBurned, targets.weeklyCalorieBurn)} />
+                </div>
+              {/if}
+
+              {#if dojo.upcomingSessions.length > 0}
+                <div class="upcoming-sessions">
+                  <span class="field-label">Upcoming</span>
+                  {#each dojo.upcomingSessions as session}
+                    <div class="upcoming-row">
+                      <span class="upcoming-day">
+                        {session.targetDay != null ? DAY_NAMES[session.targetDay] : "Unscheduled"}
+                      </span>
+                      <span class="upcoming-name">{session.planName} — {session.sessionName}</span>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          </Card>
+        {/if}
+
+        <!-- Kata Widget -->
+        {#if journey.kataTargets && overviewData.kata}
+          {@const kata = overviewData.kata}
+          <Card>
+            <div class="widget">
+              <div class="widget-header">
+                <h3 class="widget-title">
+                  <svg class="widget-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">{@html icons.kata}</svg>
+                  Kata
+                </h3>
+                <a href="/kata" class="widget-link">View &rarr;</a>
+              </div>
+
+              {#each kata.commitments as commitment}
+                <div class="widget-stat">
+                  <div class="stat-header">
+                    <span class="stat-label">{commitment.name}</span>
+                    <span class="stat-values">
+                      {commitment.progress.current}{commitment.unit ? ` ${commitment.unit}` : ""} / {commitment.progress.target}
+                    </span>
+                  </div>
+                  <ProgressBar value={commitment.progress.percentage} />
+                </div>
+              {/each}
+            </div>
+          </Card>
+        {/if}
+      </div>
+    {/if}
+
+  <!-- ════════════ HISTORY TAB ════════════ -->
+  {:else if activeTab === "history"}
+    <div class="placeholder-tab">
+      <Card>
+        <div class="empty-content">
+          <p class="empty-message">History view is coming in a future phase.</p>
+        </div>
+      </Card>
+    </div>
+
+  <!-- ════════════ JOURNAL TAB ════════════ -->
+  {:else if activeTab === "journal"}
+    <div class="placeholder-tab">
+      <Card>
+        <div class="empty-content">
+          <p class="empty-message">Journal view is coming in a future phase.</p>
+        </div>
+      </Card>
+    </div>
+  {/if}
+{/if}
+
+<style>
+  /* ── Header ── */
+  .journey-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: var(--space-6);
+  }
+
+  .header-left {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .back-link {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-light);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+  }
+
+  .back-link:hover {
+    color: var(--ink);
+  }
+
+  .journey-title {
+    font-family: var(--font-display);
+    font-size: var(--text-2xl);
+    font-weight: 500;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  .journey-dates {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-light);
+    margin: 0;
+  }
+
+  .settings-link {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-light);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .settings-link:hover {
+    border-color: var(--border-strong);
+    color: var(--ink);
+  }
+
+
+  /* ── Ended banner ── */
+  .ended-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding: var(--space-3) var(--space-4);
+    background: var(--paper-warm);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--space-6);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-light);
+  }
+
+  .btn-archive {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-1) var(--space-3);
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink-light);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .btn-archive:hover {
+    border-color: var(--border-strong);
+    color: var(--ink);
+  }
+
+  /* ── Tab navigation ── */
+  .tab-nav {
+    display: flex;
+    gap: var(--space-1);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: var(--space-6);
+  }
+
+  .tab {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: var(--space-3) var(--space-4);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--ink-faint);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .tab:hover {
+    color: var(--ink-light);
+  }
+
+  .tab-active {
+    color: var(--ink);
+    border-bottom-color: var(--accent);
+  }
+
+  /* ── Widget grid ── */
+  .widget-grid {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  @media (min-width: 768px) {
+    .widget-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  .widget {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .widget-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .widget-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: 500;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  .widget-icon {
+    flex-shrink: 0;
+  }
+
+  .widget-link {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+  }
+
+  .widget-link:hover {
+    color: var(--accent);
+  }
+
+  .widget-stat {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .stat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  .stat-label {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--ink-faint);
+  }
+
+  .stat-values {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-light);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .widget-text {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-light);
+    margin: 0;
+  }
+
+  .active-fast {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-light);
+  }
+
+  .active-fast-badge {
+    font-size: var(--text-xs);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: var(--space-1) var(--space-2);
+    background: var(--accent-green-soft);
+    color: var(--accent-green);
+    border-radius: var(--radius-sm);
+  }
+
+  .upcoming-sessions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding-top: var(--space-2);
+    border-top: 0.5px solid var(--border);
+  }
+
+  .upcoming-row {
+    display: flex;
+    gap: var(--space-3);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+  }
+
+  .upcoming-day {
+    color: var(--ink-faint);
+    min-width: 80px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .upcoming-name {
+    color: var(--ink-light);
+  }
+
+  /* ── Empty / placeholder ── */
+  .empty-overview,
+  .placeholder-tab {
+    max-width: 480px;
+  }
+
+  .empty-content {
+    text-align: center;
+    padding: var(--space-4);
+  }
+
+  .empty-message {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    line-height: 1.7;
+    color: var(--ink-light);
+    margin-bottom: var(--space-6);
+  }
+
+  .loading-text {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-faint);
+  }
+
+  /* ── Settings panel ── */
+  .settings-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+    max-width: 640px;
+  }
+
+  .section-title {
+    font-family: var(--font-display);
+    font-size: var(--text-xl);
+    font-weight: 500;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  .card-title {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: 500;
+    color: var(--ink);
+    margin: 0 0 var(--space-4) 0;
+  }
+
+  .settings-fields {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .field-row {
+    display: flex;
+    gap: var(--space-4);
+  }
+
+  .field-row .field {
+    flex: 1;
+  }
+
+  .field-label {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--ink-faint);
+  }
+
+  .field input[type="text"],
+  .field input[type="number"],
+  .field input[type="date"],
+  .field select,
+  .settings-fields input[type="text"],
+  .settings-fields input[type="number"],
+  .settings-fields input[type="date"],
+  .field > input {
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    color: var(--ink);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    padding: var(--space-3) 0;
+    outline: none;
+    transition: border-color var(--transition-fast);
+    width: 100%;
+  }
+
+  .field select {
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b6b6b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0 center;
+    padding-right: var(--space-5);
+  }
+
+  .field input:focus,
+  .field select:focus,
+  .settings-fields input:focus {
+    border-bottom-color: var(--border-strong);
+  }
+
+  .field input::placeholder,
+  .settings-fields input::placeholder {
+    color: var(--ink-faint);
+  }
+
+  .field-hint {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    line-height: 1.6;
+    color: var(--ink-light);
+    margin: var(--space-1) 0 0 0;
+  }
+
+  .module-hint {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-light);
+    margin: 0;
+  }
+
+  .module-hint a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  .module-hint a:hover {
+    text-decoration: underline;
+  }
+
+  /* Override toggle */
+  .override-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    cursor: pointer;
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-light);
+  }
+
+  .override-toggle input {
+    accent-color: var(--accent);
+  }
+
+  /* Macro section */
+  .macro-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .macro-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .macro-name {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-light);
+    min-width: 60px;
+  }
+
+  .macro-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .macro-mode-toggle {
+    display: flex;
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+
+  .macro-mode-btn {
+    background: transparent;
+    border: none;
+    padding: var(--space-1) var(--space-3);
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .macro-mode-btn-active {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .macro-unit {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+    min-width: 14px;
+  }
+
+  .macro-total {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-faint);
+    padding-top: var(--space-2);
+    border-top: 0.5px solid var(--border);
+  }
+
+  .macro-total-ok {
+    color: var(--accent-green);
+  }
+
+  .macro-total-warn {
+    color: var(--accent);
+  }
+
+  .macro-total-hint {
+    font-size: var(--text-xs);
+  }
+
+  .macro-input {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    padding: var(--space-2) 0;
+    outline: none;
+    width: 60px;
+    transition: border-color var(--transition-fast);
+  }
+
+  .macro-input:focus {
+    border-bottom-color: var(--border-strong);
+  }
+
+  .macro-ref {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+    white-space: nowrap;
+  }
+
+  /* Checkbox list */
+  .checkbox-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .checkbox-item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    cursor: pointer;
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-light);
+  }
+
+  .checkbox-item input {
+    margin-top: 2px;
+    accent-color: var(--accent);
+  }
+
+  .commitment-info {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .commitment-meta {
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+  }
+
+  /* Settings actions */
+  .settings-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding-top: var(--space-2);
+  }
+
+  /* Form feedback */
+  .form-error {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--accent);
+    margin: 0;
+  }
+
+  .form-success {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--accent-green);
+    margin: 0;
+  }
+
+  /* Shared buttons */
+  .btn-text {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-light);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    transition: color var(--transition-fast);
+  }
+
+  .btn-text:hover {
+    color: var(--ink);
+  }
+</style>
