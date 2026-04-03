@@ -68,14 +68,20 @@
     const val = (e.target as HTMLInputElement).value
     query = val
     clearTimeout(searchTimeout)
-    searchTimeout = setTimeout(() => search(val), 250)
+    searchTimeout = setTimeout(() => search(val), 400)
   }
 
   function selectFood(food: any) {
-    selectedFood = food
-    servings = 1
-    selectedCategory = category
-    mode = "confirm"
+    if (food.id.startsWith("off:")) {
+      populateFormFromNutritionData(food._offData)
+      scannedBarcode = food._offData.barcode ?? null
+      mode = "create"
+    } else {
+      selectedFood = food
+      servings = 1
+      selectedCategory = category
+      mode = "confirm"
+    }
   }
 
   function confirmSelection() {
@@ -423,6 +429,7 @@
                 {#if food.brand}
                   <span class="result-brand">{food.brand}</span>
                 {/if}
+                <span class="result-source">{food.source === "openfoodfacts" ? "OpenFoodFacts" : "My Library"}</span>
               </div>
               <span class="result-cals">{food.calories} cal/srv</span>
             </button>
@@ -584,6 +591,12 @@
   .result-brand {
     font-size: var(--text-xs);
     color: var(--ink-faint);
+  }
+
+  .result-source {
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+    font-style: italic;
   }
 
   .result-cals {

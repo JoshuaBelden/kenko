@@ -1,4 +1,5 @@
 import { getFoodItemsCollection, serializeFoodItem } from "$lib/server/shoku"
+import { searchByName } from "$lib/server/nutritionApi"
 import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
 import type { RequestHandler } from "./$types"
@@ -15,7 +16,40 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     name: { $regex: q, $options: "i" },
   }
 
-  const list = await foodItems.find(filter).sort({ name: 1 }).limit(20).toArray()
+  const libraryPromise = foodItems.find(filter).sort({ name: 1 }).limit(20).toArray()
+  const offPromise = q.length >= 3 ? searchByName(q) : Promise.resolve([])
 
-  return json(list.map(serializeFoodItem))
+  const [libraryResult, offResult] = await Promise.allSettled([libraryPromise, offPromise])
+
+  const libraryItems = (libraryResult.status === "fulfilled" ? libraryResult.value : []).map((doc) => ({
+    ...serializeFoodItem(doc),
+    source: serializeFoodItem(doc).source ?? "library",
+  }))
+
+  const libraryBarcodes = new Set(libraryItems.map((item) => item.barcode).filter(Boolean))
+
+  const offItems =
+    offResult.status === "fulfilled"
+      ? offResult.value
+          .filter((item) => !item.barcode || !libraryBarcodes.has(item.barcode))
+          .map((item) => ({
+            id: `off:${item.barcode}`,
+            name: item.name,
+            brand: item.brand,
+            barcode: item.barcode,
+            baseUnit: item.baseUnit,
+            servingSize: item.servingSize,
+            servingUnit: item.servingUnit,
+            calories: item.calories ?? 0,
+            protein: item.protein ?? 0,
+            netCarbs: item.netCarbs ?? 0,
+            fat: item.fat ?? 0,
+            source: "openfoodfacts",
+            _offData: item,
+          }))
+      : []
+
+  const merged = [...libraryItems, ...offItems].slice(0, 20)
+
+  return json(merged)
 }
