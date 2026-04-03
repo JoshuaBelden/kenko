@@ -2,6 +2,7 @@
   import { goto, invalidateAll } from "$app/navigation"
   import { page } from "$app/state"
   import { Button, Card, PageHeader, StatNumber } from "$lib/components"
+  import { icons } from "$lib/icons"
   import { journeyLens } from "$lib/stores/journeyLens.svelte"
 
   const commitments = $derived(page.data.commitments ?? [])
@@ -103,7 +104,7 @@
   }
 </script>
 
-<PageHeader kanji="型" title="Kata" subtitle="Shape your habits" />
+<PageHeader icon={icons.kata} title="Kata" subtitle="Shape your habits" />
 
 <div class="stats-row">
   <StatNumber value={metToday} label="met today" size="md" />

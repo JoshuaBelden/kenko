@@ -2,6 +2,7 @@
   import { invalidateAll } from "$app/navigation"
   import { page } from "$app/state"
   import { Button, Card, PageHeader } from "$lib/components"
+  import { icons } from "$lib/icons"
   import { formatDateRange } from "$lib/format"
 
   let journeys = $state(page.data.journeys ?? [])
@@ -77,7 +78,7 @@
   }
 </script>
 
-<PageHeader kanji="旅" title="Tabi" subtitle="Every journey begins with a single step" />
+<PageHeader icon={icons.tabi} title="Tabi" subtitle="Every journey begins with a single step" />
 
 {#if journeys.length === 0 && !creating}
   <section class="empty-state">

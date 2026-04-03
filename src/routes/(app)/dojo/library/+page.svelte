@@ -2,6 +2,7 @@
   import { invalidateAll } from "$app/navigation"
   import { page } from "$app/state"
   import { Button, Card, PageHeader } from "$lib/components"
+  import { icons } from "$lib/icons"
 
   let exercises = $state(page.data.exercises ?? [])
   $effect(() => {
@@ -191,7 +192,7 @@
   }
 </script>
 
-<PageHeader kanji="道場" title="Exercise Library" subtitle="Your exercise catalog" />
+<PageHeader icon={icons.dojo} title="Exercise Library" subtitle="Your exercise catalog" />
 
 <div class="library-controls">
   <input

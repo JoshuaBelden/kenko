@@ -2,6 +2,7 @@
   import { goto, invalidateAll } from "$app/navigation"
   import { page } from "$app/state"
   import { Button, Card, PageHeader, StatNumber } from "$lib/components"
+  import { icons } from "$lib/icons"
   import FoodSearchModal from "$lib/components/FoodSearchModal.svelte"
   import { journeyLens } from "$lib/stores/journeyLens.svelte"
 
@@ -200,7 +201,7 @@
   })
 </script>
 
-<PageHeader kanji="食" title="Shoku" subtitle="Nourish with intention" />
+<PageHeader icon={icons.shoku} title="Shoku" subtitle="Nourish with intention" />
 
 <!-- Date picker -->
 <section class="date-nav">

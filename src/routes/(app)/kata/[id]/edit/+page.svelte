@@ -2,6 +2,7 @@
   import { goto } from "$app/navigation"
   import { page } from "$app/state"
   import { Button, Card, PageHeader } from "$lib/components"
+  import { icons } from "$lib/icons"
 
   const commitment = $derived(page.data.commitment)
   const activeJourneys = $derived(page.data.activeJourneys ?? [])
@@ -70,13 +71,13 @@
 </script>
 
 {#if !commitment}
-  <PageHeader kanji="型" title="Not Found" />
+  <PageHeader icon={icons.kata} title="Not Found" />
   <div class="empty-state">
     <p>This commitment doesn't exist.</p>
     <Button variant="primary" href="/kata">Back to Kata</Button>
   </div>
 {:else}
-  <PageHeader kanji="型" title="Edit Commitment" subtitle={commitment.name} />
+  <PageHeader icon={icons.kata} title="Edit Commitment" subtitle={commitment.name} />
 
   <Card>
     <form class="form" onsubmit={(e) => { e.preventDefault(); handleSubmit() }}>

@@ -2,6 +2,7 @@
   import { invalidateAll } from "$app/navigation"
   import { page } from "$app/state"
   import { BarcodeScanner, Button, Card, PageHeader } from "$lib/components"
+  import { icons } from "$lib/icons"
 
   let foods = $state(page.data.foods ?? [])
   $effect(() => {
@@ -246,7 +247,7 @@
   }
 </script>
 
-<PageHeader kanji="食" title="Food Library" subtitle="Your saved food items" />
+<PageHeader icon={icons.shoku} title="Food Library" subtitle="Your saved food items" />
 
 <section class="controls">
   <div class="search-row">

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state"
   import { Button, Card, PageHeader, StatNumber } from "$lib/components"
+  import { icons } from "$lib/icons"
 
   const commitment = $derived(page.data.commitment)
   const progress = $derived(page.data.progress)
@@ -63,13 +64,13 @@
 </script>
 
 {#if !commitment}
-  <PageHeader kanji="型" title="Not Found" />
+  <PageHeader icon={icons.kata} title="Not Found" />
   <div class="empty-state">
     <p>This commitment doesn't exist.</p>
     <Button variant="primary" href="/kata">Back to Kata</Button>
   </div>
 {:else}
-  <PageHeader kanji="型" title={commitment.name} subtitle={periodLabel(commitment.period)} />
+  <PageHeader icon={icons.kata} title={commitment.name} subtitle={periodLabel(commitment.period)} />
 
   <!-- Summary -->
   <div class="stats-row">

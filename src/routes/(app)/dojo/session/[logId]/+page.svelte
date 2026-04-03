@@ -2,6 +2,7 @@
   import { goto, invalidateAll } from "$app/navigation"
   import { page } from "$app/state"
   import { Button, Card, PageHeader } from "$lib/components"
+  import { icons } from "$lib/icons"
 
   let log = $state(page.data.log)
   let exercises = $state(page.data.exercises ?? [])
@@ -219,14 +220,14 @@
 </script>
 
 {#if !log}
-  <PageHeader kanji="道場" title="Session Not Found" subtitle="" />
+  <PageHeader icon={icons.dojo} title="Session Not Found" subtitle="" />
   <div class="empty-state">
     <p>This workout session doesn't exist.</p>
     <Button variant="primary" href="/dojo">Back to Dojo</Button>
   </div>
 {:else}
   <PageHeader
-    kanji="道場"
+    icon={icons.dojo}
     title={log.planSnapshot?.sessionName ?? "Workout"}
     subtitle={log.planSnapshot?.planName ?? ""}
   />

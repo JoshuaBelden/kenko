@@ -2,6 +2,7 @@
   import { goto, invalidateAll } from "$app/navigation"
   import { page } from "$app/state"
   import { Button, Card, ExerciseSearchModal, PageHeader } from "$lib/components"
+  import { icons } from "$lib/icons"
 
   let plans = $state(page.data.plans ?? [])
   let exercises = $state(page.data.exercises ?? [])
@@ -271,7 +272,7 @@
   }
 </script>
 
-<PageHeader kanji="道場" title="Workout Plans" subtitle="Design your training programs" />
+<PageHeader icon={icons.dojo} title="Workout Plans" subtitle="Design your training programs" />
 
 <div class="plans-controls">
   {#if !creating && !editingPlanId}

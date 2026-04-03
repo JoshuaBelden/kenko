@@ -2,6 +2,7 @@
   import { goto } from "$app/navigation"
   import { page } from "$app/state"
   import { Button, Card, PageHeader } from "$lib/components"
+  import { icons } from "$lib/icons"
 
   const activeJourneys = $derived(page.data.activeJourneys ?? [])
 
@@ -55,7 +56,7 @@
   }
 </script>
 
-<PageHeader kanji="型" title="New Commitment" subtitle="Define a kata" />
+<PageHeader icon={icons.kata} title="New Commitment" subtitle="Define a kata" />
 
 <Card>
   <form class="form" onsubmit={(e) => { e.preventDefault(); handleSubmit() }}>

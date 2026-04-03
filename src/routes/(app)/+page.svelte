@@ -1,8 +1,9 @@
 <script lang="ts">
   import { Card, PageHeader, ProgressBar, StatNumber } from "$lib/components"
+  import { icons } from "$lib/icons"
 </script>
 
-<PageHeader title="Dashboard" subtitle="Your wellness at a glance" />
+<PageHeader icon={icons.dashboard} title="Dashboard" subtitle="Your wellness at a glance" />
 
 <div class="stats-grid">
   <Card>

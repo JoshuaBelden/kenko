@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state"
   import { NavItem, ThemeToggle } from "$lib/components"
+  import { icons } from "$lib/icons"
   import { journeyLens } from "$lib/stores/journeyLens.svelte"
   import type { Snippet } from "svelte"
 
@@ -30,11 +31,12 @@
   )
 
   const navItems = [
-    { href: "/", label: "Dashboard", kanji: undefined, icon: "dashboard" },
-    { href: "/tabi", label: "Tabi", kanji: "旅", icon: "tabi" },
-    { href: "/shoku", label: "Shoku", kanji: "食", icon: "shoku" },
-    { href: "/dojo", label: "Dojo", kanji: "道", icon: "dojo" },
-    { href: "/kata", label: "Kata", kanji: "型", icon: "kata" },
+    { href: "/", label: "Dashboard", icon: "dashboard" },
+    { href: "/tabi", label: "Tabi", icon: "tabi" },
+    { href: "/shoku", label: "Shoku", icon: "shoku" },
+    { href: "/danjiki", label: "Danjiki", icon: "danjiki" },
+    { href: "/dojo", label: "Dojo", icon: "dojo" },
+    { href: "/kata", label: "Kata", icon: "kata" },
   ]
 
   function isActive(href: string): boolean {
@@ -43,15 +45,6 @@
   }
 
   function icon(name: string): string {
-    const icons: Record<string, string> = {
-      tabi: '<circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>',
-      dashboard:
-        '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>',
-      shoku:
-        '<path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/>',
-      dojo: '<path d="M6.5 6.5a3.5 3.5 0 1 0 7 0 3.5 3.5 0 1 0-7 0"/><line x1="10" y1="10" x2="10" y2="21"/><line x1="4" y1="15" x2="16" y2="15"/>',
-      kata: '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
-    }
     return icons[name] ?? ""
   }
 </script>
@@ -117,7 +110,7 @@
 
     <nav class="sidebar-nav">
       {#each navItems as item}
-        <NavItem href={item.href} label={item.label} kanji={item.kanji} active={isActive(item.href)}>
+        <NavItem href={item.href} label={item.label} active={isActive(item.href)}>
           {#snippet children()}
             <svg
               width="20"

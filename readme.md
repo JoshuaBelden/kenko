@@ -11,6 +11,7 @@ A personal health and wellness application built with SvelteKit. Kenkō brings t
 | Module | Kanji | Purpose |
 |---|---|---|
 | **Shoku** | 食 | Nutrition diary and food library |
+| **Danjiki** | 断食 | Fasting — track fasting windows, durations, and history |
 | **Dojo** | 道 | Workout plans, sessions, and exercise library |
 | **Kata** | 型 | Commitments — things you are working toward or limiting |
 | **Tabi** | 旅 | Journeys — goal-oriented lenses that tie everything together |
@@ -102,10 +103,12 @@ kenko/
 │   ├── routes/
 │   │   ├── api/
 │   │   │   ├── shoku/          # Nutrition API routes
+│   │   │   ├── danjiki/        # Fasting API routes
 │   │   │   ├── dojo/           # Fitness API routes
 │   │   │   ├── kata/           # Commitment API routes
 │   │   │   └── journeys/       # Journey API routes
 │   │   ├── shoku/              # Nutrition UI
+│   │   ├── danjiki/            # Fasting UI
 │   │   ├── dojo/               # Fitness UI
 │   │   ├── kata/               # Commitments UI
 │   │   └── tabi/               # Journeys UI
@@ -127,6 +130,7 @@ kenko/
 | `exercises` | Global (`isGlobal: true`) and user-created exercises |
 | `workoutPlans` | Named plans containing sessions and exercises |
 | `workoutLogs` | Completed or in-progress workout sessions with set data |
+| `fasts` | Fasting sessions with target duration, actual duration, and notes |
 | `commitments` | User commitments with targets, periods, and direction |
 | `commitmentLogs` | Daily logs against commitments |
 

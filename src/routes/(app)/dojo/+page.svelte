@@ -2,6 +2,7 @@
   import { goto, invalidateAll } from "$app/navigation"
   import { page } from "$app/state"
   import { Button, Card, PageHeader, StatNumber } from "$lib/components"
+  import { icons } from "$lib/icons"
   import { journeyLens } from "$lib/stores/journeyLens.svelte"
 
   let plans = $state(page.data.plans ?? [])
@@ -72,7 +73,7 @@
   }
 </script>
 
-<PageHeader kanji="道場" title="Dojo" subtitle="Forge your strength" />
+<PageHeader icon={icons.dojo} title="Dojo" subtitle="Forge your strength" />
 
 <div class="stats-row">
   <StatNumber value={thisWeekCount()} label="this week" size="md" />
