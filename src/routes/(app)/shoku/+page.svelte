@@ -296,15 +296,7 @@
       <div class="entries-stack">
         {#each entries as entry (entry.id)}
           <Card>
-            {#if deletingId === entry.id}
-              <div class="delete-confirm">
-                <p class="delete-msg">Remove this entry from your diary?</p>
-                <div class="form-actions">
-                  <button class="btn-danger" onclick={() => deleteEntry(entry.id)}>Delete</button>
-                  <button class="btn-text" onclick={() => (deletingId = null)}>Cancel</button>
-                </div>
-              </div>
-            {:else if editingId === entry.id}
+            {#if editingId === entry.id}
               <div class="edit-form">
                 <div class="form-row">
                   <div class="form-field">
@@ -329,13 +321,15 @@
                 <div class="form-actions">
                   <Button onclick={saveEdit}>Save</Button>
                   <button class="btn-text" onclick={() => (editingId = null)}>Cancel</button>
-                  <button
-                    class="btn-text btn-danger-text"
-                    onclick={() => {
-                      editingId = null
-                      deletingId = entry.id
-                    }}>Delete</button
-                  >
+                  {#if deletingId === entry.id}
+                    <div class="confirm-delete-inline">
+                      <span class="confirm-text">Delete?</span>
+                      <button class="confirm-btn yes" onclick={() => deleteEntry(entry.id)}>Yes</button>
+                      <button class="confirm-btn no" onclick={() => (deletingId = null)}>No</button>
+                    </div>
+                  {:else}
+                    <button class="delete-btn-sm" onclick={() => (deletingId = entry.id)}>Delete</button>
+                  {/if}
                 </div>
               </div>
             {:else}
@@ -642,16 +636,6 @@
     color: var(--accent);
   }
 
-  .delete-confirm {
-    padding: var(--space-2);
-  }
-
-  .delete-msg {
-    font-size: var(--text-sm);
-    color: var(--ink-light);
-    margin-bottom: var(--space-4);
-  }
-
   .btn-text {
     background: none;
     border: none;
@@ -668,28 +652,63 @@
     color: var(--ink);
   }
 
-  .btn-danger {
-    background: var(--accent);
-    color: #ffffff;
-    border: none;
-    cursor: pointer;
+  .delete-btn-sm {
+    padding: var(--space-2) var(--space-4);
+    border: 0.5px solid var(--accent);
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--accent);
     font-family: var(--font-body);
     font-size: var(--text-sm);
     font-weight: 500;
-    padding: var(--space-2) var(--space-4);
-    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all var(--transition-fast);
   }
 
-  .btn-danger:hover {
-    opacity: 0.9;
+  .delete-btn-sm:hover {
+    background: var(--accent);
+    color: white;
   }
 
-  .btn-danger-text {
+  .confirm-delete-inline {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .confirm-text {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
     color: var(--accent);
   }
 
-  .btn-danger-text:hover {
-    opacity: 0.8;
+  .confirm-btn {
+    padding: var(--space-1) var(--space-3);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: none;
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .confirm-btn.yes {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .confirm-btn.yes:hover {
+    background: var(--accent);
+    color: white;
+  }
+
+  .confirm-btn.no {
+    color: var(--ink-light);
+  }
+
+  .confirm-btn.no:hover {
+    border-color: var(--ink-light);
   }
 
   /* Water section */

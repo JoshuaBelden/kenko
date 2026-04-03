@@ -16,16 +16,14 @@
   let unit = $state(commitment?.unit ?? "")
   let journeyId = $state<string | null>(commitment?.journeyId ?? null)
   let saving = $state(false)
-  let deleting = $state(false)
+  let confirmingDelete = $state(false)
   let error = $state("")
 
   async function handleDelete() {
-    if (!confirm("Delete this commitment? This cannot be undone.")) return
-    deleting = true
     const res = await fetch(`/api/kata/commitments/${commitment.id}`, { method: "DELETE" })
     if (!res.ok) {
       error = "Failed to delete commitment"
-      deleting = false
+      confirmingDelete = false
       return
     }
     goto("/kata")
@@ -154,9 +152,15 @@
       <div class="actions">
         <Button variant="ghost" href="/kata/{commitment.id}">Cancel</Button>
         <div class="actions-right">
-          <button type="button" class="delete-btn" disabled={deleting} onclick={handleDelete}>
-            {deleting ? "Deleting..." : "Delete"}
-          </button>
+          {#if confirmingDelete}
+            <div class="confirm-delete-inline">
+              <span class="confirm-text">Delete?</span>
+              <button type="button" class="confirm-btn yes" onclick={handleDelete}>Yes</button>
+              <button type="button" class="confirm-btn no" onclick={() => (confirmingDelete = false)}>No</button>
+            </div>
+          {:else}
+            <button type="button" class="delete-btn-sm" onclick={() => (confirmingDelete = true)}>Delete</button>
+          {/if}
           <button type="submit" class="submit-btn" disabled={saving}>
             {saving ? "Saving..." : "Save Changes"}
           </button>
@@ -287,8 +291,8 @@
     align-items: center;
   }
 
-  .delete-btn {
-    padding: var(--space-2) var(--space-5);
+  .delete-btn-sm {
+    padding: var(--space-2) var(--space-4);
     border: 0.5px solid var(--accent);
     border-radius: var(--radius-sm);
     background: none;
@@ -300,14 +304,50 @@
     transition: all var(--transition-fast);
   }
 
-  .delete-btn:hover {
+  .delete-btn-sm:hover {
     background: var(--accent);
     color: white;
   }
 
-  .delete-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+  .confirm-delete-inline {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .confirm-text {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--accent);
+  }
+
+  .confirm-btn {
+    padding: var(--space-1) var(--space-3);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: none;
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .confirm-btn.yes {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .confirm-btn.yes:hover {
+    background: var(--accent);
+    color: white;
+  }
+
+  .confirm-btn.no {
+    color: var(--ink-light);
+  }
+
+  .confirm-btn.no:hover {
+    border-color: var(--ink-light);
   }
 
   .submit-btn {

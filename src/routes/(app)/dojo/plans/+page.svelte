@@ -27,6 +27,7 @@
   // Auto-save
   let autoSaveTimer: ReturnType<typeof setTimeout> | undefined
   let saving = $state(false)
+  let confirmingDeletePlan = $state(false)
 
   const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
@@ -220,9 +221,9 @@
   }
 
   async function handleDeletePlan(id: string) {
-    if (!confirm("Delete this plan? This cannot be undone.")) return
     clearTimeout(autoSaveTimer)
     await fetch(`/api/dojo/plans/${id}`, { method: "DELETE" })
+    confirmingDeletePlan = false
     editingPlanId = null
     resetPlanForm()
     await invalidateAll()
@@ -394,7 +395,15 @@
 
       <div class="form-actions">
         {#if editingPlanId}
-          <button class="delete-btn" onclick={() => handleDeletePlan(editingPlanId!)}>Delete</button>
+          {#if confirmingDeletePlan}
+            <div class="confirm-delete-inline">
+              <span class="confirm-text">Delete?</span>
+              <button class="confirm-btn yes" onclick={() => handleDeletePlan(editingPlanId!)}>Yes</button>
+              <button class="confirm-btn no" onclick={() => (confirmingDeletePlan = false)}>No</button>
+            </div>
+          {:else}
+            <button class="delete-btn-sm" onclick={() => (confirmingDeletePlan = true)}>Delete</button>
+          {/if}
           <div class="form-actions-right">
             <span class="save-status">{saving ? "Saving..." : ""}</span>
             <Button variant="secondary" onclick={closePlanEditor}>Done</Button>
@@ -817,8 +826,8 @@
     color: var(--ink);
   }
 
-  .delete-btn {
-    padding: var(--space-2) var(--space-5);
+  .delete-btn-sm {
+    padding: var(--space-2) var(--space-4);
     border: 0.5px solid var(--accent);
     border-radius: var(--radius-sm);
     background: none;
@@ -830,9 +839,50 @@
     transition: all var(--transition-fast);
   }
 
-  .delete-btn:hover {
+  .delete-btn-sm:hover {
     background: var(--accent);
     color: white;
+  }
+
+  .confirm-delete-inline {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .confirm-text {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--accent);
+  }
+
+  .confirm-btn {
+    padding: var(--space-1) var(--space-3);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: none;
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .confirm-btn.yes {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .confirm-btn.yes:hover {
+    background: var(--accent);
+    color: white;
+  }
+
+  .confirm-btn.no {
+    color: var(--ink-light);
+  }
+
+  .confirm-btn.no:hover {
+    border-color: var(--ink-light);
   }
 
   .hidden-input {

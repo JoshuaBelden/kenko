@@ -298,18 +298,18 @@
               </div>
             </div>
 
-            {#if deletingId === exercise.id}
-              <div class="confirm-delete">
-                <span class="confirm-text">Delete?</span>
-                <Button variant="secondary" onclick={() => (deletingId = null)}>No</Button>
-                <Button variant="primary" onclick={() => handleDelete(exercise.id)}>Yes</Button>
-              </div>
-            {:else}
-              <div class="exercise-actions">
-                <button class="action-btn" onclick={() => startEdit(exercise)}>Edit</button>
-                <button class="action-btn delete" onclick={() => (deletingId = exercise.id)}>Delete</button>
-              </div>
-            {/if}
+            <div class="exercise-actions">
+              <button class="action-btn" onclick={() => startEdit(exercise)}>Edit</button>
+              {#if deletingId === exercise.id}
+                <div class="confirm-delete-inline">
+                  <span class="confirm-text">Delete?</span>
+                  <button class="confirm-btn yes" onclick={() => handleDelete(exercise.id)}>Yes</button>
+                  <button class="confirm-btn no" onclick={() => (deletingId = null)}>No</button>
+                </div>
+              {:else}
+                <button class="delete-btn-sm" onclick={() => (deletingId = exercise.id)}>Delete</button>
+              {/if}
+            </div>
           </div>
         </Card>
       {/each}
@@ -437,11 +437,25 @@
     color: var(--ink);
   }
 
-  .action-btn.delete:hover {
+  .delete-btn-sm {
+    padding: var(--space-2) var(--space-4);
+    border: 0.5px solid var(--accent);
+    border-radius: var(--radius-sm);
+    background: none;
     color: var(--accent);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
   }
 
-  .confirm-delete {
+  .delete-btn-sm:hover {
+    background: var(--accent);
+    color: white;
+  }
+
+  .confirm-delete-inline {
     display: flex;
     align-items: center;
     gap: var(--space-2);
@@ -451,6 +465,35 @@
     font-family: var(--font-body);
     font-size: var(--text-sm);
     color: var(--accent);
+  }
+
+  .confirm-btn {
+    padding: var(--space-1) var(--space-3);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: none;
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .confirm-btn.yes {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .confirm-btn.yes:hover {
+    background: var(--accent);
+    color: white;
+  }
+
+  .confirm-btn.no {
+    color: var(--ink-light);
+  }
+
+  .confirm-btn.no:hover {
+    border-color: var(--ink-light);
   }
 
   .form {

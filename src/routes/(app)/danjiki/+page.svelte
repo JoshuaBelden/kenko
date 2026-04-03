@@ -339,23 +339,13 @@
                 </svg>
               </button>
               {#if confirmDeleteId === fast.id}
-                <span class="confirm-text">Delete?</span>
-                <button class="action-btn delete" onclick={() => deleteFast(fast.id)} aria-label="Confirm delete">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12"/>
-                  </svg>
-                </button>
-                <button class="action-btn" onclick={() => (confirmDeleteId = null)} aria-label="Cancel delete">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                  </svg>
-                </button>
+                <div class="confirm-delete-inline">
+                  <span class="confirm-text">Delete?</span>
+                  <button class="confirm-btn yes" onclick={() => deleteFast(fast.id)}>Yes</button>
+                  <button class="confirm-btn no" onclick={() => (confirmDeleteId = null)}>No</button>
+                </div>
               {:else}
-                <button class="action-btn" onclick={() => (confirmDeleteId = fast.id)} aria-label="Delete">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                  </svg>
-                </button>
+                <button class="delete-btn-sm" onclick={() => (confirmDeleteId = fast.id)}>Delete</button>
               {/if}
             </div>
           </div>
@@ -629,14 +619,63 @@
     color: var(--ink);
   }
 
-  .action-btn.delete {
+  .delete-btn-sm {
+    padding: var(--space-2) var(--space-4);
+    border: 0.5px solid var(--accent);
+    border-radius: var(--radius-sm);
+    background: none;
     color: var(--accent);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .delete-btn-sm:hover {
+    background: var(--accent);
+    color: white;
+  }
+
+  .confirm-delete-inline {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
   }
 
   .confirm-text {
     font-family: var(--font-body);
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
+    color: var(--accent);
+  }
+
+  .confirm-btn {
+    padding: var(--space-1) var(--space-3);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: none;
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .confirm-btn.yes {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .confirm-btn.yes:hover {
+    background: var(--accent);
+    color: white;
+  }
+
+  .confirm-btn.no {
     color: var(--ink-light);
+  }
+
+  .confirm-btn.no:hover {
+    border-color: var(--ink-light);
   }
 
   /* Edit form */
