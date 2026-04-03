@@ -227,6 +227,45 @@
     await invalidateAll()
   }
 
+  async function exportPlan(plan: any) {
+    const res = await fetch(`/api/dojo/plans/${plan.id}/export`)
+    if (!res.ok) return
+    const data = await res.json()
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${plan.name.replace(/[^a-zA-Z0-9]/g, "_")}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  let importInput = $state<HTMLInputElement>(undefined!)
+
+  async function handleImportFile(e: Event) {
+    const file = (e.target as HTMLInputElement).files?.[0]
+    if (!file) return
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text)
+      const res = await fetch("/api/dojo/plans/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        alert(err.error ?? "Import failed")
+        return
+      }
+      await invalidateAll()
+    } catch {
+      alert("Invalid file format")
+    } finally {
+      if (importInput) importInput.value = ""
+    }
+  }
+
   function startSession(planId: string, sessionId: string) {
     goto(`/dojo?startPlan=${planId}&startSession=${sessionId}`)
   }
@@ -237,6 +276,8 @@
 <div class="plans-controls">
   {#if !creating && !editingPlanId}
     <Button variant="primary" onclick={startCreatePlan}>+ New Plan</Button>
+    <Button variant="secondary" onclick={() => importInput.click()}>Import</Button>
+    <input type="file" accept=".json" bind:this={importInput} onchange={handleImportFile} class="hidden-input" />
   {/if}
 </div>
 
@@ -397,6 +438,7 @@
         {/each}
 
         <div class="plan-actions">
+          <button class="edit-btn" onclick={() => exportPlan(plan)}>Export</button>
           <button class="edit-btn" onclick={() => startEditPlan(plan)}>Edit</button>
         </div>
       </div>
@@ -790,6 +832,10 @@
   .delete-btn:hover {
     background: var(--accent);
     color: white;
+  }
+
+  .hidden-input {
+    display: none;
   }
 
   .empty-state {
