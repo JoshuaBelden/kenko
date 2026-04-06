@@ -33,6 +33,12 @@
   const isEnded = $derived(journey && new Date(journey.endDate) < new Date())
   const isArchived = $derived(journey?.status === "archived")
 
+  // Journey progress
+  const totalDays = $derived(journey ? Math.ceil((new Date(journey.endDate).getTime() - new Date(journey.startDate).getTime()) / 86400000) : 0)
+  const daysIn = $derived(journey ? Math.max(0, Math.min(totalDays, Math.ceil((Date.now() - new Date(journey.startDate).getTime()) / 86400000))) : 0)
+  const daysLeft = $derived(totalDays - daysIn)
+  const pctComplete = $derived(totalDays > 0 ? Math.round((daysIn / totalDays) * 100) : 0)
+
   // ── Settings state ──
   let settingsName = $state("")
   let settingsDesc = $state("")
@@ -466,6 +472,9 @@
     {#if journey}
       <p class="journey-dates">
         {formatDate(journey.startDate)} &mdash; {formatDate(journey.endDate)}
+      </p>
+      <p class="journey-progress">
+        Day {daysIn} of {totalDays} &middot; {daysLeft} days left &middot; {pctComplete}%
       </p>
     {/if}
   </div>
@@ -1204,6 +1213,13 @@
     font-size: var(--text-sm);
     color: var(--ink-light);
     margin: 0;
+  }
+
+  .journey-progress {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-light);
+    margin: 0.25rem 0 0;
   }
 
   .settings-link {
