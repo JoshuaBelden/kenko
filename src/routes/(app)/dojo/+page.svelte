@@ -132,27 +132,38 @@
     <h2 class="section-title">Recent Sessions</h2>
     {#each completedLogs.slice(0, 10) as log (log.id)}
       <Card>
-        <a href="/dojo/session/{log.id}" class="log-card log-link">
-          <div class="log-info">
-            <strong class="log-session-name">{log.planSnapshot?.sessionName ?? "Workout"}</strong>
-            <span class="log-plan-name">{log.planSnapshot?.planName ?? ""}</span>
-          </div>
-          <div class="log-meta">
-            <span class="log-date">{formatDate(log.startedAt)}</span>
-            <span class="log-duration">{duration(log.startedAt, log.completedAt)}</span>
-            {#if log.planSnapshot?.sessionType === "cardio"}
-              <span class="log-sets">Cardio</span>
-            {:else}
-              <span class="log-sets">{log.sets.length} sets</span>
-            {/if}
-            {#if log.cardioDistance}
-              <span class="log-sets">{log.cardioDistance} mi</span>
-            {/if}
-            {#if log.caloriesBurned}
-              <span class="log-sets">{log.caloriesBurned} cal</span>
-            {/if}
-          </div>
-        </a>
+        <div class="completed-log-row">
+          <a href="/dojo/session/{log.id}" class="log-card log-link completed-log-link">
+            <div class="log-info">
+              <strong class="log-session-name">{log.planSnapshot?.sessionName ?? "Workout"}</strong>
+              <span class="log-plan-name">{log.planSnapshot?.planName ?? ""}</span>
+            </div>
+            <div class="log-meta">
+              <span class="log-date">{formatDate(log.startedAt)}</span>
+              <span class="log-duration">{duration(log.startedAt, log.completedAt)}</span>
+              {#if log.planSnapshot?.sessionType === "cardio"}
+                <span class="log-sets">Cardio</span>
+              {:else}
+                <span class="log-sets">{log.sets.length} sets</span>
+              {/if}
+              {#if log.cardioDistance}
+                <span class="log-sets">{log.cardioDistance} mi</span>
+              {/if}
+              {#if log.caloriesBurned}
+                <span class="log-sets">{log.caloriesBurned} cal</span>
+              {/if}
+            </div>
+          </a>
+          {#if deletingLogId === log.id}
+            <div class="confirm-delete-inline">
+              <span class="confirm-text">Delete?</span>
+              <button class="confirm-btn yes" onclick={() => handleDeleteLog(log.id)}>Yes</button>
+              <button class="confirm-btn no" onclick={() => (deletingLogId = null)}>No</button>
+            </div>
+          {:else}
+            <button class="delete-btn-sm" onclick={() => (deletingLogId = log.id)}>Delete</button>
+          {/if}
+        </div>
       </Card>
     {/each}
   </section>
@@ -200,6 +211,17 @@
 
   .log-link:hover {
     opacity: 0.8;
+  }
+
+  .completed-log-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .completed-log-link {
+    flex: 1;
+    min-width: 0;
   }
 
   .log-info {
