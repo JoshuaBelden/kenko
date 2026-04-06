@@ -143,13 +143,8 @@ export const DELETE: RequestHandler = async ({ locals, params }) => {
   const userId = new ObjectId(locals.userId)
   const commitmentId = new ObjectId(params.id)
   const commitments = await getCommitmentsCollection()
-  const result = await commitments.findOneAndUpdate(
-    { _id: commitmentId, userId },
-    { $set: { isActive: false, updatedAt: new Date() } },
-    { returnDocument: "after" },
-  )
-
-  if (!result) return json({ error: "Not found" }, { status: 404 })
+  const commitment = await commitments.findOne({ _id: commitmentId, userId })
+  if (!commitment) return json({ error: "Not found" }, { status: 404 })
 
   // Remove this commitment from any journey's kataTargets.commitmentIds
   const journeys = await getJourneysCollection()
@@ -157,6 +152,17 @@ export const DELETE: RequestHandler = async ({ locals, params }) => {
     { userId, "kataTargets.commitmentIds": commitmentId },
     { $pull: { "kataTargets.commitmentIds": commitmentId } as any },
   )
+
+  if (commitment.isActive) {
+    // Soft delete: deactivate first
+    await commitments.updateOne(
+      { _id: commitmentId },
+      { $set: { isActive: false, updatedAt: new Date() } },
+    )
+  } else {
+    // Already inactive: hard delete
+    await commitments.deleteOne({ _id: commitmentId })
+  }
 
   return new Response(null, { status: 204 })
 }

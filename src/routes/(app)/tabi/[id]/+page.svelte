@@ -947,7 +947,7 @@
                 <div class="upcoming-sessions">
                   <span class="field-label">Upcoming</span>
                   {#each dojo.upcomingSessions as session}
-                    <div class="upcoming-row">
+                    <div class="upcoming-row" class:upcoming-completed={session.completed}>
                       <span class="upcoming-day">
                         {session.targetDay != null ? DAY_NAMES[session.targetDay] : "Unscheduled"}
                       </span>
@@ -1436,6 +1436,11 @@
 
   .upcoming-name {
     color: var(--ink-light);
+  }
+
+  .upcoming-completed {
+    text-decoration: line-through;
+    opacity: 0.5;
   }
 
   /* ── Empty / placeholder ── */

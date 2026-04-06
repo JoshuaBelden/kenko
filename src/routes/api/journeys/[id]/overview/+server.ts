@@ -27,6 +27,13 @@ function startOfWeek(date: Date): Date {
   return d
 }
 
+function endOfWeek(date: Date): Date {
+  const d = startOfWeek(date)
+  d.setUTCDate(d.getUTCDate() + 6)
+  d.setUTCHours(23, 59, 59, 999)
+  return d
+}
+
 export const GET: RequestHandler = async ({ locals, params }) => {
   if (!locals.userId) return json({ error: "Unauthorized" }, { status: 401 })
 
@@ -40,7 +47,7 @@ export const GET: RequestHandler = async ({ locals, params }) => {
   const now = new Date()
   const today = now.toISOString().split("T")[0]
   const weekStart = startOfWeek(now)
-  const weekEnd = endOfDay(now)
+  const weekEnd = endOfWeek(now)
 
   const result: Record<string, unknown> = {}
 
@@ -107,33 +114,47 @@ export const GET: RequestHandler = async ({ locals, params }) => {
   if (journey.dojoTargets) {
     const logs = await getWorkoutLogsCollection()
 
-    const weekLogs = await logs
-      .find({
-        userId,
-        status: "completed",
-        completedAt: { $gte: weekStart, $lte: weekEnd },
-      })
-      .toArray()
-
-    const sessionsThisWeek = weekLogs.length
-
-    // Get upcoming sessions from selected plans
     const planIds = (journey.dojoTargets.planIds ?? []).map((id: any) =>
       id instanceof ObjectId ? id : new ObjectId(id),
     )
+
+    const weekLogQuery: Record<string, unknown> = {
+      userId,
+      status: "completed",
+      completedAt: { $gte: weekStart, $lte: weekEnd },
+    }
+    if (planIds.length > 0) {
+      weekLogQuery.planId = { $in: planIds }
+    }
+
+    const weekLogs = await logs.find(weekLogQuery).toArray()
+
+    const sessionsThisWeek = weekLogs.length
+    const weeklyCaloriesBurned = weekLogs.reduce(
+      (sum, log) => sum + (log.caloriesBurned ?? 0),
+      0,
+    )
+
+    // Get upcoming sessions from selected plans
     const plans = await getWorkoutPlansCollection()
     const selectedPlans = planIds.length > 0
       ? await plans.find({ _id: { $in: planIds }, userId }).toArray()
       : []
 
+    // Build a set of completed plan+session combos this week
+    const completedKeys = new Set(
+      weekLogs.map((l) => `${l.planId?.toString()}::${l.planSnapshot?.sessionName}`),
+    )
+
     const todayDow = now.getUTCDay()
-    const upcoming: Array<{ planName: string; sessionName: string; targetDay: number | null }> = []
+    const upcoming: Array<{ planName: string; sessionName: string; targetDay: number | null; completed: boolean }> = []
     for (const plan of selectedPlans) {
       for (const session of plan.sessions ?? []) {
         upcoming.push({
           planName: plan.name,
           sessionName: session.name,
           targetDay: session.targetDayOfWeek ?? null,
+          completed: completedKeys.has(`${plan._id.toString()}::${session.name}`),
         })
       }
     }
@@ -150,7 +171,7 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 
     result.dojo = {
       sessionsThisWeek,
-      weeklyCaloriesBurned: 0, // placeholder — no calorie tracking on workout logs yet
+      weeklyCaloriesBurned,
       upcomingSessions: upcoming,
     }
   }

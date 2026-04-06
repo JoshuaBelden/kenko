@@ -27,6 +27,8 @@
   // Auto-save
   let autoSaveTimer: ReturnType<typeof setTimeout> | undefined
   let saving = $state(false)
+  let saveInFlight = false
+  let savePending = false
   let confirmingDeletePlan = $state(false)
 
   const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
@@ -181,38 +183,56 @@
 
   async function persistPlan() {
     if (!editingPlanId || !fPlanName.trim()) return
+
+    if (saveInFlight) {
+      savePending = true
+      return
+    }
+
+    saveInFlight = true
     saving = true
 
-    // Update name
-    await fetch(`/api/dojo/plans/${editingPlanId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: fPlanName.trim() }),
-    })
+    try {
+      // Update name
+      await fetch(`/api/dojo/plans/${editingPlanId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: fPlanName.trim() }),
+      })
 
-    // Delete existing sessions and re-add
-    const existingPlan = plans.find((p: any) => p.id === editingPlanId)
-    if (existingPlan) {
-      for (const s of existingPlan.sessions) {
+      // Fetch current server state to know which sessions to delete
+      const planRes = await fetch(`/api/dojo/plans/${editingPlanId}`)
+      const serverPlan = await planRes.json()
+
+      // Delete all existing sessions on the server
+      for (const s of serverPlan.sessions ?? []) {
         await fetch(`/api/dojo/plans/${editingPlanId}/sessions/${s.id}`, { method: "DELETE" })
       }
-    }
 
-    for (const s of fSessions) {
-      await fetch(`/api/dojo/plans/${editingPlanId}/sessions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: s.name,
-          type: s.type ?? "strength",
-          targetDayOfWeek: s.targetDayOfWeek,
-          exercises: s.exercises,
-        }),
-      })
-    }
+      // Re-add current form sessions
+      for (const s of fSessions) {
+        await fetch(`/api/dojo/plans/${editingPlanId}/sessions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: s.name,
+            type: s.type ?? "strength",
+            targetDayOfWeek: s.targetDayOfWeek,
+            exercises: s.exercises,
+          }),
+        })
+      }
 
-    await invalidateAll()
-    saving = false
+      await invalidateAll()
+    } finally {
+      saving = false
+      saveInFlight = false
+
+      if (savePending) {
+        savePending = false
+        persistPlan()
+      }
+    }
   }
 
   async function closePlanEditor() {

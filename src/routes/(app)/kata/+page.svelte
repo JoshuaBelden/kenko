@@ -5,10 +5,20 @@
   import { icons } from "$lib/icons"
 
   const commitments = $derived(page.data.commitments ?? [])
+  const inactiveCommitments = $derived(page.data.inactiveCommitments ?? [])
 
   // Inline logging state
   let loggingId = $state<string | null>(null)
   let loggingValue = $state("")
+  let deletingId = $state<string | null>(null)
+
+  async function handleDeleteInactive(id: string) {
+    const res = await fetch(`/api/kata/commitments/${id}`, { method: "DELETE" })
+    if (res.ok) {
+      deletingId = null
+      await invalidateAll()
+    }
+  }
 
   const totalActive = $derived(commitments.length)
   const metToday = $derived(
@@ -102,7 +112,7 @@
   </div>
 </div>
 
-{#if commitments.length === 0}
+{#if commitments.length === 0 && inactiveCommitments.length === 0}
   <section class="section">
     <div class="empty-state">
       <p>No commitments yet. Define your first kata to start building habits.</p>
@@ -110,11 +120,40 @@
     </div>
   </section>
 {:else}
-  <section class="section">
-    {#each commitments as c (c.id)}
-      {@render commitmentCard(c)}
-    {/each}
-  </section>
+  {#if commitments.length > 0}
+    <section class="section">
+      {#each commitments as c (c.id)}
+        {@render commitmentCard(c)}
+      {/each}
+    </section>
+  {/if}
+
+  {#if inactiveCommitments.length > 0}
+    <section class="section">
+      <h2 class="section-title">Inactive</h2>
+      {#each inactiveCommitments as c (c.id)}
+        <Card>
+          <div class="inactive-row">
+            <a href="/kata/{c.id}" class="inactive-commitment">
+              <strong class="commitment-name">{c.name}</strong>
+              {#if c.description}
+                <span class="commitment-description">{c.description}</span>
+              {/if}
+            </a>
+            {#if deletingId === c.id}
+              <div class="confirm-delete-inline">
+                <span class="confirm-text">Delete?</span>
+                <button class="confirm-btn yes" onclick={() => handleDeleteInactive(c.id)}>Yes</button>
+                <button class="confirm-btn no" onclick={() => (deletingId = null)}>No</button>
+              </div>
+            {:else}
+              <button class="delete-btn-sm" onclick={() => (deletingId = c.id)}>Delete</button>
+            {/if}
+          </div>
+        </Card>
+      {/each}
+    </section>
+  {/if}
 {/if}
 
 {#snippet commitmentCard(c: any)}
@@ -483,6 +522,83 @@
 
   .quantity-cancel:hover {
     color: var(--accent);
+  }
+
+  .inactive-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+
+  .inactive-commitment {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    text-decoration: none;
+    opacity: 0.5;
+  }
+
+  .inactive-commitment:hover {
+    opacity: 0.7;
+    transition: opacity var(--transition-fast);
+  }
+
+  .delete-btn-sm {
+    padding: var(--space-2) var(--space-4);
+    border: 0.5px solid var(--accent);
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--accent);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .delete-btn-sm:hover {
+    background: var(--accent);
+    color: white;
+  }
+
+  .confirm-delete-inline {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .confirm-text {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--accent);
+  }
+
+  .confirm-btn {
+    padding: var(--space-1) var(--space-3);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: none;
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .confirm-btn.yes {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .confirm-btn.yes:hover {
+    background: var(--accent);
+    color: white;
+  }
+
+  .confirm-btn.no {
+    color: var(--ink-light);
   }
 
   .empty-state {

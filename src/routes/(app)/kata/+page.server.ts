@@ -14,7 +14,10 @@ export const load: PageServerLoad = async ({ locals }) => {
   const userId = new ObjectId(locals.userId)
 
   const commitmentsCol = await getCommitmentsCollection()
-  const commitments = await commitmentsCol.find({ userId, isActive: true }).sort({ createdAt: -1 }).toArray()
+  const [commitments, inactiveCommitments] = await Promise.all([
+    commitmentsCol.find({ userId, isActive: true }).sort({ createdAt: -1 }).toArray(),
+    commitmentsCol.find({ userId, isActive: false }).sort({ updatedAt: -1 }).toArray(),
+  ])
 
   // Get today's logs and current progress for each commitment
   const logsCol = await getCommitmentLogsCollection()
@@ -67,5 +70,8 @@ export const load: PageServerLoad = async ({ locals }) => {
     }),
   )
 
-  return { commitments: enriched }
+  return {
+    commitments: enriched,
+    inactiveCommitments: inactiveCommitments.map(serializeCommitment),
+  }
 }
