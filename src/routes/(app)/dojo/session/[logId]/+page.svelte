@@ -25,6 +25,48 @@
   let saving = false
   let completing = $state(false)
 
+  // Editable dates for completed sessions
+  let editingDates = $state(false)
+  let editStartedAt = $state("")
+  let editCompletedAt = $state("")
+  let savingDates = $state(false)
+
+  function toLocalDatetime(iso: string): string {
+    if (!iso) return ""
+    const d = new Date(iso)
+    const offset = d.getTimezoneOffset()
+    const local = new Date(d.getTime() - offset * 60000)
+    return local.toISOString().slice(0, 16)
+  }
+
+  function openDateEditor() {
+    editStartedAt = toLocalDatetime(log.startedAt)
+    editCompletedAt = toLocalDatetime(log.completedAt)
+    editingDates = true
+  }
+
+  async function saveDates() {
+    savingDates = true
+    try {
+      const res = await fetch(`/api/dojo/logs/${log.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          startedAt: new Date(editStartedAt).toISOString(),
+          completedAt: new Date(editCompletedAt).toISOString(),
+        }),
+      })
+      if (res.ok) {
+        const updated = await res.json()
+        log = updated
+        editingDates = false
+      }
+    } catch (err) {
+      console.error("Failed to save dates:", err)
+    }
+    savingDates = false
+  }
+
   // Auto-save sets whenever they change
   let saveTimeout: ReturnType<typeof setTimeout> | null = null
   $effect(() => {
@@ -263,6 +305,33 @@
 
   {#if isCompleted}
     <div class="completed-banner">Session completed</div>
+
+    {#if editingDates}
+      <div class="date-editor-wrapper">
+        <Card>
+          <div class="date-editor">
+            <div class="form-field">
+              <label class="field-label" for="edit-started-at">Started At</label>
+              <input id="edit-started-at" type="datetime-local" class="field-input" bind:value={editStartedAt} />
+            </div>
+            <div class="form-field">
+              <label class="field-label" for="edit-completed-at">Completed At</label>
+              <input id="edit-completed-at" type="datetime-local" class="field-input" bind:value={editCompletedAt} />
+            </div>
+            <div class="form-actions">
+              <Button variant="secondary" onclick={() => (editingDates = false)}>Cancel</Button>
+              <Button variant="primary" onclick={saveDates} disabled={savingDates}>
+                {savingDates ? "Saving..." : "Save"}
+              </Button>
+            </div>
+          </div>
+        </Card>
+      </div>
+    {:else}
+      <button class="edit-dates-btn" onclick={openDateEditor}>
+        {new Date(log.startedAt).toLocaleString()} &mdash; {new Date(log.completedAt).toLocaleString()} &middot; Edit
+      </button>
+    {/if}
   {/if}
 
   <!-- Rest Timer Overlay -->
@@ -816,6 +885,34 @@
   .rpe-actions {
     display: flex;
     gap: var(--space-2);
+  }
+
+  .edit-dates-btn {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink-light);
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: center;
+    width: 100%;
+    padding: var(--space-1) 0;
+    margin-bottom: var(--space-4);
+    transition: color var(--transition-fast);
+  }
+
+  .edit-dates-btn:hover {
+    color: var(--ink);
+  }
+
+  .date-editor-wrapper {
+    margin-bottom: var(--space-4);
+  }
+
+  .date-editor {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
   }
 
   .empty-state {
