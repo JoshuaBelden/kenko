@@ -501,13 +501,6 @@
   <div class="settings-panel">
     <h2 class="section-title">Journey Settings</h2>
 
-    {#if saveError}
-      <p class="form-error">{saveError}</p>
-    {/if}
-    {#if saveSuccess}
-      <p class="form-success">Settings saved.</p>
-    {/if}
-
     <!-- General -->
     <Card>
       <h3 class="card-title">General</h3>
@@ -738,6 +731,12 @@
         {saving ? "Saving..." : "Save settings"}
       </Button>
       <button class="btn-text" onclick={() => (showSettings = false)}>Close settings</button>
+      {#if saveError}
+        <p class="form-error">{saveError}</p>
+      {/if}
+      {#if saveSuccess}
+        <p class="form-success">Settings saved.</p>
+      {/if}
     </div>
 
     <!-- Archive / Unarchive journey -->
