@@ -1,8 +1,8 @@
 import {
-  createDiaryEntry,
-  getDiaryEntriesCollection,
+  createFoodItemLog,
+  getFoodItemLogsCollection,
   getFoodItemsCollection,
-  serializeDiaryEntry,
+  serializeFoodItemLog,
   type DiaryUnit,
 } from "$lib/server/shoku"
 import { json } from "@sveltejs/kit"
@@ -27,15 +27,10 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     date: { $gte: date, $lt: nextDate },
   }
 
-  const journeyId = url.searchParams.get("journeyId")
-  if (journeyId) {
-    filter.journeyIds = new ObjectId(journeyId)
-  }
+  const foodItemLogs = await getFoodItemLogsCollection()
+  const entries = await foodItemLogs.find(filter).sort({ loggedAt: 1 }).toArray()
 
-  const diaryEntries = await getDiaryEntriesCollection()
-  const entries = await diaryEntries.find(filter).sort({ loggedAt: 1 }).toArray()
-
-  const serialized = entries.map(serializeDiaryEntry)
+  const serialized = entries.map(serializeFoodItemLog)
 
   const grouped: Record<string, typeof serialized> = {
     breakfast: [],
@@ -82,7 +77,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     : new Date(new Date().toISOString().split("T")[0] + "T00:00:00.000Z")
   const category = body.category && VALID_CATEGORIES.includes(body.category) ? body.category : "uncategorized"
 
-  const created = await createDiaryEntry(
+  const created = await createFoodItemLog(
     userId,
     foodItemId,
     foodItem,
@@ -93,5 +88,5 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     body.note ?? null,
   )
 
-  return json(serializeDiaryEntry(created), { status: 201 })
+  return json(serializeFoodItemLog(created), { status: 201 })
 }

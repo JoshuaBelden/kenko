@@ -5,7 +5,6 @@
   import { icons } from "$lib/icons"
 
   const commitment = $derived(page.data.commitment)
-  const activeJourneys = $derived(page.data.activeJourneys ?? [])
   const isTaper = $derived(commitment?.type === "taper")
 
   let name = $state(commitment?.name ?? "")
@@ -15,7 +14,6 @@
   let loggingStyle = $state<"checkbox" | "quantity">(commitment?.loggingStyle ?? "checkbox")
   let targetValue = $state(commitment?.targetValue ?? 1)
   let unit = $state(commitment?.unit ?? "")
-  let journeyId = $state<string | null>(commitment?.journeyId ?? null)
   let saving = $state(false)
   let confirmingDelete = $state(false)
   let error = $state("")
@@ -84,7 +82,6 @@
             label: p.label.trim() || `Week ${p.weekNumber}`,
             dailyLimit: p.dailyLimit,
           })),
-          journeyId,
         }),
       })
 
@@ -119,7 +116,6 @@
         loggingStyle,
         targetValue,
         unit: loggingStyle === "quantity" ? unit.trim() || null : null,
-        journeyId,
       }),
     })
 
@@ -248,16 +244,6 @@
           </div>
         {/if}
       {/if}
-
-      <div class="field">
-        <label class="label" for="journey">Journey</label>
-        <select id="journey" class="input select" bind:value={journeyId}>
-          <option value={null}>Evergreen (no journey)</option>
-          {#each activeJourneys as journey}
-            <option value={journey.id}>{journey.name}</option>
-          {/each}
-        </select>
-      </div>
 
       <div class="actions">
         <Button variant="ghost" href="/kata/{commitment.id}">Cancel</Button>

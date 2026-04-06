@@ -1,10 +1,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation"
-  import { page } from "$app/state"
   import { Button, Card, PageHeader } from "$lib/components"
   import { icons } from "$lib/icons"
-
-  const activeJourneys = $derived(page.data.activeJourneys ?? [])
 
   let commitmentMode = $state<"standard" | "taper">("standard")
   let name = $state("")
@@ -14,7 +11,6 @@
   let loggingStyle = $state<"checkbox" | "quantity">("checkbox")
   let targetValue = $state(1)
   let unit = $state("")
-  let journeyId = $state<string | null>(null)
   let saving = $state(false)
   let error = $state("")
 
@@ -71,7 +67,6 @@
             label: p.label.trim() || `Week ${p.weekNumber}`,
             dailyLimit: p.dailyLimit,
           })),
-          journeyId,
         }),
       })
 
@@ -106,7 +101,6 @@
         loggingStyle,
         targetValue,
         unit: loggingStyle === "quantity" ? unit.trim() || null : null,
-        journeyId,
       }),
     })
 
@@ -240,16 +234,6 @@
         </div>
       {/if}
     {/if}
-
-    <div class="field">
-      <label class="label" for="journey">Journey</label>
-      <select id="journey" class="input select" bind:value={journeyId}>
-        <option value={null}>Evergreen (no journey)</option>
-        {#each activeJourneys as journey}
-          <option value={journey.id}>{journey.name}</option>
-        {/each}
-      </select>
-    </div>
 
     <div class="actions">
       <Button variant="ghost" href="/kata">Cancel</Button>

@@ -36,20 +36,11 @@ export const GET: RequestHandler = async ({ locals, params }) => {
     return json({ ...serializeCommitment(commitment), progress: null, taperProgress })
   }
 
-  // Resolve journey start date if journey-scoped
-  let journeyStartDate: Date | null = null
-  if (commitment.journeyId) {
-    const journeys = await getJourneysCollection()
-    const journey = await journeys.findOne({ _id: commitment.journeyId, userId })
-    journeyStartDate = journey?.startDate ?? null
-  }
-
   const progress = await calculatePeriodProgress(
     commitment._id,
     userId,
     commitment.period,
     commitment.targetValue,
-    journeyStartDate,
   )
 
   return json({ ...serializeCommitment(commitment), progress, taperProgress: null })
@@ -78,10 +69,6 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
   if (body.unit !== undefined) {
     updates.unit = body.unit?.trim() || null
   }
-  if (body.journeyId !== undefined) {
-    updates.journeyId = body.journeyId ? new ObjectId(body.journeyId) : null
-  }
-
   // Taper-specific fields
   if (existing.type === "taper" || body.type === "taper") {
     if (body.startDate !== undefined) {
@@ -154,13 +141,22 @@ export const DELETE: RequestHandler = async ({ locals, params }) => {
   if (!locals.userId) return json({ error: "Unauthorized" }, { status: 401 })
 
   const userId = new ObjectId(locals.userId)
+  const commitmentId = new ObjectId(params.id)
   const commitments = await getCommitmentsCollection()
   const result = await commitments.findOneAndUpdate(
-    { _id: new ObjectId(params.id), userId },
+    { _id: commitmentId, userId },
     { $set: { isActive: false, updatedAt: new Date() } },
     { returnDocument: "after" },
   )
 
   if (!result) return json({ error: "Not found" }, { status: 404 })
+
+  // Remove this commitment from any journey's kataTargets.commitmentIds
+  const journeys = await getJourneysCollection()
+  await journeys.updateMany(
+    { userId, "kataTargets.commitmentIds": commitmentId },
+    { $pull: { "kataTargets.commitmentIds": commitmentId } as any },
+  )
+
   return new Response(null, { status: 204 })
 }

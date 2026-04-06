@@ -1,11 +1,10 @@
 import {
   calculateNutrients,
-  getDiaryEntriesCollection,
+  getFoodItemLogsCollection,
   getFoodItemsCollection,
-  serializeDiaryEntry,
+  serializeFoodItemLog,
   type DiaryUnit,
 } from "$lib/server/shoku"
-import { getActiveJourneyIds } from "$lib/server/journeys"
 import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
 import type { RequestHandler } from "./$types"
@@ -20,14 +19,11 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
   const userId = new ObjectId(locals.userId)
   const entryId = new ObjectId(params.id)
 
-  const diaryEntries = await getDiaryEntriesCollection()
-  const existing = await diaryEntries.findOne({ _id: entryId, userId })
+  const foodItemLogs = await getFoodItemLogsCollection()
+  const existing = await foodItemLogs.findOne({ _id: entryId, userId })
   if (!existing) return json({ error: "Not found" }, { status: 404 })
 
   const updates: Record<string, unknown> = { updatedAt: new Date() }
-
-  // Re-tag with active journeys based on the entry's diary date
-  updates.journeyIds = await getActiveJourneyIds(userId, existing.date)
 
   if (body.category !== undefined && VALID_CATEGORIES.includes(body.category)) {
     updates.category = body.category
@@ -52,21 +48,21 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
     }
   }
 
-  const result = await diaryEntries.findOneAndUpdate(
+  const result = await foodItemLogs.findOneAndUpdate(
     { _id: entryId, userId },
     { $set: updates },
     { returnDocument: "after" },
   )
 
   if (!result) return json({ error: "Not found" }, { status: 404 })
-  return json(serializeDiaryEntry(result))
+  return json(serializeFoodItemLog(result))
 }
 
 export const DELETE: RequestHandler = async ({ locals, params }) => {
   if (!locals.userId) return json({ error: "Unauthorized" }, { status: 401 })
 
-  const diaryEntries = await getDiaryEntriesCollection()
-  const result = await diaryEntries.findOneAndDelete({
+  const foodItemLogs = await getFoodItemLogsCollection()
+  const result = await foodItemLogs.findOneAndDelete({
     _id: new ObjectId(params.id),
     userId: new ObjectId(locals.userId),
   })

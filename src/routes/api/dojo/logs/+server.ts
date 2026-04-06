@@ -12,11 +12,6 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 
   const filter: Record<string, unknown> = { userId: new ObjectId(locals.userId) }
 
-  const journeyId = url.searchParams.get("journeyId")
-  if (journeyId) {
-    filter.journeyIds = new ObjectId(journeyId)
-  }
-
   const status = url.searchParams.get("status")
   if (status === "in_progress" || status === "completed") {
     filter.status = status

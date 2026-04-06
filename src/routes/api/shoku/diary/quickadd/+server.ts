@@ -1,4 +1,4 @@
-import { createDiaryEntry, getFoodItemsCollection, serializeDiaryEntry } from "$lib/server/shoku"
+import { createFoodItemLog, getFoodItemsCollection, serializeFoodItemLog } from "$lib/server/shoku"
 import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
 import type { RequestHandler } from "./$types"
@@ -43,7 +43,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     ? new Date(body.date + "T00:00:00.000Z")
     : new Date(now.toISOString().split("T")[0] + "T00:00:00.000Z")
 
-  const created = await createDiaryEntry(
+  const created = await createFoodItemLog(
     userId,
     foodResult.insertedId,
     foodItem!,
@@ -54,5 +54,5 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     null,
   )
 
-  return json(serializeDiaryEntry(created), { status: 201 })
+  return json(serializeFoodItemLog(created), { status: 201 })
 }

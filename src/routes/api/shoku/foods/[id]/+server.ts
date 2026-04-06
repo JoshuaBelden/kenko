@@ -1,4 +1,4 @@
-import { getDiaryEntriesCollection, getFoodItemsCollection, serializeFoodItem } from "$lib/server/shoku"
+import { getFoodItemLogsCollection, getFoodItemsCollection, serializeFoodItem } from "$lib/server/shoku"
 import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
 import type { RequestHandler } from "./$types"
@@ -62,13 +62,13 @@ export const DELETE: RequestHandler = async ({ locals, params }) => {
   const item = await foodItems.findOne({ _id: foodItemId, userId })
   if (!item) return json({ error: "Not found" }, { status: 404 })
 
-  const diaryEntries = await getDiaryEntriesCollection()
-  const refCount = await diaryEntries.countDocuments({ foodItemId, userId })
+  const foodItemLogs = await getFoodItemLogsCollection()
+  const refCount = await foodItemLogs.countDocuments({ foodItemId, userId })
 
   if (refCount > 0) {
     return json(
       {
-        error: `This food item is referenced by ${refCount} diary ${refCount === 1 ? "entry" : "entries"}. Delete those first, or proceed with force=true.`,
+        error: `This food item is referenced by ${refCount} food ${refCount === 1 ? "log" : "logs"}. Delete those first, or proceed with force=true.`,
         refCount,
       },
       { status: 409 },

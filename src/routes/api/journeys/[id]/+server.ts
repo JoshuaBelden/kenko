@@ -1,5 +1,5 @@
 import { getJourneysCollection } from "$lib/server/collections"
-import { removeJourneyFromRecords, serializeJourney } from "$lib/server/journeys"
+import { serializeJourney } from "$lib/server/journeys"
 import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
 import type { Document } from "mongodb"
@@ -73,7 +73,6 @@ export const DELETE: RequestHandler = async ({ locals, params }) => {
 
   if (!journey) return json({ error: "Not found" }, { status: 404 })
 
-  await removeJourneyFromRecords(journeyId)
   await journeys.deleteOne({ _id: journeyId })
 
   return new Response(null, { status: 204 })

@@ -228,29 +228,16 @@
   {/if}
 
   <!-- Details -->
-  {#if commitment.description || commitment.journeyName}
+  {#if commitment.description}
     <section class="section">
       <h2 class="section-title">Details</h2>
       <Card>
         <div class="details">
-          {#if commitment.description}
-            <p class="description">{commitment.description}</p>
-          {/if}
+          <p class="description">{commitment.description}</p>
           <div class="detail-row">
             <span class="detail-label">Logging</span>
             <span class="detail-value">{commitment.loggingStyle === "checkbox" ? "Checkbox" : "Quantity"}{commitment.unit ? ` (${commitment.unit})` : ""}</span>
           </div>
-          {#if commitment.journeyName}
-            <div class="detail-row">
-              <span class="detail-label">Journey</span>
-              <span class="detail-value">{commitment.journeyName}</span>
-            </div>
-          {:else}
-            <div class="detail-row">
-              <span class="detail-label">Scope</span>
-              <span class="detail-value">Evergreen</span>
-            </div>
-          {/if}
         </div>
       </Card>
     </section>

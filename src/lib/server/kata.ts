@@ -46,7 +46,6 @@ export function serializeCommitment(doc: WithId<Document>) {
   return {
     id: doc._id.toString(),
     userId: doc.userId.toString(),
-    journeyId: doc.journeyId ? doc.journeyId.toString() : null,
     name: doc.name,
     description: doc.description ?? null,
     type: doc.type ?? null,
@@ -76,7 +75,6 @@ export function serializeCommitmentLog(doc: WithId<Document>) {
     id: doc._id.toString(),
     userId: doc.userId.toString(),
     commitmentId: doc.commitmentId.toString(),
-    journeyId: doc.journeyId ? doc.journeyId.toString() : null,
     date: doc.date instanceof Date ? doc.date.toISOString() : doc.date,
     value: doc.value,
     createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,

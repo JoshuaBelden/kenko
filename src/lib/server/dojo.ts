@@ -1,6 +1,5 @@
 import type { Document, Filter, ObjectId, WithId } from "mongodb"
 import { getDb } from "./db"
-import { getActiveJourneyIds } from "./journeys"
 
 // ========================================
 // Collections
@@ -124,7 +123,6 @@ export function serializeWorkoutLog(doc: WithId<Document>) {
   return {
     id: doc._id.toString(),
     userId: doc.userId.toString(),
-    journeyIds: (doc.journeyIds ?? []).map((id: ObjectId) => id.toString()),
     planId: doc.planId?.toString() ?? null,
     planSnapshot: doc.planSnapshot
       ? {
@@ -199,12 +197,10 @@ export async function startWorkoutLog(
   })
 
   const now = new Date()
-  const journeyIds = await getActiveJourneyIds(userId, now)
 
   const logs = await getWorkoutLogsCollection()
   const result = await logs.insertOne({
     userId,
-    journeyIds,
     planId,
     planSnapshot: {
       planName: plan.name,

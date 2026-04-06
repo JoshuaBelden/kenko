@@ -7,7 +7,6 @@ import {
   getTaperProgress,
   getTaperDailyHistory,
 } from "$lib/server/kata"
-import { getJourneysCollection } from "$lib/server/collections"
 import { ObjectId } from "mongodb"
 import type { PageServerLoad } from "./$types"
 
@@ -20,16 +19,6 @@ export const load: PageServerLoad = async ({ locals, params }) => {
   const commitmentsCol = await getCommitmentsCollection()
   const commitment = await commitmentsCol.findOne({ _id: commitmentId, userId })
   if (!commitment) return { commitment: null, progress: null, history: null, journeyTotal: null, allTimeTotal: 0, taperProgress: null, taperHistory: null }
-
-  // Resolve journey info
-  let journeyStartDate: Date | null = null
-  let journeyName: string | null = null
-  if (commitment.journeyId) {
-    const journeys = await getJourneysCollection()
-    const journey = await journeys.findOne({ _id: commitment.journeyId, userId })
-    journeyStartDate = journey?.startDate ?? null
-    journeyName = journey?.name ?? null
-  }
 
   const logsCol = await getCommitmentLogsCollection()
 
@@ -49,7 +38,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
     const allTimeTotal = allTimeResult.length > 0 ? allTimeResult[0].total : 0
 
     return {
-      commitment: { ...serializeCommitment(commitment), journeyName },
+      commitment: serializeCommitment(commitment),
       progress: null,
       history: null,
       journeyTotal: null,
@@ -60,8 +49,8 @@ export const load: PageServerLoad = async ({ locals, params }) => {
   }
 
   const [progress, historyResult, allTimeResult] = await Promise.all([
-    calculatePeriodProgress(commitmentId, userId, commitment.period, commitment.targetValue, journeyStartDate),
-    getPeriodHistory(commitmentId, userId, commitment.period, commitment.targetValue, commitment.direction, journeyStartDate),
+    calculatePeriodProgress(commitmentId, userId, commitment.period, commitment.targetValue),
+    getPeriodHistory(commitmentId, userId, commitment.period, commitment.targetValue, commitment.direction),
     logsCol
       .aggregate([
         { $match: { commitmentId, userId } },
@@ -73,7 +62,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
   const allTimeTotal = allTimeResult.length > 0 ? allTimeResult[0].total : 0
 
   return {
-    commitment: { ...serializeCommitment(commitment), journeyName },
+    commitment: serializeCommitment(commitment),
     progress,
     history: historyResult.periods,
     journeyTotal: historyResult.journeyTotal,

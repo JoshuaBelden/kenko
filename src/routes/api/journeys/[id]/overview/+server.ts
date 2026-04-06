@@ -2,7 +2,7 @@ import { getJourneysCollection } from "$lib/server/collections"
 import { getFastsCollection } from "$lib/server/danjiki"
 import { getWorkoutLogsCollection, getWorkoutPlansCollection, serializeWorkoutPlan } from "$lib/server/dojo"
 import { getCommitmentsCollection, calculatePeriodProgress, serializeCommitment } from "$lib/server/kata"
-import { getDiaryEntriesCollection, getWaterLogCollection } from "$lib/server/shoku"
+import { getFoodItemLogsCollection, getWaterLogCollection } from "$lib/server/shoku"
 import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
 import type { RequestHandler } from "./$types"
@@ -46,8 +46,8 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 
   // Shoku data
   if (journey.shokuTargets) {
-    const diary = await getDiaryEntriesCollection()
-    const todayEntries = await diary
+    const foodItemLogs = await getFoodItemLogsCollection()
+    const todayEntries = await foodItemLogs
       .find({
         userId,
         date: { $gte: startOfDay(now), $lte: endOfDay(now) },
@@ -110,7 +110,6 @@ export const GET: RequestHandler = async ({ locals, params }) => {
     const weekLogs = await logs
       .find({
         userId,
-        journeyIds: journeyId,
         status: "completed",
         completedAt: { $gte: weekStart, $lte: weekEnd },
       })

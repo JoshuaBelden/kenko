@@ -68,7 +68,6 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
       $setOnInsert: {
         commitmentId,
         userId,
-        journeyId: commitment.journeyId ?? null,
         date: todayStart,
         createdAt: now,
       },

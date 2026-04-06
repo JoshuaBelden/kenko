@@ -1,37 +1,14 @@
 <script lang="ts">
-  import { goto, invalidateAll } from "$app/navigation"
+  import { invalidateAll } from "$app/navigation"
   import { page } from "$app/state"
   import { Button, Card, PageHeader, StatNumber } from "$lib/components"
   import { icons } from "$lib/icons"
-  import { journeyLens } from "$lib/stores/journeyLens.svelte"
 
   const commitments = $derived(page.data.commitments ?? [])
-
-  // Journey lens re-navigation
-  $effect(() => {
-    const jid = journeyLens.selectedId
-    const current = page.url.searchParams.get("journeyId")
-    if (jid !== current) {
-      const params = new URLSearchParams()
-      if (jid) params.set("journeyId", jid)
-      goto(`/kata${params.toString() ? "?" + params.toString() : ""}`, { invalidateAll: true })
-    }
-  })
 
   // Inline logging state
   let loggingId = $state<string | null>(null)
   let loggingValue = $state("")
-
-  const journeyCommitments = $derived(
-    journeyLens.isGlobalView
-      ? []
-      : commitments.filter((c: any) => c.journeyId === journeyLens.selectedId),
-  )
-  const evergreenCommitments = $derived(
-    journeyLens.isGlobalView
-      ? commitments
-      : commitments.filter((c: any) => c.journeyId === null),
-  )
 
   const totalActive = $derived(commitments.length)
   const metToday = $derived(
@@ -130,22 +107,8 @@
     </div>
   </section>
 {:else}
-  <!-- Journey-scoped commitments (when lens is active) -->
-  {#if !journeyLens.isGlobalView && journeyCommitments.length > 0}
-    <section class="section">
-      <h2 class="section-title">Journey</h2>
-      {#each journeyCommitments as c (c.id)}
-        {@render commitmentCard(c)}
-      {/each}
-    </section>
-  {/if}
-
-  <!-- Evergreen / All commitments -->
   <section class="section">
-    {#if !journeyLens.isGlobalView}
-      <h2 class="section-title">Evergreen</h2>
-    {/if}
-    {#each evergreenCommitments as c (c.id)}
+    {#each commitments as c (c.id)}
       {@render commitmentCard(c)}
     {/each}
   </section>

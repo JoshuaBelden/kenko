@@ -12,21 +12,12 @@ import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
 import type { RequestHandler } from "./$types"
 
-export const GET: RequestHandler = async ({ locals, url }) => {
+export const GET: RequestHandler = async ({ locals }) => {
   if (!locals.userId) return json({ error: "Unauthorized" }, { status: 401 })
 
   const userId = new ObjectId(locals.userId)
-  const filter: Record<string, unknown> = { userId, isActive: true }
-
-  const journeyId = url.searchParams.get("journeyId")
-  if (journeyId) {
-    // Show commitments for this journey + evergreen (null journeyId)
-    filter.$or = [{ journeyId: new ObjectId(journeyId) }, { journeyId: null }]
-    delete filter.journeyId
-  }
-
   const commitments = await getCommitmentsCollection()
-  const list = await commitments.find(filter).sort({ createdAt: -1 }).toArray()
+  const list = await commitments.find({ userId, isActive: true }).sort({ createdAt: -1 }).toArray()
 
   return json(list.map(serializeCommitment))
 }
@@ -77,7 +68,6 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     const commitments = await getCommitmentsCollection()
     const result = await commitments.insertOne({
       userId: new ObjectId(locals.userId),
-      journeyId: body.journeyId ? new ObjectId(body.journeyId) : null,
       name: body.name.trim(),
       description: body.description?.trim() || null,
       type: "taper",
@@ -116,7 +106,6 @@ export const POST: RequestHandler = async ({ locals, request }) => {
   const commitments = await getCommitmentsCollection()
   const result = await commitments.insertOne({
     userId: new ObjectId(locals.userId),
-    journeyId: body.journeyId ? new ObjectId(body.journeyId) : null,
     name: body.name.trim(),
     description: body.description?.trim() || null,
     type: body.type || null,

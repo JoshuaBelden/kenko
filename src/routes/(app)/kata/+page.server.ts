@@ -5,24 +5,16 @@ import {
   calculatePeriodProgress,
   getTaperProgress,
 } from "$lib/server/kata"
-import { getJourneysCollection } from "$lib/server/collections"
 import { ObjectId } from "mongodb"
 import type { PageServerLoad } from "./$types"
 
-export const load: PageServerLoad = async ({ locals, url }) => {
+export const load: PageServerLoad = async ({ locals }) => {
   if (!locals.userId) return { commitments: [] }
 
   const userId = new ObjectId(locals.userId)
-  const journeyId = url.searchParams.get("journeyId")
 
   const commitmentsCol = await getCommitmentsCollection()
-  const filter: Record<string, unknown> = { userId, isActive: true }
-
-  if (journeyId) {
-    filter.$or = [{ journeyId: new ObjectId(journeyId) }, { journeyId: null }]
-  }
-
-  const commitments = await commitmentsCol.find(filter).sort({ createdAt: -1 }).toArray()
+  const commitments = await commitmentsCol.find({ userId, isActive: true }).sort({ createdAt: -1 }).toArray()
 
   // Get today's logs and current progress for each commitment
   const logsCol = await getCommitmentLogsCollection()
@@ -42,19 +34,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     .toArray()
 
   const todayLogMap = new Map(todayLogs.map((log) => [log.commitmentId.toString(), log]))
-
-  // Resolve journey start dates for journey_total commitments
-  const journeyIds = [...new Set(commitments.filter((c) => c.journeyId).map((c) => c.journeyId.toString()))]
-  const journeyStartDates = new Map<string, Date>()
-  if (journeyIds.length > 0) {
-    const journeysCol = await getJourneysCollection()
-    const journeys = await journeysCol
-      .find({ _id: { $in: journeyIds.map((id) => new ObjectId(id)) } })
-      .toArray()
-    for (const j of journeys) {
-      journeyStartDates.set(j._id.toString(), j.startDate)
-    }
-  }
 
   const enriched = await Promise.all(
     commitments.map(async (c) => {
@@ -77,8 +56,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
         }
       }
 
-      const journeyStartDate = c.journeyId ? journeyStartDates.get(c.journeyId.toString()) ?? null : null
-      const progress = await calculatePeriodProgress(c._id, userId, c.period, c.targetValue, journeyStartDate)
+      const progress = await calculatePeriodProgress(c._id, userId, c.period, c.targetValue)
 
       return {
         ...serializeCommitment(c),

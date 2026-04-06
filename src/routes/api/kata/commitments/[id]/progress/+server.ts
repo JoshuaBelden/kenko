@@ -4,7 +4,6 @@ import {
   calculatePeriodProgress,
   getPeriodHistory,
 } from "$lib/server/kata"
-import { getJourneysCollection } from "$lib/server/collections"
 import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
 import type { RequestHandler } from "./$types"
@@ -19,17 +18,9 @@ export const GET: RequestHandler = async ({ locals, params }) => {
   const commitment = await commitments.findOne({ _id: commitmentId, userId })
   if (!commitment) return json({ error: "Not found" }, { status: 404 })
 
-  // Resolve journey start date if journey-scoped
-  let journeyStartDate: Date | null = null
-  if (commitment.journeyId) {
-    const journeys = await getJourneysCollection()
-    const journey = await journeys.findOne({ _id: commitment.journeyId, userId })
-    journeyStartDate = journey?.startDate ?? null
-  }
-
   const [progress, history, allTimeResult] = await Promise.all([
-    calculatePeriodProgress(commitmentId, userId, commitment.period, commitment.targetValue, journeyStartDate),
-    getPeriodHistory(commitmentId, userId, commitment.period, commitment.targetValue, commitment.direction, journeyStartDate),
+    calculatePeriodProgress(commitmentId, userId, commitment.period, commitment.targetValue),
+    getPeriodHistory(commitmentId, userId, commitment.period, commitment.targetValue, commitment.direction),
     getCommitmentLogsCollection().then((logs) =>
       logs
         .aggregate([

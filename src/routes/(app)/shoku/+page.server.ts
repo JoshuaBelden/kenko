@@ -1,4 +1,4 @@
-import { getDiaryEntriesCollection, getWaterLogCollection, serializeDiaryEntry } from "$lib/server/shoku"
+import { getFoodItemLogsCollection, getWaterLogCollection, serializeFoodItemLog } from "$lib/server/shoku"
 import { ObjectId } from "mongodb"
 import type { PageServerLoad } from "./$types"
 
@@ -15,9 +15,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     date: { $gte: date, $lt: nextDate },
   }
 
-  const diaryEntries = await getDiaryEntriesCollection()
-  const entries = await diaryEntries.find(filter).sort({ loggedAt: 1 }).toArray()
-  const serialized = entries.map(serializeDiaryEntry)
+  const foodItemLogs = await getFoodItemLogsCollection()
+  const entries = await foodItemLogs.find(filter).sort({ loggedAt: 1 }).toArray()
+  const serialized = entries.map(serializeFoodItemLog)
 
   const grouped: Record<string, typeof serialized> = {
     breakfast: [],

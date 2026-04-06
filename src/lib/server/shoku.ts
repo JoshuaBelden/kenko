@@ -1,6 +1,5 @@
 import type { Document, ObjectId, WithId } from "mongodb"
 import { getDb } from "./db"
-import { getActiveJourneyIds } from "./journeys"
 
 // ========================================
 // Collections
@@ -11,9 +10,9 @@ export async function getFoodItemsCollection() {
   return db.collection("foodItems")
 }
 
-export async function getDiaryEntriesCollection() {
+export async function getFoodItemLogsCollection() {
   const db = await getDb()
-  return db.collection("diaryEntries")
+  return db.collection("foodItemLogs")
 }
 
 export async function getWaterLogCollection() {
@@ -120,14 +119,13 @@ export function serializeFoodItem(doc: WithId<Document>) {
   }
 }
 
-export function serializeDiaryEntry(doc: WithId<Document>) {
+export function serializeFoodItemLog(doc: WithId<Document>) {
   return {
     id: doc._id.toString(),
     userId: doc.userId.toString(),
     foodItemId: doc.foodItemId.toString(),
     foodName: doc.foodName ?? "",
     foodBrand: doc.foodBrand ?? null,
-    journeyIds: (doc.journeyIds ?? []).map((id: ObjectId) => id.toString()),
     date: doc.date instanceof Date ? doc.date.toISOString() : doc.date,
     loggedAt: doc.loggedAt instanceof Date ? doc.loggedAt.toISOString() : doc.loggedAt,
     category: doc.category ?? "uncategorized",
@@ -144,10 +142,10 @@ export function serializeDiaryEntry(doc: WithId<Document>) {
 }
 
 // ========================================
-// Diary Helpers
+// Food Item Log Helpers
 // ========================================
 
-export async function createDiaryEntry(
+export async function createFoodItemLog(
   userId: ObjectId,
   foodItemId: ObjectId,
   foodItem: Document,
@@ -159,16 +157,14 @@ export async function createDiaryEntry(
 ) {
   const now = new Date()
   const nutrients = calculateNutrients(foodItem, quantity, unit)
-  const journeyIds = await getActiveJourneyIds(userId, date)
 
-  const diaryEntries = await getDiaryEntriesCollection()
+  const foodItemLogs = await getFoodItemLogsCollection()
 
   const entry = {
     userId,
     foodItemId,
     foodName: foodItem.name,
     foodBrand: foodItem.brand ?? null,
-    journeyIds,
     date,
     loggedAt: now,
     category,
@@ -183,7 +179,7 @@ export async function createDiaryEntry(
     updatedAt: now,
   }
 
-  const result = await diaryEntries.insertOne(entry)
-  const created = await diaryEntries.findOne({ _id: result.insertedId })
+  const result = await foodItemLogs.insertOne(entry)
+  const created = await foodItemLogs.findOne({ _id: result.insertedId })
   return created!
 }
