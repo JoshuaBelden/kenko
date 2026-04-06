@@ -4,6 +4,27 @@
   import { BarcodeScanner, Button, Card, PageHeader } from "$lib/components"
   import { icons } from "$lib/icons"
 
+  let addedToDiaryId = $state<string | null>(null)
+
+  async function addToDiary(food: any) {
+    const today = new Date().toISOString().split("T")[0]
+    const res = await fetch("/api/shoku/diary", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        foodItemId: food.id,
+        quantity: 1,
+        unit: "serving",
+        category: "uncategorized",
+        date: today,
+      }),
+    })
+    if (res.ok) {
+      addedToDiaryId = food.id
+      setTimeout(() => { addedToDiaryId = null }, 2000)
+    }
+  }
+
   let foods = $state(page.data.foods ?? [])
   $effect(() => {
     foods = page.data.foods ?? []
@@ -397,6 +418,11 @@
               </div>
               <p class="serving-info">1 serving = {food.servingSize ?? 100}{food.baseUnit}</p>
               <div class="food-actions">
+                {#if addedToDiaryId === food.id}
+                  <span class="added-confirm">Added!</span>
+                {:else}
+                  <button class="btn-diary" onclick={() => addToDiary(food)}>Add to diary</button>
+                {/if}
                 <button class="btn-text" onclick={() => startEdit(food)}>Edit</button>
                 {#if deletingId === food.id}
                   <div class="confirm-delete-inline">
@@ -946,6 +972,32 @@
     white-space: pre-wrap;
     word-break: break-word;
     margin: 0;
+  }
+
+  .btn-diary {
+    padding: var(--space-2) var(--space-4);
+    border: 0.5px solid var(--accent);
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--accent);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .btn-diary:hover {
+    background: var(--accent);
+    color: white;
+  }
+
+  .added-confirm {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--ink-light);
+    padding: var(--space-2) var(--space-4);
   }
 
   .readonly-input {
