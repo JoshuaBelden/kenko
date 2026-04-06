@@ -24,8 +24,10 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
 
   if (body.startedAt) updates.startedAt = new Date(body.startedAt)
   if (body.completedAt) updates.completedAt = new Date(body.completedAt)
+  if (body.caloriesBurned !== undefined) updates.caloriesBurned = body.caloriesBurned
+  if (body.cardioDistance !== undefined) updates.cardioDistance = body.cardioDistance
 
-  if (!body.startedAt && !body.completedAt) {
+  if (Object.keys(updates).length <= 1) {
     return json({ error: "No valid fields to update" }, { status: 400 })
   }
 

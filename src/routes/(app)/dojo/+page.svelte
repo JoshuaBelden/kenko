@@ -140,7 +140,17 @@
           <div class="log-meta">
             <span class="log-date">{formatDate(log.startedAt)}</span>
             <span class="log-duration">{duration(log.startedAt, log.completedAt)}</span>
-            <span class="log-sets">{log.sets.length} sets</span>
+            {#if log.planSnapshot?.sessionType === "cardio"}
+              <span class="log-sets">Cardio</span>
+            {:else}
+              <span class="log-sets">{log.sets.length} sets</span>
+            {/if}
+            {#if log.cardioDistance}
+              <span class="log-sets">{log.cardioDistance} mi</span>
+            {/if}
+            {#if log.caloriesBurned}
+              <span class="log-sets">{log.caloriesBurned} cal</span>
+            {/if}
           </div>
         </a>
       </Card>

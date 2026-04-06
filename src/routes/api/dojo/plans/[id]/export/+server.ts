@@ -28,6 +28,7 @@ export const GET: RequestHandler = async ({ locals, params }) => {
     name: plan.name,
     sessions: (plan.sessions ?? []).map((s: any) => ({
       name: s.name,
+      type: s.type ?? "strength",
       targetDayOfWeek: s.targetDayOfWeek ?? null,
       exercises: (s.exercises ?? []).map((e: any) => {
         const ex = exerciseMap.get(e.exerciseId?.toString())

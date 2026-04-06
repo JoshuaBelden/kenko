@@ -71,6 +71,7 @@
     fSessions = plan.sessions.map((s: any) => ({
       id: s.id,
       name: s.name,
+      type: s.type ?? "strength",
       targetDayOfWeek: s.targetDayOfWeek,
       exercises: s.exercises.map((e: any) => ({ ...e })),
     }))
@@ -79,7 +80,7 @@
   }
 
   function addSession() {
-    fSessions = [...fSessions, { name: "Session " + (fSessions.length + 1), targetDayOfWeek: null, exercises: [] }]
+    fSessions = [...fSessions, { name: "Session " + (fSessions.length + 1), type: "strength", targetDayOfWeek: null, exercises: [] }]
     editingSessionIdx = fSessions.length - 1
     scheduleAutoSave()
   }
@@ -160,6 +161,7 @@
         name: fPlanName.trim(),
         sessions: fSessions.map(s => ({
           name: s.name,
+          type: s.type ?? "strength",
           targetDayOfWeek: s.targetDayOfWeek,
           exercises: s.exercises,
         })),
@@ -202,6 +204,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: s.name,
+          type: s.type ?? "strength",
           targetDayOfWeek: s.targetDayOfWeek,
           exercises: s.exercises,
         }),
@@ -309,6 +312,13 @@
                     <input type="text" class="field-input" bind:value={session.name} oninput={handleSessionNameInput} />
                   </div>
                   <div class="form-field">
+                    <label class="field-label">Type</label>
+                    <select class="field-input" bind:value={session.type} onchange={handleSessionDayChange}>
+                      <option value="strength">Strength</option>
+                      <option value="cardio">Cardio</option>
+                    </select>
+                  </div>
+                  <div class="form-field">
                     <label class="field-label">Target Day</label>
                     <select class="field-input" bind:value={session.targetDayOfWeek} onchange={handleSessionDayChange}>
                       <option value={null}>Any</option>
@@ -319,6 +329,7 @@
                   </div>
                 </div>
 
+                {#if session.type !== "cardio"}
                 <div class="session-exercises">
                   <span class="field-label">Exercises ({session.exercises.length})</span>
                   {#each session.exercises as ex, exIdx}
@@ -368,6 +379,7 @@
                     <p class="hint">Create exercises in the <a href="/dojo/library">library</a> first</p>
                   {/if}
                 </div>
+                {/if}
 
                 <div class="form-actions">
                   <Button variant="secondary" onclick={() => removeSession(idx)}>Remove Session</Button>
@@ -382,7 +394,7 @@
                     <span class="day-badge">{DAY_NAMES[session.targetDayOfWeek]}</span>
                   {/if}
                 </div>
-                <span class="session-exercise-count">{session.exercises.length} exercises</span>
+                <span class="session-exercise-count">{session.type === "cardio" ? "Cardio" : `${session.exercises.length} exercises`}</span>
               </div>
             {/if}
           </div>
@@ -439,11 +451,15 @@
               <Button variant="ghost" onclick={() => startSession(plan.id, session.id)}>Start</Button>
             </div>
             <div class="plan-session-exercises">
-              {#each session.exercises as ex, i}
-                <span class="plan-exercise-item">
-                  {exerciseName(ex.exerciseId)} — {ex.targetSets}x{ex.targetReps}{ex.targetWeight ? ` @ ${ex.targetWeight}lbs` : ""}
-                </span>
-              {/each}
+              {#if session.type === "cardio"}
+                <span class="plan-exercise-item">Cardio session</span>
+              {:else}
+                {#each session.exercises as ex}
+                  <span class="plan-exercise-item">
+                    {exerciseName(ex.exerciseId)} — {ex.targetSets}x{ex.targetReps}{ex.targetWeight ? ` @ ${ex.targetWeight}lbs` : ""}
+                  </span>
+                {/each}
+              {/if}
             </div>
           </div>
         {/each}

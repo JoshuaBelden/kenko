@@ -16,6 +16,8 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
   }
 
   if (body.notes !== undefined) updates.notes = body.notes
+  if (body.caloriesBurned !== undefined) updates.caloriesBurned = body.caloriesBurned
+  if (body.cardioDistance !== undefined) updates.cardioDistance = body.cardioDistance
 
   const logs = await getWorkoutLogsCollection()
   const result = await logs.findOneAndUpdate(

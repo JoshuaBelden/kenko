@@ -62,6 +62,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     resolvedSessions.push({
       _id: new ObjectId(),
       name: session.name ?? "Session",
+      type: session.type === "cardio" ? "cardio" : "strength",
       targetDayOfWeek: session.targetDayOfWeek ?? null,
       exercises: resolvedExercises,
     })

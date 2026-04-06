@@ -54,6 +54,8 @@ export type Equipment =
   | "bodyweight"
   | "other"
 
+export type SessionType = "strength" | "cardio"
+
 export const VALID_REGIONS: MuscleRegion[] = ["torso", "arms", "lower_body"]
 
 export const MUSCLES_BY_REGION: Record<MuscleRegion, Muscle[]> = {
@@ -103,6 +105,7 @@ export function serializeWorkoutPlan(doc: WithId<Document>) {
     sessions: (doc.sessions ?? []).map((s: any) => ({
       id: s._id?.toString() ?? s.id,
       name: s.name,
+      type: s.type ?? "strength",
       targetDayOfWeek: s.targetDayOfWeek ?? null,
       exercises: (s.exercises ?? []).map((e: any) => ({
         id: e._id?.toString() ?? e.id,
@@ -128,6 +131,7 @@ export function serializeWorkoutLog(doc: WithId<Document>) {
       ? {
           planName: doc.planSnapshot.planName,
           sessionName: doc.planSnapshot.sessionName,
+          sessionType: doc.planSnapshot.sessionType ?? "strength",
           exercises: (doc.planSnapshot.exercises ?? []).map((e: any) => ({
             exerciseId: e.exerciseId?.toString() ?? e.exerciseId,
             exerciseName: e.exerciseName,
@@ -151,6 +155,8 @@ export function serializeWorkoutLog(doc: WithId<Document>) {
       isAdditional: s.isAdditional ?? false,
     })),
     notes: doc.notes ?? null,
+    caloriesBurned: doc.caloriesBurned ?? null,
+    cardioDistance: doc.cardioDistance ?? null,
     status: doc.status ?? "in_progress",
     startedAt: doc.startedAt instanceof Date ? doc.startedAt.toISOString() : doc.startedAt,
     completedAt: doc.completedAt instanceof Date ? doc.completedAt.toISOString() : (doc.completedAt ?? null),
@@ -175,39 +181,45 @@ export async function startWorkoutLog(
   const session = (plan.sessions ?? []).find((s: any) => s._id?.toString() === sessionId)
   if (!session) return null
 
-  // Resolve exercise names for the snapshot
-  const exercises = await getExercisesCollection()
-  const exerciseIds = (session.exercises ?? []).map((e: any) => e.exerciseId)
-  const exerciseDocs = await exercises.find({ _id: { $in: exerciseIds } }).toArray()
-  const exerciseMap = new Map(exerciseDocs.map(d => [d._id.toString(), d]))
+  const sessionType = session.type ?? "strength"
+  let snapshotExercises: any[] = []
+  let initialSets: any[] = []
 
-  const snapshotExercises = (session.exercises ?? []).map((e: any) => {
-    const ex = exerciseMap.get(e.exerciseId?.toString())
-    return {
-      exerciseId: e.exerciseId,
-      exerciseName: ex?.name ?? "Unknown",
-      muscleGroup: ex?.muscleGroup ?? { region: "torso", muscle: "chest" },
-      equipment: ex?.equipment ?? "bodyweight",
-      order: e.order ?? 0,
-      targetSets: e.targetSets ?? 3,
-      targetReps: e.targetReps ?? 10,
-      targetWeight: e.targetWeight ?? null,
-      restSeconds: e.restSeconds ?? 90,
-    }
-  })
+  if (sessionType === "strength") {
+    // Resolve exercise names for the snapshot
+    const exercises = await getExercisesCollection()
+    const exerciseIds = (session.exercises ?? []).map((e: any) => e.exerciseId)
+    const exerciseDocs = await exercises.find({ _id: { $in: exerciseIds } }).toArray()
+    const exerciseMap = new Map(exerciseDocs.map(d => [d._id.toString(), d]))
 
-  // Pre-populate sets from exercise targets
-  const initialSets = snapshotExercises.flatMap((e: any) => {
-    const count = e.targetSets ?? 3
-    return Array.from({ length: count }, (_, i) => ({
-      exerciseId: e.exerciseId,
-      setNumber: i + 1,
-      weight: e.targetWeight ?? 0,
-      reps: e.targetReps ?? 10,
-      rpe: null,
-      isAdditional: false,
-    }))
-  })
+    snapshotExercises = (session.exercises ?? []).map((e: any) => {
+      const ex = exerciseMap.get(e.exerciseId?.toString())
+      return {
+        exerciseId: e.exerciseId,
+        exerciseName: ex?.name ?? "Unknown",
+        muscleGroup: ex?.muscleGroup ?? { region: "torso", muscle: "chest" },
+        equipment: ex?.equipment ?? "bodyweight",
+        order: e.order ?? 0,
+        targetSets: e.targetSets ?? 3,
+        targetReps: e.targetReps ?? 10,
+        targetWeight: e.targetWeight ?? null,
+        restSeconds: e.restSeconds ?? 90,
+      }
+    })
+
+    // Pre-populate sets from exercise targets
+    initialSets = snapshotExercises.flatMap((e: any) => {
+      const count = e.targetSets ?? 3
+      return Array.from({ length: count }, (_, i) => ({
+        exerciseId: e.exerciseId,
+        setNumber: i + 1,
+        weight: e.targetWeight ?? 0,
+        reps: e.targetReps ?? 10,
+        rpe: null,
+        isAdditional: false,
+      }))
+    })
+  }
 
   const now = new Date()
 
@@ -218,10 +230,13 @@ export async function startWorkoutLog(
     planSnapshot: {
       planName: plan.name,
       sessionName: session.name,
+      sessionType,
       exercises: snapshotExercises,
     },
     sets: initialSets,
     notes: null,
+    caloriesBurned: null,
+    cardioDistance: null,
     status: "in_progress",
     startedAt: now,
     completedAt: null,

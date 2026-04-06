@@ -22,6 +22,8 @@
   })
 
   let notes = $state(log?.notes ?? "")
+  let caloriesBurned = $state<number | null>(log?.caloriesBurned ?? null)
+  let cardioDistance = $state<number | null>(log?.cardioDistance ?? null)
   let saving = false
   let completing = $state(false)
 
@@ -42,19 +44,28 @@
   function openDateEditor() {
     editStartedAt = toLocalDatetime(log.startedAt)
     editCompletedAt = toLocalDatetime(log.completedAt)
+    caloriesBurned = log.caloriesBurned ?? null
+    if (isCardio) {
+      cardioDistance = log.cardioDistance ?? null
+    }
     editingDates = true
   }
 
   async function saveDates() {
     savingDates = true
     try {
+      const body: Record<string, any> = {
+        startedAt: new Date(editStartedAt).toISOString(),
+        completedAt: new Date(editCompletedAt).toISOString(),
+        caloriesBurned: caloriesBurned ?? null,
+      }
+      if (isCardio) {
+        body.cardioDistance = cardioDistance ?? null
+      }
       const res = await fetch(`/api/dojo/logs/${log.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          startedAt: new Date(editStartedAt).toISOString(),
-          completedAt: new Date(editCompletedAt).toISOString(),
-        }),
+        body: JSON.stringify(body),
       })
       if (res.ok) {
         const updated = await res.json()
@@ -62,7 +73,7 @@
         editingDates = false
       }
     } catch (err) {
-      console.error("Failed to save dates:", err)
+      console.error("Failed to save details:", err)
     }
     savingDates = false
   }
@@ -95,6 +106,8 @@
 
   const snapshotExercises = $derived(log?.planSnapshot?.exercises ?? [])
   const isCompleted = $derived(log?.status === "completed")
+  const isCardio = $derived((log?.planSnapshot?.sessionType ?? "strength") === "cardio")
+
 
   function setsForExercise(exerciseId: string) {
     return sets.filter(s => s.exerciseId === exerciseId)
@@ -257,11 +270,18 @@
   async function handleComplete() {
     completing = true
     if (saveTimeout) clearTimeout(saveTimeout)
-    await saveSets()
+    if (!isCardio) await saveSets()
+    const completeBody: Record<string, any> = {
+      notes: notes || null,
+      caloriesBurned: caloriesBurned ?? null,
+    }
+    if (isCardio) {
+      completeBody.cardioDistance = cardioDistance ?? null
+    }
     const res = await fetch(`/api/dojo/logs/${log.id}/complete`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notes: notes || null }),
+      body: JSON.stringify(completeBody),
     })
 
     if (res.ok) {
@@ -310,13 +330,25 @@
       <div class="date-editor-wrapper">
         <Card>
           <div class="date-editor">
-            <div class="form-field">
-              <label class="field-label" for="edit-started-at">Started At</label>
-              <input id="edit-started-at" type="datetime-local" class="field-input" bind:value={editStartedAt} />
+            <div class="form-row">
+              <div class="form-field">
+                <label class="field-label" for="edit-started-at">Started At</label>
+                <input id="edit-started-at" type="datetime-local" class="field-input" bind:value={editStartedAt} />
+              </div>
+              <div class="form-field">
+                <label class="field-label" for="edit-completed-at">Completed At</label>
+                <input id="edit-completed-at" type="datetime-local" class="field-input" bind:value={editCompletedAt} />
+              </div>
             </div>
+            {#if isCardio}
+              <div class="form-field">
+                <label class="field-label" for="edit-cardio-distance">Distance (miles)</label>
+                <input id="edit-cardio-distance" type="number" class="field-input" bind:value={cardioDistance} placeholder="Optional" min="0" step="0.01" />
+              </div>
+            {/if}
             <div class="form-field">
-              <label class="field-label" for="edit-completed-at">Completed At</label>
-              <input id="edit-completed-at" type="datetime-local" class="field-input" bind:value={editCompletedAt} />
+              <label class="field-label" for="edit-calories">Calories Burned</label>
+              <input id="edit-calories" type="number" class="field-input" bind:value={caloriesBurned} placeholder="Optional" min="0" />
             </div>
             <div class="form-actions">
               <Button variant="secondary" onclick={() => (editingDates = false)}>Cancel</Button>
@@ -327,10 +359,6 @@
           </div>
         </Card>
       </div>
-    {:else}
-      <button class="edit-dates-btn" onclick={openDateEditor}>
-        {new Date(log.startedAt).toLocaleString()} &mdash; {new Date(log.completedAt).toLocaleString()} &middot; Edit
-      </button>
     {/if}
   {/if}
 
@@ -370,6 +398,7 @@
     </div>
   {/if}
 
+  {#if !isCardio}
   <!-- Exercise List -->
   <div class="exercise-list">
   {#each exerciseOrder() as exerciseId, exIdx}
@@ -480,11 +509,35 @@
       <button class="add-exercise-btn" onclick={openAddExercise}>+ Add Exercise</button>
     {/if}
   {/if}
+  {/if}
+
+  <!-- Cardio Distance -->
+  {#if isCardio}
+    {#if !isCompleted}
+      <Card>
+        <div class="form-field">
+          <label class="field-label" for="cardio-distance">Distance (miles)</label>
+          <input id="cardio-distance" type="number" class="field-input" bind:value={cardioDistance} placeholder="Optional" min="0" step="0.01" />
+        </div>
+      </Card>
+    {:else if log.cardioDistance}
+      <Card>
+        <div class="form-field">
+          <span class="field-label">Distance</span>
+          <p class="notes-display">{log.cardioDistance} mi</p>
+        </div>
+      </Card>
+    {/if}
+  {/if}
 
   <!-- Notes & Complete -->
   {#if !isCompleted}
     <Card>
       <div class="session-footer">
+        <div class="form-field">
+          <label class="field-label" for="calories-burned">Calories Burned</label>
+          <input id="calories-burned" type="number" class="field-input" bind:value={caloriesBurned} placeholder="Optional" min="0" />
+        </div>
         <div class="form-field">
           <label class="field-label">Session Notes</label>
           <textarea class="notes-input" bind:value={notes} placeholder="How did it go?" rows="3"></textarea>
@@ -496,17 +549,32 @@
         </div>
       </div>
     </Card>
-  {:else if log.notes}
+  {:else}
+    {#if log.caloriesBurned || log.notes}
     <Card>
-      <div class="form-field">
-        <span class="field-label">Notes</span>
-        <p class="notes-display">{log.notes}</p>
+      <div class="session-footer">
+        {#if log.caloriesBurned}
+          <div class="form-field">
+            <span class="field-label">Calories Burned</span>
+            <p class="notes-display">{log.caloriesBurned} cal</p>
+          </div>
+        {/if}
+        {#if log.notes}
+          <div class="form-field">
+            <span class="field-label">Notes</span>
+            <p class="notes-display">{log.notes}</p>
+          </div>
+        {/if}
       </div>
     </Card>
+    {/if}
   {/if}
 
   <div class="back-link">
-    <Button variant="ghost" onclick={handleBackToDojo}>Back to Dojo</Button>
+    {#if isCompleted && !editingDates}
+      <Button variant="secondary" onclick={openDateEditor}>Edit</Button>
+    {/if}
+    <Button variant="ghost" onclick={handleBackToDojo}>Close</Button>
   </div>
 {/if}
 
@@ -887,24 +955,6 @@
     gap: var(--space-2);
   }
 
-  .edit-dates-btn {
-    font-family: var(--font-body);
-    font-size: var(--text-xs);
-    color: var(--ink-light);
-    background: none;
-    border: none;
-    cursor: pointer;
-    text-align: center;
-    width: 100%;
-    padding: var(--space-1) 0;
-    margin-bottom: var(--space-4);
-    transition: color var(--transition-fast);
-  }
-
-  .edit-dates-btn:hover {
-    color: var(--ink);
-  }
-
   .date-editor-wrapper {
     margin-bottom: var(--space-4);
   }
@@ -925,5 +975,11 @@
     flex-direction: column;
     align-items: center;
     gap: var(--space-4);
+  }
+
+  .form-row {
+    display: flex;
+    gap: var(--space-4);
+    flex-wrap: wrap;
   }
 </style>

@@ -12,6 +12,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
   const session = {
     _id: new ObjectId(),
     name: body.name.trim(),
+    type: body.type === "cardio" ? "cardio" : "strength",
     targetDayOfWeek: body.targetDayOfWeek ?? null,
     exercises: (body.exercises ?? []).map((e: any, i: number) => ({
       _id: new ObjectId(),
