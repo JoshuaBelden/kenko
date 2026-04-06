@@ -103,7 +103,10 @@
 
   function updateSet(exerciseId: string, setNumber: number, field: string, value: any) {
     sets = sets.map(s => {
-      if (s.exerciseId === exerciseId && s.setNumber === setNumber) {
+      if (s.exerciseId !== exerciseId) return s
+      if (s.setNumber === setNumber) return { ...s, [field]: value }
+      // Propagate weight/reps changes to all sets below
+      if ((field === "weight" || field === "reps") && s.setNumber > setNumber) {
         return { ...s, [field]: value }
       }
       return s

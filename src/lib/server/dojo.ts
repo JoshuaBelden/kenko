@@ -196,6 +196,19 @@ export async function startWorkoutLog(
     }
   })
 
+  // Pre-populate sets from exercise targets
+  const initialSets = snapshotExercises.flatMap((e: any) => {
+    const count = e.targetSets ?? 3
+    return Array.from({ length: count }, (_, i) => ({
+      exerciseId: e.exerciseId,
+      setNumber: i + 1,
+      weight: e.targetWeight ?? 0,
+      reps: e.targetReps ?? 10,
+      rpe: null,
+      isAdditional: false,
+    }))
+  })
+
   const now = new Date()
 
   const logs = await getWorkoutLogsCollection()
@@ -207,7 +220,7 @@ export async function startWorkoutLog(
       sessionName: session.name,
       exercises: snapshotExercises,
     },
-    sets: [],
+    sets: initialSets,
     notes: null,
     status: "in_progress",
     startedAt: now,
