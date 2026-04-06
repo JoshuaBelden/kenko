@@ -1,4 +1,4 @@
-import { getJourneysCollection } from "$lib/server/collections"
+import { getJourneysCollection, getWeightLogCollection } from "$lib/server/collections"
 import { getFastsCollection } from "$lib/server/danjiki"
 import { getWorkoutLogsCollection, getWorkoutPlansCollection, serializeWorkoutPlan } from "$lib/server/dojo"
 import { getCommitmentsCollection, calculatePeriodProgress, serializeCommitment } from "$lib/server/kata"
@@ -203,6 +203,30 @@ export const GET: RequestHandler = async ({ locals, params }) => {
     )
 
     result.kata = { commitments: kataData }
+  }
+
+  // Weight log data (scoped to journey date range)
+  const weightLogCol = await getWeightLogCollection()
+  const journeyStart = journey.startDate instanceof Date
+    ? journey.startDate.toISOString().split("T")[0]
+    : String(journey.startDate).split("T")[0]
+  const journeyEnd = journey.endDate instanceof Date
+    ? journey.endDate.toISOString().split("T")[0]
+    : String(journey.endDate).split("T")[0]
+
+  const weightEntries = await weightLogCol
+    .find({
+      userId,
+      date: { $gte: journeyStart, $lte: today },
+    })
+    .sort({ date: 1 })
+    .toArray()
+
+  result.weight = {
+    entries: weightEntries.map((e) => ({ date: e.date, weight: e.weight })),
+    journeyStart,
+    journeyEnd,
+    weightGoalLbsPerWeek: journey.shokuTargets?.weightGoalLbsPerWeek ?? null,
   }
 
   return json(result)

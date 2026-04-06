@@ -322,6 +322,54 @@
     }
   })
 
+  // ── Weight chart derived data ──
+  const weightChart = $derived.by(() => {
+    const w = overviewData?.weight
+    if (!w || !w.entries.length) return null
+
+    const entries = w.entries as Array<{ date: string; weight: number }>
+    const goalRate = w.weightGoalLbsPerWeek as number | null
+    const jStart = new Date(w.journeyStart + "T00:00:00")
+    const jEnd = new Date(w.journeyEnd + "T00:00:00")
+    const today = new Date(new Date().toISOString().split("T")[0] + "T00:00:00")
+
+    // X-axis ends 1 month from today (capped at journey end)
+    const oneMonthOut = new Date(today)
+    oneMonthOut.setMonth(oneMonthOut.getMonth() + 1)
+    const chartEnd = oneMonthOut < jEnd ? oneMonthOut : jEnd
+
+    const totalMs = chartEnd.getTime() - jStart.getTime()
+    if (totalMs <= 0) return null
+
+    const lastEntry = entries[entries.length - 1]
+    const firstEntry = entries[0]
+
+    // Goal weight projected to chart end
+    const weeksToChartEnd = (chartEnd.getTime() - new Date(firstEntry.date + "T00:00:00").getTime()) / (7 * 86400000)
+    const goalWeightAtEnd = goalRate ? firstEntry.weight + goalRate * weeksToChartEnd : null
+
+    // Y-axis from actual entries, extended to include projection
+    const actualWeights = entries.map((e) => e.weight)
+    const allWeights = [...actualWeights, ...(goalWeightAtEnd != null ? [goalWeightAtEnd] : [])]
+    const minW = Math.min(...allWeights)
+    const maxW = Math.max(...allWeights)
+    const padding = Math.max((maxW - minW) * 0.15, 1)
+
+    return {
+      entries,
+      goalRate,
+      goalWeightAtEnd,
+      jStart,
+      chartEnd,
+      totalMs,
+      lastEntry,
+      yMin: minW - padding,
+      yMax: maxW + padding,
+      journeyStart: w.journeyStart as string,
+      chartEndLabel: `${String(chartEnd.getMonth() + 1).padStart(2, "0")}-${String(chartEnd.getDate()).padStart(2, "0")}`,
+    }
+  })
+
   // ── Journal state ──
   let journalDate = $state(new Date().toISOString().split("T")[0])
   let journalEntry = $state<any>(null)
@@ -988,6 +1036,88 @@
           </Card>
         {/if}
       </div>
+
+      <!-- Weight Chart Widget (full width, below grid) -->
+      {#if weightChart}
+        {@const wc = weightChart}
+        {@const cW = 600}
+        {@const cH = 200}
+        {@const cPad = { top: 20, right: 20, bottom: 30, left: 45 }}
+        {@const plotW = cW - cPad.left - cPad.right}
+        {@const plotH = cH - cPad.top - cPad.bottom}
+        {@const xForDate = (d: Date) => cPad.left + (plotW * (d.getTime() - wc.jStart.getTime())) / wc.totalMs}
+        {@const yForWeight = (w: number) => cPad.top + plotH - (plotH * (w - wc.yMin)) / (wc.yMax - wc.yMin)}
+        {@const todayDate = new Date(new Date().toISOString().split("T")[0] + "T00:00:00")}
+
+        <div class="weight-chart-wrapper">
+          <Card>
+            <div class="widget">
+              <div class="widget-header">
+                <h3 class="widget-title">
+                  <svg class="widget-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M3 3v18h18"/><polyline points="7 14 11 10 14 13 20 7"/>
+                  </svg>
+                  Weight
+                </h3>
+                <span class="stat-values">{wc.lastEntry.weight} lbs</span>
+              </div>
+
+              <svg class="weight-chart" viewBox="0 0 {cW} {cH}" preserveAspectRatio="xMidYMid meet">
+                <!-- Y-axis gridlines and labels -->
+                {#each Array(5) as _, i}
+                  {@const yVal = wc.yMin + ((wc.yMax - wc.yMin) * (4 - i)) / 4}
+                  {@const y = cPad.top + (plotH * i) / 4}
+                  <line x1={cPad.left} y1={y} x2={cW - cPad.right} y2={y} class="chart-grid" />
+                  <text x={cPad.left - 6} y={y + 4} class="chart-label" text-anchor="end">{Math.round(yVal * 10) / 10}</text>
+                {/each}
+
+                <!-- X-axis labels -->
+                <text x={xForDate(wc.jStart)} y={cH - 4} class="chart-label" text-anchor="start">
+                  {wc.journeyStart.slice(5)}
+                </text>
+                {#if todayDate.getTime() > wc.jStart.getTime() && todayDate.getTime() < wc.chartEnd.getTime()}
+                  <line x1={xForDate(todayDate)} y1={cPad.top} x2={xForDate(todayDate)} y2={cPad.top + plotH} class="chart-today" />
+                  <text x={xForDate(todayDate)} y={cH - 4} class="chart-label" text-anchor="middle">Today</text>
+                {/if}
+                <text x={xForDate(wc.chartEnd)} y={cH - 4} class="chart-label" text-anchor="end">
+                  {wc.chartEndLabel}
+                </text>
+
+                <!-- Actual weight line -->
+                {#if wc.entries.length >= 2}
+                  <polyline
+                    fill="none"
+                    class="chart-line-actual"
+                    points={wc.entries.map((e: {date: string, weight: number}) => {
+                      const x = xForDate(new Date(e.date + "T00:00:00"))
+                      const y = yForWeight(e.weight)
+                      return `${x},${y}`
+                    }).join(" ")}
+                  />
+                {/if}
+
+                <!-- Actual weight dots -->
+                {#each wc.entries as e}
+                  {@const x = xForDate(new Date(e.date + "T00:00:00"))}
+                  {@const y = yForWeight(e.weight)}
+                  <circle cx={x} cy={y} r="3" class="chart-dot" />
+                {/each}
+
+                <!-- Projected line from last entry to goal -->
+                {#if wc.goalWeightAtEnd != null}
+                  {@const x1 = xForDate(new Date(wc.lastEntry.date + "T00:00:00"))}
+                  {@const y1 = yForWeight(wc.lastEntry.weight)}
+                  {@const x2 = xForDate(wc.chartEnd)}
+                  {@const y2 = yForWeight(wc.goalWeightAtEnd)}
+                  <line {x1} {y1} {x2} {y2} class="chart-line-projected" />
+                  <circle cx={x2} cy={y2} r="4" class="chart-dot-goal" />
+                  <text x={x2 - 6} y={y2 - 8} class="chart-label-goal" text-anchor="end">{Math.round(wc.goalWeightAtEnd * 10) / 10} lbs</text>
+                {/if}
+              </svg>
+            </div>
+          </Card>
+        </div>
+      {/if}
     {/if}
 
   <!-- ════════════ HISTORY TAB ════════════ -->
@@ -1826,6 +1956,63 @@
 
   .btn-danger:hover {
     opacity: 0.9;
+  }
+
+  /* ── Weight chart ── */
+  .weight-chart-wrapper {
+    margin-top: var(--space-4);
+  }
+
+  .weight-chart {
+    width: 100%;
+    height: auto;
+  }
+
+  .chart-grid {
+    stroke: var(--border);
+    stroke-width: 0.5;
+  }
+
+  .chart-label {
+    font-family: var(--font-body);
+    font-size: 7px;
+    fill: var(--ink-faint);
+  }
+
+  .chart-today {
+    stroke: var(--ink-faint);
+    stroke-width: 0.5;
+    stroke-dasharray: 4 3;
+  }
+
+  .chart-line-actual {
+    stroke: var(--ink);
+    stroke-width: 1.5;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+
+  .chart-dot {
+    fill: var(--ink);
+  }
+
+  .chart-line-projected {
+    stroke: var(--ink-faint);
+    stroke-width: 1.5;
+    stroke-dasharray: 6 4;
+  }
+
+  .chart-dot-goal {
+    fill: none;
+    stroke: var(--ink-faint);
+    stroke-width: 1.5;
+  }
+
+  .chart-label-goal {
+    font-family: var(--font-body);
+    font-size: 7px;
+    fill: var(--ink-faint);
+    font-weight: 500;
   }
 
   /* ── Journal ── */
