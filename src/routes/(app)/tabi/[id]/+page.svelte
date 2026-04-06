@@ -280,6 +280,17 @@
     goto("/tabi")
   }
 
+  let confirmingArchive = $state(false)
+
+  async function unarchiveJourney() {
+    await fetch(`/api/journeys/${journey.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "active" }),
+    })
+    await invalidateAll()
+  }
+
   let confirmingDelete = $state(false)
 
   async function deleteJourney() {
@@ -475,13 +486,13 @@
 {#if isEnded && !isArchived}
   <div class="ended-banner">
     <span>This journey ended on {formatDate(journey.endDate)}.</span>
-    <button class="btn-archive" onclick={archiveJourney}>Archive</button>
   </div>
 {/if}
 
 {#if isArchived}
   <div class="ended-banner">
     <span>This journey has been archived.</span>
+    <button class="btn-archive" onclick={unarchiveJourney}>Unarchive</button>
   </div>
 {/if}
 
@@ -727,6 +738,25 @@
         {saving ? "Saving..." : "Save settings"}
       </Button>
       <button class="btn-text" onclick={() => (showSettings = false)}>Close settings</button>
+    </div>
+
+    <!-- Archive / Unarchive journey -->
+    <div class="danger-zone">
+      {#if isArchived}
+        <button class="btn-text" onclick={unarchiveJourney}>Unarchive this journey</button>
+      {:else if confirmingArchive}
+        <Card>
+          <div class="delete-confirm">
+            <p class="delete-message">Archive this journey? It will be hidden from your journey list but can be restored later.</p>
+            <div class="delete-actions">
+              <button class="btn-danger" onclick={archiveJourney}>Yes, archive</button>
+              <button class="btn-text" onclick={() => (confirmingArchive = false)}>Cancel</button>
+            </div>
+          </div>
+        </Card>
+      {:else}
+        <button class="btn-text btn-danger-text" onclick={() => (confirmingArchive = true)}>Archive this journey</button>
+      {/if}
     </div>
 
     <!-- Delete journey -->

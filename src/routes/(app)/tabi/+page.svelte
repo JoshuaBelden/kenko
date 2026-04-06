@@ -100,9 +100,16 @@
   <section class="section">
     <div class="section-header">
       <h3>Journeys</h3>
-      {#if !creating}
-        <Button onclick={() => (creating = true)}>New journey</Button>
-      {/if}
+      <div class="section-header-actions">
+        {#if archivedJourneys.length > 0}
+          <button class="archived-toggle" onclick={() => (showArchived = !showArchived)}>
+            {showArchived ? "Hide" : "Show"} archived
+          </button>
+        {/if}
+        {#if !creating}
+          <Button onclick={() => (creating = true)}>New journey</Button>
+        {/if}
+      </div>
     </div>
 
     {#if creating}
@@ -164,7 +171,6 @@
                       {formatDateRange(journey.startDate, journey.endDate)}
                     </p>
                   </div>
-                  <span class="status-badge status-active">Active</span>
                 </div>
                 {#if journey.description}
                   <p class="journey-description">{journey.description}</p>
@@ -202,33 +208,29 @@
       </div>
     {/if}
 
-    <!-- Archived journeys -->
-    {#if archivedJourneys.length > 0}
-      <div class="subsection archived-section">
-        <button class="archived-toggle" onclick={() => (showArchived = !showArchived)}>
-          {showArchived ? "Hide" : "Show"} archived ({archivedJourneys.length})
-        </button>
-        {#if showArchived}
-          <div class="journey-list">
-            {#each archivedJourneys as journey (journey.id)}
-              <a href="/tabi/{journey.id}" class="journey-card-link">
-                <Card>
-                  <div class="journey-card archived">
-                    <div class="journey-top">
-                      <div>
-                        <h4 class="journey-name">{journey.name}</h4>
-                        <p class="journey-dates">
-                          {formatDateRange(journey.startDate, journey.endDate)}
-                        </p>
-                      </div>
-                      <span class="status-badge status-archived">Archived</span>
+    <!-- Archived journeys (shown when toggled) -->
+    {#if showArchived && archivedJourneys.length > 0}
+      <div class="subsection">
+        <h4 class="subsection-title">Archived</h4>
+        <div class="journey-list">
+          {#each archivedJourneys as journey (journey.id)}
+            <a href="/tabi/{journey.id}" class="journey-card-link">
+              <Card>
+                <div class="journey-card archived">
+                  <div class="journey-top">
+                    <div>
+                      <h4 class="journey-name">{journey.name}</h4>
+                      <p class="journey-dates">
+                        {formatDateRange(journey.startDate, journey.endDate)}
+                      </p>
                     </div>
+                    <span class="status-badge status-archived">Archived</span>
                   </div>
-                </Card>
-              </a>
-            {/each}
-          </div>
-        {/if}
+                </div>
+              </Card>
+            </a>
+          {/each}
+        </div>
       </div>
     {/if}
   </section>
@@ -367,11 +369,6 @@
     flex-shrink: 0;
   }
 
-  .status-active {
-    color: var(--accent-green);
-    background: var(--accent-green-soft);
-  }
-
   .status-ended {
     color: var(--ink-light);
     background: var(--paper-warm);
@@ -383,12 +380,13 @@
     opacity: 0.7;
   }
 
-  /* ── Archived toggle ── */
-  .archived-section {
-    padding-top: var(--space-4);
-    border-top: 0.5px solid var(--border);
+  .section-header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
   }
 
+  /* ── Archived toggle ── */
   .archived-toggle {
     background: none;
     border: none;
