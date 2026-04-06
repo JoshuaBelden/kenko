@@ -255,15 +255,26 @@
     await invalidateAll()
   }
 
-  async function handleDelete(id: string) {
-    const res = await fetch(`/api/shoku/foods/${id}`, { method: "DELETE" })
+  let forceDeleteId = $state<string | null>(null)
+  let forceDeleteMsg = $state("")
+
+  async function handleDelete(id: string, force = false) {
+    const url = force ? `/api/shoku/foods/${id}?force=true` : `/api/shoku/foods/${id}`
+    const res = await fetch(url, { method: "DELETE" })
     if (res.ok) {
       deletingId = null
+      forceDeleteId = null
       await invalidateAll()
     } else {
       const err = await res.json()
-      formError = err.error ?? "Failed to delete"
-      deletingId = null
+      if (res.status === 409) {
+        deletingId = null
+        forceDeleteId = id
+        forceDeleteMsg = err.error ?? "This food has logs. Delete anyway?"
+      } else {
+        formError = err.error ?? "Failed to delete"
+        deletingId = null
+      }
     }
   }
 </script>
@@ -424,7 +435,13 @@
                   <button class="btn-diary" onclick={() => addToDiary(food)}>Add to diary</button>
                 {/if}
                 <button class="btn-text" onclick={() => startEdit(food)}>Edit</button>
-                {#if deletingId === food.id}
+                {#if forceDeleteId === food.id}
+                  <div class="confirm-delete-inline">
+                    <span class="confirm-text">{forceDeleteMsg}</span>
+                    <button class="confirm-btn yes" onclick={() => handleDelete(food.id, true)}>Yes</button>
+                    <button class="confirm-btn no" onclick={() => (forceDeleteId = null)}>No</button>
+                  </div>
+                {:else if deletingId === food.id}
                   <div class="confirm-delete-inline">
                     <span class="confirm-text">Delete?</span>
                     <button class="confirm-btn yes" onclick={() => handleDelete(food.id)}>Yes</button>

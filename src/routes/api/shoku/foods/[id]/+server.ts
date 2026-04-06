@@ -52,11 +52,12 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
   return json(serializeFoodItem(result))
 }
 
-export const DELETE: RequestHandler = async ({ locals, params }) => {
+export const DELETE: RequestHandler = async ({ locals, params, url }) => {
   if (!locals.userId) return json({ error: "Unauthorized" }, { status: 401 })
 
   const foodItemId = new ObjectId(params.id)
   const userId = new ObjectId(locals.userId)
+  const force = url.searchParams.get("force") === "true"
 
   const foodItems = await getFoodItemsCollection()
   const item = await foodItems.findOne({ _id: foodItemId, userId })
@@ -65,14 +66,18 @@ export const DELETE: RequestHandler = async ({ locals, params }) => {
   const foodItemLogs = await getFoodItemLogsCollection()
   const refCount = await foodItemLogs.countDocuments({ foodItemId, userId })
 
-  if (refCount > 0) {
+  if (refCount > 0 && !force) {
     return json(
       {
-        error: `This food item is referenced by ${refCount} food ${refCount === 1 ? "log" : "logs"}. Delete those first, or proceed with force=true.`,
+        error: `This food is referenced by ${refCount} ${refCount === 1 ? "log" : "logs"}. Delete anyway?`,
         refCount,
       },
       { status: 409 },
     )
+  }
+
+  if (refCount > 0) {
+    await foodItemLogs.deleteMany({ foodItemId, userId })
   }
 
   await foodItems.deleteOne({ _id: foodItemId })
