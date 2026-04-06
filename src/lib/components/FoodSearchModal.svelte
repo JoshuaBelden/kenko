@@ -6,10 +6,9 @@
     category: string
     onclose: () => void
     onselect: (foodId: string, quantity: number, unit: string, category: string) => void
-    oncreate: () => void
   }
 
-  let { open, category, onclose, onselect, oncreate }: Props = $props()
+  let { open, category, onclose, onselect }: Props = $props()
 
   let mode = $state<"search" | "scanner" | "create" | "confirm">("search")
   let query = $state("")
@@ -168,7 +167,7 @@
       vitaminB12: parseFloat(fVitaminB12) || null,
       folate: parseFloat(fFolate) || null,
       potassium: parseFloat(fPotassium) || null,
-      source: "openfoodfacts",
+      source: scannedBarcode ? "openfoodfacts" : "manual",
     }
 
     try {
@@ -437,8 +436,25 @@
           <button
             class="result-item create-new"
             onclick={() => {
-              reset()
-              oncreate()
+              scannedBarcode = null
+              fName = query
+              fBrand = ""
+              fBaseUnit = "g"
+              fServingSize = ""
+              fCalories = ""
+              fProtein = ""
+              fNetCarbs = ""
+              fFat = ""
+              fFiber = ""
+              fIron = ""
+              fCalcium = ""
+              fVitaminA = ""
+              fVitaminC = ""
+              fVitaminB12 = ""
+              fFolate = ""
+              fPotassium = ""
+              createError = ""
+              mode = "create"
             }}
           >
             + Create new food item

@@ -68,15 +68,12 @@
     waterSaving = false
   }
 
-  // Expanded categories
-  let expandedEmpty = $state<Set<string>>(new Set())
-
   const CATEGORIES = [
+    { key: "uncategorized", label: "Uncategorized" },
     { key: "breakfast", label: "Breakfast" },
     { key: "lunch", label: "Lunch" },
     { key: "dinner", label: "Dinner" },
     { key: "snack", label: "Snack" },
-    { key: "uncategorized", label: "Uncategorized" },
   ]
 
   function navigateDate(dateStr: string) {
@@ -108,11 +105,6 @@
       body: JSON.stringify({ foodItemId: foodId, quantity, unit, category, date: currentDate }),
     })
     if (res.ok) await invalidateAll()
-  }
-
-  function handleCreateFood() {
-    searchOpen = false
-    goto("/shoku/library?create=1")
   }
 
   async function handleQuickAdd() {
@@ -176,12 +168,6 @@
     }
   }
 
-  function toggleEmptyCategory(key: string) {
-    const next = new Set(expandedEmpty)
-    if (next.has(key)) next.delete(key)
-    else next.add(key)
-    expandedEmpty = next
-  }
 
 </script>
 
@@ -251,32 +237,10 @@
   {@const entries = grouped[cat.key] ?? []}
   <section class="section">
     <div class="category-header">
-      {#if entries.length === 0}
-        <button
-          class="btn-chevron"
-          onclick={() => toggleEmptyCategory(cat.key)}
-          aria-label="{expandedEmpty.has(cat.key) ? 'Collapse' : 'Expand'} {cat.label}"
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            class:chevron-open={expandedEmpty.has(cat.key)}
-          >
-            <polyline points="9 18 15 12 9 6" />
-          </svg>
-        </button>
-      {/if}
       <h3>{cat.label}</h3>
       <button class="btn-add" onclick={() => openSearch(cat.key)}>+</button>
     </div>
 
-    {#if entries.length > 0 || expandedEmpty.has(cat.key)}
       <div class="entries-stack">
         {#each entries as entry (entry.id)}
           <Card>
@@ -329,7 +293,6 @@
           <p class="empty-cat">No entries yet</p>
         {/if}
       </div>
-    {/if}
   </section>
 {/each}
 
@@ -365,7 +328,6 @@
   category={searchCategory}
   onclose={() => (searchOpen = false)}
   onselect={handleFoodSelect}
-  oncreate={handleCreateFood}
 />
 
 <style>
@@ -472,29 +434,6 @@
   .btn-add:hover {
     border-color: var(--accent);
     color: var(--accent);
-  }
-
-  .btn-chevron {
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0;
-    display: flex;
-    align-items: center;
-    color: var(--ink-faint);
-    transition: color var(--transition-fast);
-  }
-
-  .btn-chevron:hover {
-    color: var(--ink-light);
-  }
-
-  .btn-chevron svg {
-    transition: transform var(--transition-fast);
-  }
-
-  :global(.chevron-open) {
-    transform: rotate(90deg);
   }
 
   .entries-stack {
