@@ -97,6 +97,9 @@
 <div class="stats-row">
   <StatNumber value={metToday} label="met today" size="md" />
   <StatNumber value={totalActive} label="commitments" size="md" />
+  <div class="stats-row-action">
+    <Button variant="primary" href="/kata/new">New Commitment</Button>
+  </div>
 </div>
 
 {#if commitments.length === 0}
@@ -112,10 +115,6 @@
       {@render commitmentCard(c)}
     {/each}
   </section>
-
-  <div class="nav-links">
-    <Button variant="primary" href="/kata/new">New Commitment</Button>
-  </div>
 {/if}
 
 {#snippet commitmentCard(c: any)}
@@ -498,9 +497,10 @@
     gap: var(--space-4);
   }
 
-  .nav-links {
-    text-align: center;
-    margin-top: var(--space-4);
+  .stats-row-action {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
   }
 
   /* Taper card styles */

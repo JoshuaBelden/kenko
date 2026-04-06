@@ -161,6 +161,9 @@
 
   .section {
     margin-bottom: var(--space-6);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
   }
 
   .section-title {

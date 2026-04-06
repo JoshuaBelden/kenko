@@ -419,6 +419,7 @@
   </Card>
 {/if}
 
+<div class="plan-list">
 {#each plans as plan (plan.id)}
   {#if editingPlanId !== plan.id}
     <Card>
@@ -455,6 +456,7 @@
     </Card>
   {/if}
 {/each}
+</div>
 
 {#if plans.length === 0 && !creating}
   <div class="empty-state">
@@ -470,6 +472,12 @@
 />
 
 <style>
+  .plan-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
   .plans-controls {
     margin-bottom: var(--space-6);
   }

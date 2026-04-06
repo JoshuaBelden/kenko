@@ -299,6 +299,7 @@
   {/if}
 
   <!-- Exercise List -->
+  <div class="exercise-list">
   {#each exerciseOrder() as exerciseId, exIdx}
     {@const target = getTargetForExercise(exerciseId)}
     {@const exSets = setsForExercise(exerciseId)}
@@ -384,6 +385,7 @@
       </div>
     </Card>
   {/each}
+  </div>
 
   <!-- Add Exercise from Library -->
   {#if !isCompleted}
@@ -437,6 +439,12 @@
 {/if}
 
 <style>
+  .exercise-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
   .completed-banner {
     font-family: var(--font-body);
     font-size: var(--text-sm);

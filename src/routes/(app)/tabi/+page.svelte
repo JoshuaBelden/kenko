@@ -99,15 +99,14 @@
 {:else}
   <section class="section">
     <div class="section-header">
-      <h3>Journeys</h3>
-      <div class="section-header-actions">
+      <div class="section-header-actions" style="margin-left: auto;">
         {#if archivedJourneys.length > 0}
           <button class="archived-toggle" onclick={() => (showArchived = !showArchived)}>
             {showArchived ? "Hide" : "Show"} archived
           </button>
         {/if}
         {#if !creating}
-          <Button onclick={() => (creating = true)}>New journey</Button>
+          <Button onclick={() => (creating = true)}>New Journey</Button>
         {/if}
       </div>
     </div>
@@ -246,10 +245,6 @@
     justify-content: space-between;
     align-items: center;
     margin-bottom: var(--space-4);
-  }
-
-  .section-header h3 {
-    margin: 0;
   }
 
   .subsection {
