@@ -18,14 +18,19 @@
   }
 
   const user = $derived(page.data.user)
+  const activeJourneys = $derived((page.data as any).activeJourneys ?? [])
 
-  const navItems = [
-    { href: "/tabi", label: "Tabi", icon: "tabi" },
+  const tabiHref = $derived(
+    activeJourneys.length === 1 ? `/tabi/${activeJourneys[0].id}` : "/tabi",
+  )
+
+  const navItems = $derived([
+    { href: tabiHref, label: "Tabi", icon: "tabi" },
     { href: "/shoku", label: "Shoku", icon: "shoku" },
     { href: "/danjiki", label: "Danjiki", icon: "danjiki" },
     { href: "/dojo", label: "Dojo", icon: "dojo" },
     { href: "/kata", label: "Kata", icon: "kata" },
-  ]
+  ])
 
   function isActive(href: string): boolean {
     return page.url.pathname.startsWith(href)
@@ -50,7 +55,7 @@
 
   <aside class="sidebar" class:open={mobileNavOpen}>
     <div class="sidebar-header">
-      <a href="/tabi" class="logo" onclick={closeMobileNav}>
+      <a href={tabiHref} class="logo" onclick={closeMobileNav}>
         <span class="logo-kanji">健</span>
         <span class="logo-text">Kenkō</span>
       </a>
