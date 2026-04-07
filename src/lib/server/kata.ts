@@ -132,21 +132,22 @@ export async function calculatePeriodProgress(
   period: Period,
   targetValue: number,
   journeyStartDate?: Date | null,
+  referenceDate?: Date,
 ): Promise<PeriodProgress> {
   const logs = await getCommitmentLogsCollection()
-  const now = new Date()
+  const ref = referenceDate ?? new Date()
 
   const filter: Record<string, unknown> = { commitmentId, userId }
 
   switch (period) {
     case "daily":
-      filter.date = { $gte: startOfDay(now), $lte: endOfDay(now) }
+      filter.date = { $gte: startOfDay(ref), $lte: endOfDay(ref) }
       break
     case "weekly":
-      filter.date = { $gte: startOfWeek(now), $lte: endOfDay(now) }
+      filter.date = { $gte: startOfWeek(ref), $lte: endOfDay(ref) }
       break
     case "monthly":
-      filter.date = { $gte: startOfMonth(now), $lte: endOfDay(now) }
+      filter.date = { $gte: startOfMonth(ref), $lte: endOfDay(ref) }
       break
     case "journey_total":
       if (journeyStartDate) {
@@ -292,13 +293,13 @@ export async function getPeriodHistory(
 // Today's log helpers
 // ========================================
 
-export async function getTodayLog(commitmentId: ObjectId, userId: ObjectId) {
+export async function getTodayLog(commitmentId: ObjectId, userId: ObjectId, referenceDate?: Date) {
   const logs = await getCommitmentLogsCollection()
-  const now = new Date()
+  const ref = referenceDate ?? new Date()
   return logs.findOne({
     commitmentId,
     userId,
-    date: { $gte: startOfDay(now), $lte: endOfDay(now) },
+    date: { $gte: startOfDay(ref), $lte: endOfDay(ref) },
   })
 }
 
@@ -329,8 +330,9 @@ export function calculateTaperPhaseInfo(
   startDate: Date,
   taperPhases: TaperPhase[],
   commitmentStatus: string,
+  referenceDate?: Date,
 ): { weeksElapsed: number; activePhase: TaperPhase | null; status: string } {
-  const now = startOfDay(new Date())
+  const now = startOfDay(referenceDate ?? new Date())
   const start = startOfDay(startDate)
   const diffMs = now.getTime() - start.getTime()
   const diffDays = diffMs / (1000 * 60 * 60 * 24)
@@ -359,18 +361,20 @@ export async function getTaperProgress(
   startDate: Date,
   taperPhases: TaperPhase[],
   commitmentStatus: string,
+  referenceDate?: Date,
 ): Promise<TaperProgress> {
+  const ref = referenceDate ?? new Date()
   const sortedPhases = [...taperPhases].sort((a, b) => a.weekNumber - b.weekNumber)
   const totalWeeks = sortedPhases.length > 0 ? sortedPhases[sortedPhases.length - 1].weekNumber : 0
 
-  const { weeksElapsed, activePhase, status } = calculateTaperPhaseInfo(startDate, sortedPhases, commitmentStatus)
+  const { weeksElapsed, activePhase, status } = calculateTaperPhaseInfo(startDate, sortedPhases, commitmentStatus, ref)
 
-  // Get today's log
-  const todayLog = await getTodayLog(commitmentId, userId)
+  // Get log for reference date
+  const todayLog = await getTodayLog(commitmentId, userId, ref)
   const todayValue = todayLog?.value ?? 0
 
   // Days until start (if scheduled)
-  const now = startOfDay(new Date())
+  const now = startOfDay(ref)
   const start = startOfDay(startDate)
   const daysUntilStart = status === "scheduled"
     ? Math.ceil((start.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))

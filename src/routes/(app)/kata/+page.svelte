@@ -1,11 +1,34 @@
 <script lang="ts">
-  import { invalidateAll } from "$app/navigation"
+  import { goto, invalidateAll } from "$app/navigation"
   import { page } from "$app/state"
   import { Button, Card, PageHeader, StatNumber } from "$lib/components"
   import { icons } from "$lib/icons"
 
   const commitments = $derived(page.data.commitments ?? [])
   const inactiveCommitments = $derived(page.data.inactiveCommitments ?? [])
+
+  // Date navigation
+  let currentDate = $state(page.data.date ?? new Date().toISOString().split("T")[0])
+
+  $effect(() => {
+    currentDate = page.data.date ?? new Date().toISOString().split("T")[0]
+  })
+
+  function navigateDate(dateStr: string) {
+    goto(`/kata?date=${dateStr}`, { invalidateAll: true })
+  }
+
+  function prevDay() {
+    const d = new Date(currentDate + "T00:00:00")
+    d.setDate(d.getDate() - 1)
+    navigateDate(d.toISOString().split("T")[0])
+  }
+
+  function nextDay() {
+    const d = new Date(currentDate + "T00:00:00")
+    d.setDate(d.getDate() + 1)
+    navigateDate(d.toISOString().split("T")[0])
+  }
 
   // Inline logging state
   let loggingId = $state<string | null>(null)
@@ -54,7 +77,7 @@
     await fetch(`/api/kata/commitments/${c.id}/logs`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ value: next }),
+      body: JSON.stringify({ value: next, date: currentDate }),
     })
     await invalidateAll()
   }
@@ -71,7 +94,7 @@
     await fetch(`/api/kata/commitments/${commitmentId}/logs`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ value: val }),
+      body: JSON.stringify({ value: val, date: currentDate }),
     })
     loggingId = null
     loggingValue = ""
@@ -103,6 +126,17 @@
 </script>
 
 <PageHeader icon={icons.kata} title="Kata" subtitle="Shape your habits" />
+
+<section class="date-nav">
+  <button class="date-btn" onclick={prevDay}>&larr;</button>
+  <input
+    type="date"
+    class="date-input"
+    value={currentDate}
+    onchange={e => navigateDate((e.target as HTMLInputElement).value)}
+  />
+  <button class="date-btn" onclick={nextDay}>&rarr;</button>
+</section>
 
 <div class="stats-row">
   <StatNumber value={metToday} label="met today" size="md" />
@@ -311,6 +345,39 @@
 {/snippet}
 
 <style>
+  .date-nav {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin-bottom: var(--space-6);
+  }
+
+  .date-btn {
+    background: none;
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3);
+    cursor: pointer;
+    font-size: var(--text-base);
+    color: var(--ink);
+    transition: background var(--transition-fast);
+  }
+
+  .date-btn:hover {
+    background: var(--paper-warm);
+  }
+
+  .date-input {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink);
+    background: transparent;
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3);
+    outline: none;
+  }
+
   .stats-row {
     display: flex;
     gap: var(--space-6);

@@ -5,13 +5,18 @@ import {
   calculatePeriodProgress,
   getTaperProgress,
 } from "$lib/server/kata"
+import { todayStr, startOfDayTz, endOfDayTz } from "$lib/server/dates"
 import { ObjectId } from "mongodb"
 import type { PageServerLoad } from "./$types"
 
-export const load: PageServerLoad = async ({ locals }) => {
-  if (!locals.userId) return { commitments: [] }
+export const load: PageServerLoad = async ({ locals, url }) => {
+  if (!locals.userId) return { commitments: [], date: "" }
 
   const userId = new ObjectId(locals.userId)
+  const tz = locals.userTimezone ?? "America/Los_Angeles"
+  const dateStr = url.searchParams.get("date") ?? todayStr(tz)
+  const dayStart = startOfDayTz(dateStr, tz)
+  const dayEnd = endOfDayTz(dateStr, tz)
 
   const commitmentsCol = await getCommitmentsCollection()
   const [commitments, inactiveCommitments] = await Promise.all([
@@ -19,28 +24,23 @@ export const load: PageServerLoad = async ({ locals }) => {
     commitmentsCol.find({ userId, isActive: false }).sort({ updatedAt: -1 }).toArray(),
   ])
 
-  // Get today's logs and current progress for each commitment
+  // Get logs for the selected date and current progress for each commitment
   const logsCol = await getCommitmentLogsCollection()
-  const now = new Date()
-  const todayStart = new Date(now)
-  todayStart.setUTCHours(0, 0, 0, 0)
-  const todayEnd = new Date(now)
-  todayEnd.setUTCHours(23, 59, 59, 999)
 
   const commitmentIds = commitments.map((c) => c._id)
-  const todayLogs = await logsCol
+  const dayLogs = await logsCol
     .find({
       commitmentId: { $in: commitmentIds },
       userId,
-      date: { $gte: todayStart, $lte: todayEnd },
+      date: { $gte: dayStart, $lte: dayEnd },
     })
     .toArray()
 
-  const todayLogMap = new Map(todayLogs.map((log) => [log.commitmentId.toString(), log]))
+  const dayLogMap = new Map(dayLogs.map((log) => [log.commitmentId.toString(), log]))
 
   const enriched = await Promise.all(
     commitments.map(async (c) => {
-      const todayLog = todayLogMap.get(c._id.toString())
+      const todayLog = dayLogMap.get(c._id.toString())
 
       // Taper commitments get taper progress instead of period progress
       if (c.type === "taper") {
@@ -50,6 +50,7 @@ export const load: PageServerLoad = async ({ locals }) => {
           c.startDate,
           c.taperPhases ?? [],
           c.status ?? "active",
+          dayStart,
         )
         return {
           ...serializeCommitment(c),
@@ -59,7 +60,7 @@ export const load: PageServerLoad = async ({ locals }) => {
         }
       }
 
-      const progress = await calculatePeriodProgress(c._id, userId, c.period, c.targetValue)
+      const progress = await calculatePeriodProgress(c._id, userId, c.period, c.targetValue, null, dayStart)
 
       return {
         ...serializeCommitment(c),
@@ -73,5 +74,6 @@ export const load: PageServerLoad = async ({ locals }) => {
   return {
     commitments: enriched,
     inactiveCommitments: inactiveCommitments.map(serializeCommitment),
+    date: dateStr,
   }
 }

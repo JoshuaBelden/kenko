@@ -3,6 +3,7 @@ import {
   getCommitmentLogsCollection,
   serializeCommitmentLog,
 } from "$lib/server/kata"
+import { startOfDayTz, endOfDayTz, todayStr } from "$lib/server/dates"
 import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
 import type { RequestHandler } from "./$types"
@@ -44,12 +45,13 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
     return json({ error: "value must be a non-negative number" }, { status: 400 })
   }
 
+  const tz = locals.userTimezone ?? "America/Los_Angeles"
+  const dateStr = typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date)
+    ? body.date
+    : todayStr(tz)
+  const dayStart = startOfDayTz(dateStr, tz)
+  const dayEnd = endOfDayTz(dateStr, tz)
   const now = new Date()
-  const todayStart = new Date(now)
-  todayStart.setUTCHours(0, 0, 0, 0)
-
-  const todayEnd = new Date(now)
-  todayEnd.setUTCHours(23, 59, 59, 999)
 
   const logs = await getCommitmentLogsCollection()
 
@@ -58,7 +60,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
     {
       commitmentId,
       userId,
-      date: { $gte: todayStart, $lte: todayEnd },
+      date: { $gte: dayStart, $lte: dayEnd },
     },
     {
       $set: {
@@ -68,7 +70,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
       $setOnInsert: {
         commitmentId,
         userId,
-        date: todayStart,
+        date: dayStart,
         createdAt: now,
       },
     },
