@@ -18,9 +18,53 @@
     journey?.shokuTargets || journey?.danjikiTargets || journey?.dojoTargets || journey?.kataTargets,
   )
 
-  type Tab = "overview" | "history" | "journal"
+  type Tab = "overview" | "journal" | "progress"
   let activeTab = $state<Tab>("overview")
   let showSettings = $state(false)
+
+  // ── Progress tab: calendar state ──
+  let calendarMonth = $state(new Date())
+  const calendarToday = $derived(localToday(tz))
+
+  const calendarRows = $derived.by(() => {
+    const year = calendarMonth.getFullYear()
+    const month = calendarMonth.getMonth()
+    const startDow = new Date(year, month, 1).getDay()
+    const daysInMonth = new Date(year, month + 1, 0).getDate()
+
+    // Build flat list of day cells (null = blank)
+    type Cell = { day: number; dateStr: string } | null
+    const flat: Cell[] = Array(startDow).fill(null)
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`
+      flat.push({ day: d, dateStr })
+    }
+    // Pad trailing blanks to complete the last week
+    while (flat.length % 7 !== 0) flat.push(null)
+
+    // Chunk into rows of 7 days + 1 summary cell
+    const rows: { days: Cell[]; weekIndex: number }[] = []
+    for (let i = 0; i < flat.length; i += 7) {
+      rows.push({ days: flat.slice(i, i + 7), weekIndex: rows.length })
+    }
+    return rows
+  })
+
+  const calendarMonthLabel = $derived(
+    new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(calendarMonth),
+  )
+
+  function calendarPrevMonth() {
+    const d = new Date(calendarMonth)
+    d.setMonth(d.getMonth() - 1)
+    calendarMonth = d
+  }
+
+  function calendarNextMonth() {
+    const d = new Date(calendarMonth)
+    d.setMonth(d.getMonth() + 1)
+    calendarMonth = d
+  }
 
   // Show settings by default only if no targets and no description configured
   let settingsAutoShown = $state(false)
@@ -323,38 +367,41 @@
   }
 
   $effect(() => {
-    if (journey && hasAnyTargets && activeTab === "overview" && !showSettings) {
+    if (journey && hasAnyTargets && (activeTab === "overview" || activeTab === "progress") && !showSettings) {
       loadOverview()
     }
   })
 
-  // ── Weight chart derived data ──
-  const weightChart = $derived.by(() => {
+  // ── Progress weight chart (scoped to calendar month, projection 1 month out) ──
+  const progressWeightChart = $derived.by(() => {
     const w = overviewData?.weight
     if (!w || !w.entries.length) return null
 
-    const entries = w.entries as Array<{ date: string; weight: number }>
+    const allEntries = w.entries as Array<{ date: string; weight: number }>
     const goalRate = w.weightGoalLbsPerWeek as number | null
-    const jStart = new Date(w.journeyStart)
-    const jEnd = new Date(w.journeyEnd)
-    const today = new Date(localToday(tz) + "T00:00:00")
 
-    // X-axis ends 1 month from today (capped at journey end)
-    const oneMonthOut = new Date(today)
-    oneMonthOut.setMonth(oneMonthOut.getMonth() + 1)
-    const chartEnd = oneMonthOut < jEnd ? oneMonthOut : jEnd
+    // Filter entries to the selected calendar month
+    const year = calendarMonth.getFullYear()
+    const month = calendarMonth.getMonth()
+    const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`
+    const entries = allEntries.filter((e) => e.date.startsWith(monthPrefix))
+    if (!entries.length) return null
 
-    const totalMs = chartEnd.getTime() - jStart.getTime()
+    // X-axis: first of month → 1 month after end of month
+    const monthStart = new Date(year, month, 1)
+    const projectionEnd = new Date(year, month + 2, 0) // last day of next month
+
+    const totalMs = projectionEnd.getTime() - monthStart.getTime()
     if (totalMs <= 0) return null
 
-    const lastEntry = entries[entries.length - 1]
     const firstEntry = entries[0]
+    const lastEntry = entries[entries.length - 1]
 
-    // Goal weight projected to chart end
-    const weeksToChartEnd = (chartEnd.getTime() - new Date(firstEntry.date + "T12:00:00").getTime()) / (7 * 86400000)
-    const goalWeightAtEnd = goalRate ? firstEntry.weight + goalRate * weeksToChartEnd : null
+    // Goal weight projected to projection end
+    const weeksToEnd = (projectionEnd.getTime() - new Date(firstEntry.date + "T12:00:00").getTime()) / (7 * 86400000)
+    const goalWeightAtEnd = goalRate ? firstEntry.weight + goalRate * weeksToEnd : null
 
-    // Y-axis from actual entries, extended to include projection
+    // Y-axis bounds
     const actualWeights = entries.map((e) => e.weight)
     const allWeights = [...actualWeights, ...(goalWeightAtEnd != null ? [goalWeightAtEnd] : [])]
     const minW = Math.min(...allWeights)
@@ -365,14 +412,15 @@
       entries,
       goalRate,
       goalWeightAtEnd,
-      jStart,
-      chartEnd,
+      chartStart: monthStart,
+      chartEnd: projectionEnd,
       totalMs,
       lastEntry,
+      firstEntry,
       yMin: minW - padding,
       yMax: maxW + padding,
-      journeyStart: w.journeyStart as string,
-      chartEndLabel: `${String(chartEnd.getMonth() + 1).padStart(2, "0")}-${String(chartEnd.getDate()).padStart(2, "0")}`,
+      startLabel: `${String(month + 1).padStart(2, "0")}-01`,
+      endLabel: `${String(projectionEnd.getMonth() + 1).padStart(2, "0")}-${String(projectionEnd.getDate()).padStart(2, "0")}`,
     }
   })
 
@@ -855,11 +903,11 @@
     <button class="tab" class:tab-active={activeTab === "overview"} onclick={() => (activeTab = "overview")}>
       Dashboard
     </button>
-    <button class="tab" class:tab-active={activeTab === "history"} onclick={() => (activeTab = "history")}>
-      History
-    </button>
     <button class="tab" class:tab-active={activeTab === "journal"} onclick={() => (activeTab = "journal")}>
       Journal
+    </button>
+    <button class="tab" class:tab-active={activeTab === "progress"} onclick={() => (activeTab = "progress")}>
+      Progress
     </button>
   </nav>
 
@@ -1054,98 +1102,7 @@
         {/if}
       </div>
 
-      <!-- Weight Chart Widget (full width, below grid) -->
-      {#if weightChart}
-        {@const wc = weightChart}
-        {@const cW = 600}
-        {@const cH = 200}
-        {@const cPad = { top: 20, right: 20, bottom: 30, left: 45 }}
-        {@const plotW = cW - cPad.left - cPad.right}
-        {@const plotH = cH - cPad.top - cPad.bottom}
-        {@const xForDate = (d: Date) => cPad.left + (plotW * (d.getTime() - wc.jStart.getTime())) / wc.totalMs}
-        {@const yForWeight = (w: number) => cPad.top + plotH - (plotH * (w - wc.yMin)) / (wc.yMax - wc.yMin)}
-        {@const todayDate = new Date(new Date().toISOString().split("T")[0] + "T00:00:00")}
-
-        <div class="weight-chart-wrapper">
-          <Card>
-            <div class="widget">
-              <div class="widget-header">
-                <h3 class="widget-title">
-                  <svg class="widget-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <path d="M3 3v18h18"/><polyline points="7 14 11 10 14 13 20 7"/>
-                  </svg>
-                  Weight
-                </h3>
-                <span class="stat-values">{wc.lastEntry.weight} lbs</span>
-              </div>
-
-              <svg class="weight-chart" viewBox="0 0 {cW} {cH}" preserveAspectRatio="xMidYMid meet">
-                <!-- Y-axis gridlines and labels -->
-                {#each Array(5) as _, i}
-                  {@const yVal = wc.yMin + ((wc.yMax - wc.yMin) * (4 - i)) / 4}
-                  {@const y = cPad.top + (plotH * i) / 4}
-                  <line x1={cPad.left} y1={y} x2={cW - cPad.right} y2={y} class="chart-grid" />
-                  <text x={cPad.left - 6} y={y + 4} class="chart-label" text-anchor="end">{Math.round(yVal * 10) / 10}</text>
-                {/each}
-
-                <!-- X-axis labels -->
-                <text x={xForDate(wc.jStart)} y={cH - 4} class="chart-label" text-anchor="start">
-                  {wc.journeyStart.slice(5)}
-                </text>
-                {#if todayDate.getTime() > wc.jStart.getTime() && todayDate.getTime() < wc.chartEnd.getTime()}
-                  <line x1={xForDate(todayDate)} y1={cPad.top} x2={xForDate(todayDate)} y2={cPad.top + plotH} class="chart-today" />
-                  <text x={xForDate(todayDate)} y={cH - 4} class="chart-label" text-anchor="middle">Today</text>
-                {/if}
-                <text x={xForDate(wc.chartEnd)} y={cH - 4} class="chart-label" text-anchor="end">
-                  {wc.chartEndLabel}
-                </text>
-
-                <!-- Actual weight line -->
-                {#if wc.entries.length >= 2}
-                  <polyline
-                    fill="none"
-                    class="chart-line-actual"
-                    points={wc.entries.map((e: {date: string, weight: number}) => {
-                      const x = xForDate(new Date(e.date + "T00:00:00"))
-                      const y = yForWeight(e.weight)
-                      return `${x},${y}`
-                    }).join(" ")}
-                  />
-                {/if}
-
-                <!-- Actual weight dots -->
-                {#each wc.entries as e}
-                  {@const x = xForDate(new Date(e.date + "T00:00:00"))}
-                  {@const y = yForWeight(e.weight)}
-                  <circle cx={x} cy={y} r="3" class="chart-dot" />
-                {/each}
-
-                <!-- Projected line from last entry to goal -->
-                {#if wc.goalWeightAtEnd != null}
-                  {@const x1 = xForDate(new Date(wc.lastEntry.date + "T00:00:00"))}
-                  {@const y1 = yForWeight(wc.lastEntry.weight)}
-                  {@const x2 = xForDate(wc.chartEnd)}
-                  {@const y2 = yForWeight(wc.goalWeightAtEnd)}
-                  <line {x1} {y1} {x2} {y2} class="chart-line-projected" />
-                  <circle cx={x2} cy={y2} r="4" class="chart-dot-goal" />
-                  <text x={x2 - 6} y={y2 - 8} class="chart-label-goal" text-anchor="end">{Math.round(wc.goalWeightAtEnd * 10) / 10} lbs</text>
-                {/if}
-              </svg>
-            </div>
-          </Card>
-        </div>
-      {/if}
     {/if}
-
-  <!-- ════════════ HISTORY TAB ════════════ -->
-  {:else if activeTab === "history"}
-    <div class="placeholder-tab">
-      <Card>
-        <div class="empty-content">
-          <p class="empty-message">History view is coming in a future phase.</p>
-        </div>
-      </Card>
-    </div>
 
   <!-- ════════════ JOURNAL TAB ════════════ -->
   {:else if activeTab === "journal"}
@@ -1309,6 +1266,127 @@
           </div>
         {/if}
       {/if}
+    </div>
+
+  <!-- ════════════ PROGRESS TAB ════════════ -->
+  {:else if activeTab === "progress"}
+    <div class="progress-layout">
+      <!-- Left: Calendar (2/3) -->
+      <div class="progress-main">
+        <Card>
+          <div class="calendar-widget">
+            <div class="calendar-header">
+              <button class="date-btn" onclick={calendarPrevMonth}>&larr;</button>
+              <span class="calendar-month-label">{calendarMonthLabel}</span>
+              <button class="date-btn" onclick={calendarNextMonth}>&rarr;</button>
+            </div>
+            <div class="calendar-grid">
+              <div class="calendar-row calendar-row-header">
+                {#each ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as dow}
+                  <div class="calendar-dow">{dow}</div>
+                {/each}
+                <div class="calendar-dow calendar-dow-summary"></div>
+              </div>
+              {#each calendarRows as row}
+                <div class="calendar-row" class:calendar-row-alt={row.weekIndex % 2 === 1}>
+                  {#each row.days as cell}
+                    {#if cell}
+                      <div class="calendar-cell" class:calendar-cell-today={cell.dateStr === calendarToday}>
+                        <span class="calendar-day-number">{cell.day}</span>
+                      </div>
+                    {:else}
+                      <div class="calendar-cell calendar-cell-empty"></div>
+                    {/if}
+                  {/each}
+                  <div class="calendar-cell calendar-cell-summary"></div>
+                </div>
+              {/each}
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      <!-- Right: Widgets (1/3) -->
+      <div class="progress-sidebar">
+        {#if progressWeightChart}
+          {@const wc = progressWeightChart}
+          {@const cW = 600}
+          {@const cH = 200}
+          {@const cPad = { top: 20, right: 20, bottom: 30, left: 45 }}
+          {@const plotW = cW - cPad.left - cPad.right}
+          {@const plotH = cH - cPad.top - cPad.bottom}
+          {@const xForDate = (d: Date) => cPad.left + (plotW * (d.getTime() - wc.chartStart.getTime())) / wc.totalMs}
+          {@const yForWeight = (w: number) => cPad.top + plotH - (plotH * (w - wc.yMin)) / (wc.yMax - wc.yMin)}
+          {@const todayDate = new Date(new Date().toISOString().split("T")[0] + "T00:00:00")}
+
+          <Card>
+            <div class="widget">
+              <div class="widget-header">
+                <h3 class="widget-title">
+                  <svg class="widget-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M3 3v18h18"/><polyline points="7 14 11 10 14 13 20 7"/>
+                  </svg>
+                  Weight
+                </h3>
+                <span class="stat-values">{wc.lastEntry.weight} lbs</span>
+              </div>
+
+              <svg class="weight-chart" viewBox="0 0 {cW} {cH}" preserveAspectRatio="xMidYMid meet">
+                <!-- Y-axis gridlines and labels -->
+                {#each Array(5) as _, i}
+                  {@const yVal = wc.yMin + ((wc.yMax - wc.yMin) * (4 - i)) / 4}
+                  {@const y = cPad.top + (plotH * i) / 4}
+                  <line x1={cPad.left} y1={y} x2={cW - cPad.right} y2={y} class="chart-grid" />
+                  <text x={cPad.left - 6} y={y + 4} class="chart-label" text-anchor="end">{Math.round(yVal * 10) / 10}</text>
+                {/each}
+
+                <!-- X-axis labels -->
+                <text x={xForDate(wc.chartStart)} y={cH - 4} class="chart-label" text-anchor="start">
+                  {wc.startLabel}
+                </text>
+                {#if todayDate.getTime() > wc.chartStart.getTime() && todayDate.getTime() < wc.chartEnd.getTime()}
+                  <line x1={xForDate(todayDate)} y1={cPad.top} x2={xForDate(todayDate)} y2={cPad.top + plotH} class="chart-today" />
+                  <text x={xForDate(todayDate)} y={cH - 4} class="chart-label" text-anchor="middle">Today</text>
+                {/if}
+                <text x={xForDate(wc.chartEnd)} y={cH - 4} class="chart-label" text-anchor="end">
+                  {wc.endLabel}
+                </text>
+
+                <!-- Actual weight line -->
+                {#if wc.entries.length >= 2}
+                  <polyline
+                    fill="none"
+                    class="chart-line-actual"
+                    points={wc.entries.map((e: {date: string, weight: number}) => {
+                      const x = xForDate(new Date(e.date + "T00:00:00"))
+                      const y = yForWeight(e.weight)
+                      return `${x},${y}`
+                    }).join(" ")}
+                  />
+                {/if}
+
+                <!-- Actual weight dots -->
+                {#each wc.entries as e}
+                  {@const x = xForDate(new Date(e.date + "T00:00:00"))}
+                  {@const y = yForWeight(e.weight)}
+                  <circle cx={x} cy={y} r="3" class="chart-dot" />
+                {/each}
+
+                <!-- Projected line from last entry to goal -->
+                {#if wc.goalWeightAtEnd != null}
+                  {@const x1 = xForDate(new Date(wc.lastEntry.date + "T00:00:00"))}
+                  {@const y1 = yForWeight(wc.lastEntry.weight)}
+                  {@const x2 = xForDate(wc.chartEnd)}
+                  {@const y2 = yForWeight(wc.goalWeightAtEnd)}
+                  <line {x1} {y1} {x2} {y2} class="chart-line-projected" />
+                  <circle cx={x2} cy={y2} r="4" class="chart-dot-goal" />
+                  <text x={x2 - 6} y={y2 - 8} class="chart-label-goal" text-anchor="end">{Math.round(wc.goalWeightAtEnd * 10) / 10} lbs</text>
+                {/if}
+              </svg>
+            </div>
+          </Card>
+        {/if}
+      </div>
     </div>
   {/if}
 {/if}
@@ -1591,8 +1669,7 @@
   }
 
   /* ── Empty / placeholder ── */
-  .empty-overview,
-  .placeholder-tab {
+  .empty-overview {
     max-width: 480px;
   }
 
@@ -1978,10 +2055,6 @@
   }
 
   /* ── Weight chart ── */
-  .weight-chart-wrapper {
-    margin-top: var(--space-4);
-  }
-
   .weight-chart {
     width: 100%;
     height: auto;
@@ -2032,6 +2105,101 @@
     font-size: 7px;
     fill: var(--ink-faint);
     font-weight: 500;
+  }
+
+  /* ── Progress tab layout ── */
+  .progress-layout {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  @media (min-width: 768px) {
+    .progress-layout {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: var(--space-6);
+    }
+  }
+
+  .progress-main {
+    min-width: 0;
+  }
+
+  .progress-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  /* ── Calendar ── */
+  .calendar-widget {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .calendar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .calendar-month-label {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  .calendar-grid {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .calendar-row {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr) minmax(0, 1fr);
+  }
+
+  .calendar-row-alt {
+    background: var(--paper-warm);
+  }
+
+  .calendar-dow {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    color: var(--ink-faint);
+    text-align: center;
+    padding: var(--space-2) 0;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .calendar-cell {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: var(--space-1);
+    border: 1px solid var(--border);
+    transition: background var(--transition-fast);
+  }
+
+  .calendar-cell-today {
+    background: var(--accent-light, rgba(0, 0, 0, 0.05));
+    font-weight: 600;
+  }
+
+  .calendar-cell-summary {
+    border-left: 2px solid var(--border);
+  }
+
+  .calendar-day-number {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink);
   }
 
   /* ── Journal ── */
