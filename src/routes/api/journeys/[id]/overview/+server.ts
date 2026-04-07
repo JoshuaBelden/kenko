@@ -1,38 +1,12 @@
 import { getJourneysCollection, getWeightLogCollection } from "$lib/server/collections"
 import { getFastsCollection } from "$lib/server/danjiki"
+import { startOfDayTz, endOfDayTz, startOfWeekTz, endOfWeekTz, todayStr } from "$lib/server/dates"
 import { getWorkoutLogsCollection, getWorkoutPlansCollection, serializeWorkoutPlan } from "$lib/server/dojo"
 import { getCommitmentsCollection, calculatePeriodProgress, serializeCommitment } from "$lib/server/kata"
 import { getFoodItemLogsCollection, getWaterLogCollection } from "$lib/server/shoku"
 import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
 import type { RequestHandler } from "./$types"
-
-function startOfDay(date: Date): Date {
-  const d = new Date(date)
-  d.setUTCHours(0, 0, 0, 0)
-  return d
-}
-
-function endOfDay(date: Date): Date {
-  const d = new Date(date)
-  d.setUTCHours(23, 59, 59, 999)
-  return d
-}
-
-function startOfWeek(date: Date): Date {
-  const d = startOfDay(date)
-  const day = d.getUTCDay()
-  const diff = day === 0 ? 6 : day - 1
-  d.setUTCDate(d.getUTCDate() - diff)
-  return d
-}
-
-function endOfWeek(date: Date): Date {
-  const d = startOfWeek(date)
-  d.setUTCDate(d.getUTCDate() + 6)
-  d.setUTCHours(23, 59, 59, 999)
-  return d
-}
 
 export const GET: RequestHandler = async ({ locals, params }) => {
   if (!locals.userId) return json({ error: "Unauthorized" }, { status: 401 })
@@ -44,10 +18,13 @@ export const GET: RequestHandler = async ({ locals, params }) => {
   const journey = await journeys.findOne({ _id: journeyId, userId })
   if (!journey) return json({ error: "Not found" }, { status: 404 })
 
+  const userTz = locals.userTimezone ?? "America/Los_Angeles"
   const now = new Date()
-  const today = now.toISOString().split("T")[0]
-  const weekStart = startOfWeek(now)
-  const weekEnd = endOfWeek(now)
+  const today = todayStr(userTz)
+  const todayStart = startOfDayTz(today, userTz)
+  const todayEnd = endOfDayTz(today, userTz)
+  const weekStart = startOfWeekTz(now, userTz)
+  const weekEnd = endOfWeekTz(now, userTz)
 
   const result: Record<string, unknown> = {}
 
@@ -57,7 +34,7 @@ export const GET: RequestHandler = async ({ locals, params }) => {
     const todayEntries = await foodItemLogs
       .find({
         userId,
-        date: { $gte: startOfDay(now), $lte: endOfDay(now) },
+        date: { $gte: todayStart, $lte: todayEnd },
       })
       .toArray()
 
@@ -207,25 +184,26 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 
   // Weight log data (scoped to journey date range)
   const weightLogCol = await getWeightLogCollection()
-  const journeyStart = journey.startDate instanceof Date
-    ? journey.startDate.toISOString().split("T")[0]
-    : String(journey.startDate).split("T")[0]
-  const journeyEnd = journey.endDate instanceof Date
-    ? journey.endDate.toISOString().split("T")[0]
-    : String(journey.endDate).split("T")[0]
+  const journeyStartStr = journey.startDate instanceof Date
+    ? journey.startDate.toISOString()
+    : String(journey.startDate)
+  const journeyEndStr = journey.endDate instanceof Date
+    ? journey.endDate.toISOString()
+    : String(journey.endDate)
+  const journeyStartDateOnly = journeyStartStr.split("T")[0]
 
   const weightEntries = await weightLogCol
     .find({
       userId,
-      date: { $gte: journeyStart, $lte: today },
+      date: { $gte: journeyStartDateOnly, $lte: today },
     })
     .sort({ date: 1 })
     .toArray()
 
   result.weight = {
     entries: weightEntries.map((e) => ({ date: e.date, weight: e.weight })),
-    journeyStart,
-    journeyEnd,
+    journeyStart: journeyStartStr,
+    journeyEnd: journeyEndStr,
     weightGoalLbsPerWeek: journey.shokuTargets?.weightGoalLbsPerWeek ?? null,
   }
 

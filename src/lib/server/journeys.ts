@@ -1,7 +1,7 @@
 import type { Document, ObjectId, WithId } from "mongodb"
 import { getJourneysCollection } from "./collections"
 
-export async function createDefaultJourney(userId: ObjectId): Promise<void> {
+export async function createDefaultJourney(userId: ObjectId, tz: string = "America/Los_Angeles"): Promise<void> {
   const journeys = await getJourneysCollection()
   const now = new Date()
   const oneYearLater = new Date(now)

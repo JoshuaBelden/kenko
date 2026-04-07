@@ -2,8 +2,11 @@
   import { goto } from "$app/navigation"
   import { page } from "$app/state"
   import { Button, Card, PageHeader } from "$lib/components"
-  import { icons } from "$lib/icons"
+  import { localToday, toDatetime } from "$lib/dates"
   import { formatDateRange } from "$lib/format"
+  import { icons } from "$lib/icons"
+
+  const tz = $derived(page.data.user?.profile?.timezone ?? "America/Los_Angeles")
 
   let journeys = $state(page.data.journeys ?? [])
   let creating = $state(false)
@@ -34,20 +37,33 @@
   // Create form state
   let newName = $state("")
   let newDescription = $state("")
-  let newStartDate = $state(new Date().toISOString().split("T")[0])
-  const defaultEndDate = (() => {
-    const d = new Date()
-    d.setFullYear(d.getFullYear() + 1)
-    return d.toISOString().split("T")[0]
-  })()
-  let newEndDate = $state(defaultEndDate)
+  let newStartDate = $state("")
+  let newStartTime = $state("00:00")
+  let newEndDate = $state("")
+  let newEndTime = $state("23:59")
   let createError = $state("")
+
+  // Initialize date defaults from tz (reactive)
+  $effect(() => {
+    if (!newStartDate) {
+      newStartDate = localToday(tz)
+      const d = new Date()
+      d.setFullYear(d.getFullYear() + 1)
+      const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" })
+      newEndDate = fmt.format(d)
+    }
+  })
 
   function resetCreateForm() {
     newName = ""
     newDescription = ""
-    newStartDate = new Date().toISOString().split("T")[0]
-    newEndDate = defaultEndDate
+    newStartDate = localToday(tz)
+    newStartTime = "00:00"
+    const d = new Date()
+    d.setFullYear(d.getFullYear() + 1)
+    const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" })
+    newEndDate = fmt.format(d)
+    newEndTime = "23:59"
     createError = ""
   }
 
@@ -63,8 +79,8 @@
       body: JSON.stringify({
         name: newName.trim(),
         description: newDescription.trim(),
-        startDate: newStartDate,
-        endDate: newEndDate,
+        startDate: toDatetime(newStartDate, newStartTime, tz),
+        endDate: toDatetime(newEndDate, newEndTime, tz),
       }),
     })
 
@@ -134,8 +150,18 @@
                 <input id="journey-start" type="date" bind:value={newStartDate} />
               </div>
               <div class="form-field">
+                <label class="field-label" for="journey-start-time">Start time</label>
+                <input id="journey-start-time" type="time" bind:value={newStartTime} />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-field">
                 <label class="field-label" for="journey-end">End date</label>
                 <input id="journey-end" type="date" bind:value={newEndDate} />
+              </div>
+              <div class="form-field">
+                <label class="field-label" for="journey-end-time">End time</label>
+                <input id="journey-end-time" type="time" bind:value={newEndTime} />
               </div>
             </div>
           </div>
@@ -167,7 +193,7 @@
                   <div>
                     <h4 class="journey-name">{journey.name}</h4>
                     <p class="journey-dates">
-                      {formatDateRange(journey.startDate, journey.endDate)}
+                      {formatDateRange(journey.startDate, journey.endDate, tz)}
                     </p>
                   </div>
                 </div>
@@ -194,7 +220,7 @@
                     <div>
                       <h4 class="journey-name">{journey.name}</h4>
                       <p class="journey-dates">
-                        {formatDateRange(journey.startDate, journey.endDate)}
+                        {formatDateRange(journey.startDate, journey.endDate, tz)}
                       </p>
                     </div>
                     <span class="status-badge status-ended">Ended</span>
@@ -220,7 +246,7 @@
                     <div>
                       <h4 class="journey-name">{journey.name}</h4>
                       <p class="journey-dates">
-                        {formatDateRange(journey.startDate, journey.endDate)}
+                        {formatDateRange(journey.startDate, journey.endDate, tz)}
                       </p>
                     </div>
                     <span class="status-badge status-archived">Archived</span>
@@ -424,6 +450,19 @@
   }
 
   .form-field input {
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    color: var(--ink);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    padding: var(--space-3) 0;
+    outline: none;
+    transition: border-color var(--transition-fast);
+    width: 100%;
+  }
+
+  .form-field input[type="time"] {
     font-family: var(--font-body);
     font-size: var(--text-base);
     color: var(--ink);

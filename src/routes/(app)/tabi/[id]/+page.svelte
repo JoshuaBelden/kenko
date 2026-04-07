@@ -2,10 +2,12 @@
   import { goto, invalidateAll } from "$app/navigation"
   import { page } from "$app/state"
   import { Button, Card, ProgressBar, StarRating, DotRating, TipTapEditor } from "$lib/components"
-  import { icons } from "$lib/icons"
+  import { localToday, localDateStr, localTimeStr, toDatetime } from "$lib/dates"
   import { formatDate } from "$lib/format"
+  import { icons } from "$lib/icons"
 
   const data = $derived(page.data as any)
+  const tz = $derived(page.data.user?.profile?.timezone ?? "America/Los_Angeles")
   const journey = $derived(data.journey)
   const allPlans = $derived(data.allPlans ?? [])
   const allCommitments = $derived(data.allCommitments ?? [])
@@ -44,7 +46,9 @@
   let settingsDesc = $state("")
   let settingsStatement = $state<string | null>(null)
   let settingsStartDate = $state("")
+  let settingsStartTime = $state("00:00")
   let settingsEndDate = $state("")
+  let settingsEndTime = $state("23:59")
   let saving = $state(false)
   let saveError = $state("")
   let saveSuccess = $state(false)
@@ -152,8 +156,10 @@
     settingsName = j.name ?? ""
     settingsDesc = j.description ?? ""
     settingsStatement = j.statement ?? null
-    settingsStartDate = j.startDate ? j.startDate.split("T")[0] : ""
-    settingsEndDate = j.endDate ? j.endDate.split("T")[0] : ""
+    settingsStartDate = j.startDate ? localDateStr(j.startDate, tz) : ""
+    settingsStartTime = j.startDate ? localTimeStr(j.startDate, tz) : "00:00"
+    settingsEndDate = j.endDate ? localDateStr(j.endDate, tz) : ""
+    settingsEndTime = j.endDate ? localTimeStr(j.endDate, tz) : "23:59"
 
     const s = j.shokuTargets
     if (s) {
@@ -256,8 +262,8 @@
         name: settingsName.trim(),
         description: settingsDesc.trim(),
         statement: settingsStatement,
-        startDate: settingsStartDate,
-        endDate: settingsEndDate,
+        startDate: toDatetime(settingsStartDate, settingsStartTime, tz),
+        endDate: toDatetime(settingsEndDate, settingsEndTime, tz),
         shokuTargets,
         danjikiTargets,
         dojoTargets,
@@ -329,9 +335,9 @@
 
     const entries = w.entries as Array<{ date: string; weight: number }>
     const goalRate = w.weightGoalLbsPerWeek as number | null
-    const jStart = new Date(w.journeyStart + "T00:00:00")
-    const jEnd = new Date(w.journeyEnd + "T00:00:00")
-    const today = new Date(new Date().toISOString().split("T")[0] + "T00:00:00")
+    const jStart = new Date(w.journeyStart)
+    const jEnd = new Date(w.journeyEnd)
+    const today = new Date(localToday(tz) + "T00:00:00")
 
     // X-axis ends 1 month from today (capped at journey end)
     const oneMonthOut = new Date(today)
@@ -345,7 +351,7 @@
     const firstEntry = entries[0]
 
     // Goal weight projected to chart end
-    const weeksToChartEnd = (chartEnd.getTime() - new Date(firstEntry.date + "T00:00:00").getTime()) / (7 * 86400000)
+    const weeksToChartEnd = (chartEnd.getTime() - new Date(firstEntry.date + "T12:00:00").getTime()) / (7 * 86400000)
     const goalWeightAtEnd = goalRate ? firstEntry.weight + goalRate * weeksToChartEnd : null
 
     // Y-axis from actual entries, extended to include projection
@@ -371,7 +377,7 @@
   })
 
   // ── Journal state ──
-  let journalDate = $state(new Date().toISOString().split("T")[0])
+  let journalDate = $state("")
   let journalEntry = $state<any>(null)
   let journalLoading = $state(false)
   let journalTab = $state<"morning" | "evening">("morning")
@@ -390,7 +396,7 @@
   let jDayRating = $state<number | null>(null)
   let jEveningNotes = $state<string | null>(null)
 
-  const todayStr = new Date().toISOString().split("T")[0]
+  const todayStr = $derived(localToday(tz))
   const isJournalFuture = $derived(journalDate > todayStr)
 
   function syncJournalFields(entry: any) {
@@ -444,6 +450,7 @@
 
   $effect(() => {
     if (journey && activeTab === "journal") {
+      if (!journalDate) journalDate = localToday(tz)
       loadJournalEntry()
     }
   })
@@ -519,7 +526,7 @@
     {/if}
     {#if journey}
       <p class="journey-dates">
-        {formatDate(journey.startDate)} &mdash; {formatDate(journey.endDate)}
+        {formatDate(journey.startDate, tz)} &mdash; {formatDate(journey.endDate, tz)}
       </p>
       <p class="journey-progress">
         Day {daysIn} of {totalDays} &middot; {daysLeft} days left &middot; {pctComplete}%
@@ -542,7 +549,7 @@
 <!-- Ended banner -->
 {#if isEnded && !isArchived}
   <div class="ended-banner">
-    <span>This journey ended on {formatDate(journey.endDate)}.</span>
+    <span>This journey ended on {formatDate(journey.endDate, tz)}.</span>
   </div>
 {/if}
 
@@ -572,8 +579,18 @@
             <input id="s-start" type="date" bind:value={settingsStartDate} />
           </div>
           <div class="field">
+            <label class="field-label" for="s-start-time">Start time</label>
+            <input id="s-start-time" type="time" bind:value={settingsStartTime} />
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
             <label class="field-label" for="s-end">End date</label>
             <input id="s-end" type="date" bind:value={settingsEndDate} />
+          </div>
+          <div class="field">
+            <label class="field-label" for="s-end-time">End time</label>
+            <input id="s-end-time" type="time" bind:value={settingsEndTime} />
           </div>
         </div>
         <div class="field">
@@ -1655,10 +1672,12 @@
   .field input[type="text"],
   .field input[type="number"],
   .field input[type="date"],
+  .field input[type="time"],
   .field select,
   .settings-fields input[type="text"],
   .settings-fields input[type="number"],
   .settings-fields input[type="date"],
+  .settings-fields input[type="time"],
   .field > input {
     font-family: var(--font-body);
     font-size: var(--text-base);
