@@ -9,27 +9,78 @@
 
   const today = new Date().toISOString().split("T")[0]
 
-  let useTdeeOverride = $state(false)
-  let selectedActivityLevel = $state("")
-  let birthDateValue = $state("")
+  let firstNameValue = $state("")
+  let lastNameValue = $state("")
   let weightValue = $state("")
   let heightValue = $state("")
   let sexValue = $state("")
+  let bmiValue = $state("")
+  let bodyFatPercentValue = $state("")
+  let birthDateValue = $state("")
+  let selectedActivityLevel = $state("")
+  let useTdeeOverride = $state(false)
   let tdeeOverrideValue = $state("")
+  let timezoneValue = $state(Intl.DateTimeFormat().resolvedOptions().timeZone)
 
   // Sync from profile data
   $effect(() => {
     const p = profile
     if (p) {
-      useTdeeOverride = p.tdeeOverride != null
-      selectedActivityLevel = p.activityLevel ?? ""
-      birthDateValue = p.birthDate ?? ""
+      firstNameValue = p.firstName ?? ""
+      lastNameValue = p.lastName ?? ""
       weightValue = p.weight?.toString() ?? ""
       heightValue = p.height?.toString() ?? ""
       sexValue = p.sex ?? ""
+      bmiValue = p.bmi?.toString() ?? ""
+      bodyFatPercentValue = p.bodyFatPercent?.toString() ?? ""
+      birthDateValue = p.birthDate ?? ""
+      selectedActivityLevel = p.activityLevel ?? ""
+      useTdeeOverride = p.tdeeOverride != null
       tdeeOverrideValue = p.tdeeOverride?.toString() ?? ""
+      timezoneValue = p.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone
     }
   })
+
+  const TIMEZONE_OPTIONS = [
+    { value: "Pacific/Honolulu", label: "Hawaii (HST)" },
+    { value: "America/Anchorage", label: "Alaska (AKST/AKDT)" },
+    { value: "America/Los_Angeles", label: "Pacific Time (PST/PDT)" },
+    { value: "America/Phoenix", label: "Arizona (MST)" },
+    { value: "America/Denver", label: "Mountain Time (MST/MDT)" },
+    { value: "America/Chicago", label: "Central Time (CST/CDT)" },
+    { value: "America/New_York", label: "Eastern Time (EST/EDT)" },
+    { value: "America/Halifax", label: "Atlantic Time (AST/ADT)" },
+    { value: "America/St_Johns", label: "Newfoundland (NST/NDT)" },
+    { value: "America/Sao_Paulo", label: "Brasilia (BRT/BRST)" },
+    { value: "America/Argentina/Buenos_Aires", label: "Argentina (ART)" },
+    { value: "Atlantic/Reykjavik", label: "Iceland (GMT)" },
+    { value: "Europe/London", label: "London (GMT/BST)" },
+    { value: "Europe/Paris", label: "Central European (CET/CEST)" },
+    { value: "Europe/Helsinki", label: "Eastern European (EET/EEST)" },
+    { value: "Europe/Moscow", label: "Moscow (MSK)" },
+    { value: "Asia/Dubai", label: "Gulf (GST)" },
+    { value: "Asia/Kolkata", label: "India (IST)" },
+    { value: "Asia/Dhaka", label: "Bangladesh (BST)" },
+    { value: "Asia/Bangkok", label: "Indochina (ICT)" },
+    { value: "Asia/Shanghai", label: "China (CST)" },
+    { value: "Asia/Hong_Kong", label: "Hong Kong (HKT)" },
+    { value: "Asia/Singapore", label: "Singapore (SGT)" },
+    { value: "Asia/Tokyo", label: "Japan (JST)" },
+    { value: "Asia/Seoul", label: "Korea (KST)" },
+    { value: "Australia/Perth", label: "Australian Western (AWST)" },
+    { value: "Australia/Adelaide", label: "Australian Central (ACST/ACDT)" },
+    { value: "Australia/Sydney", label: "Australian Eastern (AEST/AEDT)" },
+    { value: "Pacific/Auckland", label: "New Zealand (NZST/NZDT)" },
+    { value: "Pacific/Fiji", label: "Fiji (FJT)" },
+  ] as const
+
+  // Ensure the user's detected timezone is always available as an option
+  const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const timezoneOptions = $derived(
+    TIMEZONE_OPTIONS.some((tz) => tz.value === detectedTz)
+      ? TIMEZONE_OPTIONS
+      : [{ value: detectedTz, label: detectedTz }, ...TIMEZONE_OPTIONS],
+  )
 
   const ACTIVITY_LEVELS = [
     { value: "sedentary", label: "Sedentary", desc: "Little or no exercise, desk job" },
@@ -99,14 +150,12 @@
     <form
       method="POST"
       action="?/updateProfile"
-      use:enhance
-      class="profile-form"
-      oninput={(e) => {
-        const target = e.target as HTMLInputElement
-        if (target.name === "weight") weightValue = target.value
-        if (target.name === "height") heightValue = target.value
-        if (target.name === "tdeeOverride") tdeeOverrideValue = target.value
+      use:enhance={() => {
+        return async ({ update }) => {
+          await update({ reset: false })
+        }
       }}
+      class="profile-form"
     >
       {#if form?.profileError}
         <p class="form-error">{form.profileError}</p>
@@ -116,23 +165,13 @@
       {/if}
 
       <div class="form-row">
-        <Input name="firstName" label="First name" value={profile?.firstName ?? ""} required />
-        <Input name="lastName" label="Last name" value={profile?.lastName ?? ""} required />
+        <Input name="firstName" label="First name" value={firstNameValue} required />
+        <Input name="lastName" label="Last name" value={lastNameValue} required />
       </div>
 
       <div class="form-row">
-        <Input
-          name="weight"
-          label="Weight (lbs)"
-          type="number"
-          value={profile?.weight?.toString() ?? ""}
-        />
-        <Input
-          name="height"
-          label="Height (in)"
-          type="number"
-          value={profile?.height?.toString() ?? ""}
-        />
+        <Input name="weight" label="Weight (lbs)" type="number" value={weightValue} />
+        <Input name="height" label="Height (in)" type="number" value={heightValue} />
       </div>
 
       <div class="input-group">
@@ -143,7 +182,7 @@
               type="radio"
               name="sex"
               value="male"
-              checked={profile?.sex === "male"}
+              checked={sexValue === "male"}
               onchange={() => (sexValue = "male")}
             />
             <span>Male</span>
@@ -153,7 +192,7 @@
               type="radio"
               name="sex"
               value="female"
-              checked={profile?.sex === "female"}
+              checked={sexValue === "female"}
               onchange={() => (sexValue = "female")}
             />
             <span>Female</span>
@@ -162,13 +201,8 @@
       </div>
 
       <div class="form-row">
-        <Input name="bmi" label="BMI" type="number" value={profile?.bmi?.toString() ?? ""} />
-        <Input
-          name="bodyFatPercent"
-          label="Body fat %"
-          type="number"
-          value={profile?.bodyFatPercent?.toString() ?? ""}
-        />
+        <Input name="bmi" label="BMI" type="number" value={bmiValue} />
+        <Input name="bodyFatPercent" label="Body fat %" type="number" value={bodyFatPercentValue} />
       </div>
 
       <!-- Birth Date -->
@@ -179,9 +213,18 @@
           id="birthDate"
           name="birthDate"
           max={today}
-          value={profile?.birthDate ?? ""}
-          onchange={(e) => (birthDateValue = e.currentTarget.value)}
+          bind:value={birthDateValue}
         />
+      </div>
+
+      <!-- Timezone -->
+      <div class="input-group">
+        <label class="input-label" for="timezone">Timezone</label>
+        <select id="timezone" name="timezone" bind:value={timezoneValue}>
+          {#each timezoneOptions as tz}
+            <option value={tz.value}>{tz.label}</option>
+          {/each}
+        </select>
       </div>
 
       <!-- Activity Level -->
@@ -194,7 +237,7 @@
                 type="radio"
                 name="activityLevel"
                 value={level.value}
-                checked={profile?.activityLevel === level.value}
+                checked={selectedActivityLevel === level.value}
                 onchange={() => (selectedActivityLevel = level.value)}
               />
               <div class="activity-content">
@@ -407,6 +450,36 @@
 
   input[type="date"]:focus {
     border-bottom-color: var(--border-strong);
+  }
+
+  select {
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    font-weight: 400;
+    color: var(--ink);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    padding: var(--space-3) 0;
+    outline: none;
+    transition: border-color var(--transition-fast);
+    width: 100%;
+    cursor: pointer;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23999' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0 center;
+  }
+
+  select:focus {
+    border-bottom-color: var(--border-strong);
+  }
+
+  select option {
+    background: var(--surface);
+    color: var(--ink);
   }
 
   /* Activity level selector */

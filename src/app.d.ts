@@ -2,6 +2,7 @@ declare global {
   namespace App {
     interface Locals {
       userId?: string
+      userTimezone?: string
     }
     interface PageData {
       user: {
@@ -19,6 +20,7 @@ declare global {
           birthDate?: string
           activityLevel?: "sedentary" | "lightly_active" | "moderately_active" | "very_active" | "extremely_active"
           tdeeOverride?: number | null
+          timezone?: string
         } | null
       } | null
       activeJourneys: Array<{

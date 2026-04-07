@@ -29,6 +29,7 @@ export const actions: Actions = {
     const activityLevel = data.get("activityLevel") as ActivityLevel | null
     const tdeeOverrideRaw = data.get("tdeeOverride") as string | null
     const useTdeeOverride = data.get("useTdeeOverride") === "on"
+    const timezone = (data.get("timezone") as string)?.trim() || undefined
 
     if (!firstName || !lastName) {
       return fail(400, { profileError: "First and last name are required." })
@@ -40,6 +41,14 @@ export const actions: Actions = {
 
     if (activityLevel && !VALID_ACTIVITY_LEVELS.includes(activityLevel)) {
       return fail(400, { profileError: "Invalid activity level." })
+    }
+
+    if (timezone) {
+      try {
+        Intl.DateTimeFormat(undefined, { timeZone: timezone })
+      } catch {
+        return fail(400, { profileError: "Invalid timezone." })
+      }
     }
 
     let tdeeOverride: number | null = null
@@ -67,6 +76,7 @@ export const actions: Actions = {
             birthDate: birthDate || undefined,
             activityLevel: activityLevel || undefined,
             tdeeOverride,
+            timezone,
           },
           profileComplete: true,
           updatedAt: new Date(),

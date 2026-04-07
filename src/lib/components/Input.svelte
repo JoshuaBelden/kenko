@@ -16,7 +16,7 @@
   {#if label}
     <label class="input-label" for={name}>{label}</label>
   {/if}
-  <input {type} {name} id={name} {placeholder} {value} {required} class:has-error={error} />
+  <input {type} {name} id={name} {placeholder} bind:value {required} class:has-error={error} />
   {#if error}
     <span class="input-error">{error}</span>
   {/if}
