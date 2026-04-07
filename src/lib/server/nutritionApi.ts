@@ -1,3 +1,17 @@
+/**
+ * Returns an array of barcode variants to match against.
+ * Handles UPC-A (12 digits) ↔ EAN-13 (13 digits) conversion.
+ */
+export function barcodeVariants(barcode: string): string[] {
+  const variants = [barcode]
+  if (barcode.length === 12) {
+    variants.push("0" + barcode) // UPC-A → EAN-13
+  } else if (barcode.length === 13 && barcode.startsWith("0")) {
+    variants.push(barcode.slice(1)) // EAN-13 → UPC-A
+  }
+  return variants
+}
+
 export interface NutritionApiResult {
   name: string
   brand: string | null
@@ -9,14 +23,23 @@ export interface NutritionApiResult {
   protein: number | null
   netCarbs: number | null
   fat: number | null
+  saturatedFat: number | null
+  transFat: number | null
   fiber: number | null
+  addedSugars: number | null
+  cholesterol: number | null
+  sodium: number | null
   iron: number | null
   calcium: number | null
+  magnesium: number | null
   vitaminA: number | null
   vitaminC: number | null
   vitaminB12: number | null
+  vitaminE: number | null
+  vitaminK: number | null
   folate: number | null
   potassium: number | null
+  zinc: number | null
 }
 
 export interface BarcodeLookupResult {
@@ -27,8 +50,8 @@ export interface BarcodeLookupResult {
 function mapProduct(product: Record<string, unknown>, barcode: string): NutritionApiResult {
   const n = (product.nutriments as Record<string, unknown>) ?? {}
 
-  const quantity = ((product.quantity as string) ?? "").toLowerCase()
-  const baseUnit: "g" | "ml" = quantity.includes("ml") || quantity.includes("l") ? "ml" : "g"
+  const servingUnit = ((product.serving_quantity_unit as string) ?? "g").toLowerCase()
+  const baseUnit: "g" | "ml" = servingUnit === "ml" || servingUnit === "l" ? "ml" : "g"
 
   const servingQty = typeof product.serving_quantity === "number" ? product.serving_quantity : null
 
@@ -37,32 +60,41 @@ function mapProduct(product: Record<string, unknown>, barcode: string): Nutritio
     return typeof v === "number" ? Math.round(v * 10) / 10 : null
   }
 
-  const carbsTotal = num("carbohydrates_100g")
-  const fiberVal = num("fiber_100g")
+  const carbsServing = num("carbohydrates_serving")
+  const fiberServing = num("fiber_serving")
   let netCarbs: number | null = null
-  if (carbsTotal !== null) {
-    netCarbs = fiberVal !== null ? Math.round((carbsTotal - fiberVal) * 10) / 10 : carbsTotal
+  if (carbsServing !== null) {
+    netCarbs = fiberServing !== null ? Math.round((carbsServing - fiberServing) * 10) / 10 : carbsServing
   }
 
   return {
     name: product.product_name as string,
     brand: (product.brands as string) ?? null,
-    barcode,
+    barcode: (product.code as string) ?? barcode,
     baseUnit,
     servingSize: servingQty,
     servingUnit: (product.serving_size as string) ?? null,
     calories: num("energy-kcal_serving"),
-    protein: num("proteins_100g"),
+    protein: num("proteins_serving"),
     netCarbs,
-    fat: num("fat_100g"),
-    fiber: fiberVal,
-    iron: num("iron_100g"),
-    calcium: num("calcium_100g"),
-    vitaminA: num("vitamin-a_100g"),
-    vitaminC: num("vitamin-c_100g"),
-    vitaminB12: num("vitamin-b12_100g"),
-    folate: num("folates_100g"),
-    potassium: num("potassium_100g"),
+    fat: num("fat_serving"),
+    saturatedFat: num("saturated-fat_serving"),
+    transFat: num("trans-fat_serving"),
+    fiber: fiberServing,
+    addedSugars: num("added-sugars_serving"),
+    cholesterol: num("cholesterol_serving"),
+    sodium: num("sodium_serving"),
+    iron: num("iron_serving"),
+    calcium: num("calcium_serving"),
+    magnesium: num("magnesium_serving"),
+    vitaminA: num("vitamin-a_serving"),
+    vitaminC: num("vitamin-c_serving"),
+    vitaminB12: num("vitamin-b12_serving"),
+    vitaminE: num("vitamin-e_serving"),
+    vitaminK: num("vitamin-k_serving"),
+    folate: num("folates_serving"),
+    potassium: num("potassium_serving"),
+    zinc: num("zinc_serving"),
   }
 }
 

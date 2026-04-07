@@ -43,6 +43,8 @@
   let scanRawJson = $state<Record<string, unknown> | null>(null)
   let scanError = $state("")
   let fBarcode = $state<string | null>(null)
+  let manualBarcode = $state("")
+  let manualLookingUp = $state(false)
 
   $effect(() => {
     scannerSupported = typeof window !== "undefined" && !!navigator.mediaDevices?.getUserMedia
@@ -57,14 +59,23 @@
   let fProtein = $state("")
   let fNetCarbs = $state("")
   let fFat = $state("")
+  let fSaturatedFat = $state("")
+  let fTransFat = $state("")
   let fFiber = $state("")
+  let fAddedSugars = $state("")
+  let fCholesterol = $state("")
+  let fSodium = $state("")
   let fIron = $state("")
   let fCalcium = $state("")
+  let fMagnesium = $state("")
   let fVitaminA = $state("")
   let fVitaminC = $state("")
   let fVitaminB12 = $state("")
+  let fVitaminE = $state("")
+  let fVitaminK = $state("")
   let fFolate = $state("")
   let fPotassium = $state("")
+  let fZinc = $state("")
 
   const SOURCE_LABELS: Record<string, string> = {
     manual: "Manual",
@@ -109,14 +120,23 @@
         fProtein = d.protein?.toString() ?? "0"
         fNetCarbs = d.netCarbs?.toString() ?? "0"
         fFat = d.fat?.toString() ?? "0"
+        fSaturatedFat = d.saturatedFat?.toString() ?? ""
+        fTransFat = d.transFat?.toString() ?? ""
         fFiber = d.fiber?.toString() ?? ""
+        fAddedSugars = d.addedSugars?.toString() ?? ""
+        fCholesterol = d.cholesterol?.toString() ?? ""
+        fSodium = d.sodium?.toString() ?? ""
         fIron = d.iron?.toString() ?? ""
         fCalcium = d.calcium?.toString() ?? ""
+        fMagnesium = d.magnesium?.toString() ?? ""
         fVitaminA = d.vitaminA?.toString() ?? ""
         fVitaminC = d.vitaminC?.toString() ?? ""
         fVitaminB12 = d.vitaminB12?.toString() ?? ""
+        fVitaminE = d.vitaminE?.toString() ?? ""
+        fVitaminK = d.vitaminK?.toString() ?? ""
         fFolate = d.folate?.toString() ?? ""
         fPotassium = d.potassium?.toString() ?? ""
+        fZinc = d.zinc?.toString() ?? ""
         creating = true
         return
       }
@@ -125,6 +145,16 @@
     } catch {
       scanError = "Failed to look up barcode"
     }
+  }
+
+  async function handleManualBarcodeLookup() {
+    const barcode = manualBarcode.trim()
+    if (!barcode) return
+    manualLookingUp = true
+    scanError = ""
+    await handleBarcodeScan(barcode)
+    manualLookingUp = false
+    if (!creating) manualBarcode = ""
   }
 
   function resetForm() {
@@ -136,14 +166,23 @@
     fProtein = ""
     fNetCarbs = ""
     fFat = ""
+    fSaturatedFat = ""
+    fTransFat = ""
     fFiber = ""
+    fAddedSugars = ""
+    fCholesterol = ""
+    fSodium = ""
     fIron = ""
     fCalcium = ""
+    fMagnesium = ""
     fVitaminA = ""
     fVitaminC = ""
     fVitaminB12 = ""
+    fVitaminE = ""
+    fVitaminK = ""
     fFolate = ""
     fPotassium = ""
+    fZinc = ""
     formError = ""
     duplicateWarning = ""
     fBarcode = null
@@ -169,19 +208,29 @@
       barcode: fBarcode,
       baseUnit: fBaseUnit,
       source: fBarcode ? "openfoodfacts" : "manual",
+      debug: scanRawJson ?? null,
       servingSize: numOrNull(fServingSize),
       calories: parseFloat(fCalories) || 0,
       protein: parseFloat(fProtein) || 0,
       netCarbs: parseFloat(fNetCarbs) || 0,
       fat: parseFloat(fFat) || 0,
+      saturatedFat: numOrNull(fSaturatedFat),
+      transFat: numOrNull(fTransFat),
       fiber: numOrNull(fFiber),
+      addedSugars: numOrNull(fAddedSugars),
+      cholesterol: numOrNull(fCholesterol),
+      sodium: numOrNull(fSodium),
       iron: numOrNull(fIron),
       calcium: numOrNull(fCalcium),
+      magnesium: numOrNull(fMagnesium),
       vitaminA: numOrNull(fVitaminA),
       vitaminC: numOrNull(fVitaminC),
       vitaminB12: numOrNull(fVitaminB12),
+      vitaminE: numOrNull(fVitaminE),
+      vitaminK: numOrNull(fVitaminK),
       folate: numOrNull(fFolate),
       potassium: numOrNull(fPotassium),
+      zinc: numOrNull(fZinc),
     }
   }
 
@@ -220,14 +269,23 @@
     fProtein = food.protein.toString()
     fNetCarbs = food.netCarbs.toString()
     fFat = food.fat.toString()
+    fSaturatedFat = food.saturatedFat?.toString() ?? ""
+    fTransFat = food.transFat?.toString() ?? ""
     fFiber = food.fiber?.toString() ?? ""
+    fAddedSugars = food.addedSugars?.toString() ?? ""
+    fCholesterol = food.cholesterol?.toString() ?? ""
+    fSodium = food.sodium?.toString() ?? ""
     fIron = food.iron?.toString() ?? ""
     fCalcium = food.calcium?.toString() ?? ""
+    fMagnesium = food.magnesium?.toString() ?? ""
     fVitaminA = food.vitaminA?.toString() ?? ""
     fVitaminC = food.vitaminC?.toString() ?? ""
     fVitaminB12 = food.vitaminB12?.toString() ?? ""
+    fVitaminE = food.vitaminE?.toString() ?? ""
+    fVitaminK = food.vitaminK?.toString() ?? ""
     fFolate = food.folate?.toString() ?? ""
     fPotassium = food.potassium?.toString() ?? ""
+    fZinc = food.zinc?.toString() ?? ""
     formError = ""
   }
 
@@ -303,6 +361,18 @@
       {#if scannerSupported}
         <Button variant="secondary" onclick={() => { scanning = true; scanError = ""; scanRawJson = null }}>Scan barcode</Button>
       {/if}
+    </div>
+    <div class="barcode-lookup-row">
+      <input
+        class="barcode-input"
+        type="text"
+        placeholder="Enter barcode..."
+        bind:value={manualBarcode}
+        onkeydown={(e) => { if (e.key === "Enter") handleManualBarcodeLookup() }}
+      />
+      <Button variant="secondary" onclick={handleManualBarcodeLookup} disabled={manualLookingUp || !manualBarcode.trim()}>
+        {manualLookingUp ? "Looking up..." : "Lookup"}
+      </Button>
     </div>
   {/if}
 </section>
@@ -402,32 +472,34 @@
                 <div class="nutrient"><span class="nutrient-label">Protein</span><span>{food.protein}g</span></div>
                 <div class="nutrient"><span class="nutrient-label">Net Carbs</span><span>{food.netCarbs}g</span></div>
                 <div class="nutrient"><span class="nutrient-label">Fat</span><span>{food.fat}g</span></div>
-                {#if food.fiber != null}<div class="nutrient">
-                    <span class="nutrient-label">Fiber</span><span>{food.fiber}g</span>
-                  </div>{/if}
-                {#if food.iron != null}<div class="nutrient">
-                    <span class="nutrient-label">Iron</span><span>{food.iron}mg</span>
-                  </div>{/if}
-                {#if food.calcium != null}<div class="nutrient">
-                    <span class="nutrient-label">Calcium</span><span>{food.calcium}mg</span>
-                  </div>{/if}
-                {#if food.vitaminA != null}<div class="nutrient">
-                    <span class="nutrient-label">Vitamin A</span><span>{food.vitaminA}</span>
-                  </div>{/if}
-                {#if food.vitaminC != null}<div class="nutrient">
-                    <span class="nutrient-label">Vitamin C</span><span>{food.vitaminC}mg</span>
-                  </div>{/if}
-                {#if food.vitaminB12 != null}<div class="nutrient">
-                    <span class="nutrient-label">Vitamin B12</span><span>{food.vitaminB12}</span>
-                  </div>{/if}
-                {#if food.folate != null}<div class="nutrient">
-                    <span class="nutrient-label">Folate</span><span>{food.folate}</span>
-                  </div>{/if}
-                {#if food.potassium != null}<div class="nutrient">
-                    <span class="nutrient-label">Potassium</span><span>{food.potassium}mg</span>
-                  </div>{/if}
+                {#if food.saturatedFat != null}<div class="nutrient"><span class="nutrient-label">Saturated Fat</span><span>{food.saturatedFat}g</span></div>{/if}
+                {#if food.transFat != null}<div class="nutrient"><span class="nutrient-label">Trans Fat</span><span>{food.transFat}g</span></div>{/if}
+                {#if food.fiber != null}<div class="nutrient"><span class="nutrient-label">Fiber</span><span>{food.fiber}g</span></div>{/if}
+                {#if food.addedSugars != null}<div class="nutrient"><span class="nutrient-label">Added Sugars</span><span>{food.addedSugars}g</span></div>{/if}
+                {#if food.cholesterol != null}<div class="nutrient"><span class="nutrient-label">Cholesterol</span><span>{food.cholesterol}mg</span></div>{/if}
+                {#if food.sodium != null}<div class="nutrient"><span class="nutrient-label">Sodium</span><span>{food.sodium}mg</span></div>{/if}
+                {#if food.iron != null}<div class="nutrient"><span class="nutrient-label">Iron</span><span>{food.iron}mg</span></div>{/if}
+                {#if food.calcium != null}<div class="nutrient"><span class="nutrient-label">Calcium</span><span>{food.calcium}mg</span></div>{/if}
+                {#if food.magnesium != null}<div class="nutrient"><span class="nutrient-label">Magnesium</span><span>{food.magnesium}mg</span></div>{/if}
+                {#if food.vitaminA != null}<div class="nutrient"><span class="nutrient-label">Vitamin A</span><span>{food.vitaminA}</span></div>{/if}
+                {#if food.vitaminC != null}<div class="nutrient"><span class="nutrient-label">Vitamin C</span><span>{food.vitaminC}mg</span></div>{/if}
+                {#if food.vitaminB12 != null}<div class="nutrient"><span class="nutrient-label">Vitamin B12</span><span>{food.vitaminB12}</span></div>{/if}
+                {#if food.vitaminE != null}<div class="nutrient"><span class="nutrient-label">Vitamin E</span><span>{food.vitaminE}mg</span></div>{/if}
+                {#if food.vitaminK != null}<div class="nutrient"><span class="nutrient-label">Vitamin K</span><span>{food.vitaminK}</span></div>{/if}
+                {#if food.folate != null}<div class="nutrient"><span class="nutrient-label">Folate</span><span>{food.folate}</span></div>{/if}
+                {#if food.potassium != null}<div class="nutrient"><span class="nutrient-label">Potassium</span><span>{food.potassium}mg</span></div>{/if}
+                {#if food.zinc != null}<div class="nutrient"><span class="nutrient-label">Zinc</span><span>{food.zinc}mg</span></div>{/if}
               </div>
               <p class="serving-info">1 serving = {food.servingSize ?? 100}{food.baseUnit}</p>
+              {#if food.barcode}
+                <p class="serving-info">Barcode: {food.barcode}</p>
+              {/if}
+              {#if food.debug}
+                <details class="debug-details">
+                  <summary class="debug-summary">Debug JSON</summary>
+                  <pre class="raw-json">{JSON.stringify(food.debug, null, 2)}</pre>
+                </details>
+              {/if}
               <div class="food-actions">
                 {#if addedToDiaryId === food.id}
                   <span class="added-confirm">Added!</span>
@@ -526,22 +598,52 @@
           <input id="food-fat" type="number" bind:value={fFat} placeholder="0" />
         </div>
       </div>
-
-      <h4 class="subsection">Micronutrients (optional)</h4>
+      <div class="form-row">
+        <div class="form-field">
+          <label class="field-label" for="food-satfat">Saturated Fat (g)</label>
+          <input id="food-satfat" type="number" bind:value={fSaturatedFat} />
+        </div>
+        <div class="form-field">
+          <label class="field-label" for="food-transfat">Trans Fat (g)</label>
+          <input id="food-transfat" type="number" bind:value={fTransFat} />
+        </div>
+      </div>
       <div class="form-row">
         <div class="form-field">
           <label class="field-label" for="food-fiber">Fiber (g)</label>
           <input id="food-fiber" type="number" bind:value={fFiber} />
         </div>
         <div class="form-field">
-          <label class="field-label" for="food-iron">Iron (mg)</label>
-          <input id="food-iron" type="number" bind:value={fIron} />
+          <label class="field-label" for="food-addsugars">Added Sugars (g)</label>
+          <input id="food-addsugars" type="number" bind:value={fAddedSugars} />
+        </div>
+      </div>
+
+      <h4 class="subsection">Micronutrients (optional)</h4>
+      <div class="form-row">
+        <div class="form-field">
+          <label class="field-label" for="food-cholesterol">Cholesterol (mg)</label>
+          <input id="food-cholesterol" type="number" bind:value={fCholesterol} />
+        </div>
+        <div class="form-field">
+          <label class="field-label" for="food-sodium">Sodium (mg)</label>
+          <input id="food-sodium" type="number" bind:value={fSodium} />
         </div>
       </div>
       <div class="form-row">
         <div class="form-field">
+          <label class="field-label" for="food-iron">Iron (mg)</label>
+          <input id="food-iron" type="number" bind:value={fIron} />
+        </div>
+        <div class="form-field">
           <label class="field-label" for="food-calcium">Calcium (mg)</label>
           <input id="food-calcium" type="number" bind:value={fCalcium} />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-field">
+          <label class="field-label" for="food-magnesium">Magnesium (mg)</label>
+          <input id="food-magnesium" type="number" bind:value={fMagnesium} />
         </div>
         <div class="form-field">
           <label class="field-label" for="food-va">Vitamin A</label>
@@ -560,6 +662,16 @@
       </div>
       <div class="form-row">
         <div class="form-field">
+          <label class="field-label" for="food-ve">Vitamin E (mg)</label>
+          <input id="food-ve" type="number" bind:value={fVitaminE} />
+        </div>
+        <div class="form-field">
+          <label class="field-label" for="food-vk">Vitamin K</label>
+          <input id="food-vk" type="number" bind:value={fVitaminK} />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-field">
           <label class="field-label" for="food-folate">Folate</label>
           <input id="food-folate" type="number" bind:value={fFolate} />
         </div>
@@ -567,6 +679,13 @@
           <label class="field-label" for="food-potassium">Potassium (mg)</label>
           <input id="food-potassium" type="number" bind:value={fPotassium} />
         </div>
+      </div>
+      <div class="form-row">
+        <div class="form-field">
+          <label class="field-label" for="food-zinc">Zinc (mg)</label>
+          <input id="food-zinc" type="number" bind:value={fZinc} />
+        </div>
+        <div class="form-field"></div>
       </div>
     </div>
 
@@ -931,6 +1050,49 @@
   .action-buttons {
     display: flex;
     gap: var(--space-3);
+  }
+
+  .barcode-lookup-row {
+    display: flex;
+    gap: var(--space-3);
+    align-items: center;
+    width: 100%;
+  }
+
+  .barcode-input {
+    flex: 1;
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink);
+    background: transparent;
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3);
+    outline: none;
+  }
+
+  .barcode-input:focus {
+    border-color: var(--border-strong);
+  }
+
+  .barcode-input::placeholder {
+    color: var(--ink-faint);
+  }
+
+  .debug-details {
+    margin-top: var(--space-2);
+  }
+
+  .debug-summary {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .debug-summary:hover {
+    color: var(--ink-light);
   }
 
   .scanner-card {

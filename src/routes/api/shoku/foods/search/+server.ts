@@ -1,5 +1,5 @@
 import { getFoodItemsCollection, serializeFoodItem } from "$lib/server/shoku"
-import { searchByName } from "$lib/server/nutritionApi"
+import { barcodeVariants, searchByName } from "$lib/server/nutritionApi"
 import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
 import type { RequestHandler } from "./$types"
@@ -13,7 +13,10 @@ export const GET: RequestHandler = async ({ locals, url }) => {
   const foodItems = await getFoodItemsCollection()
   const filter: Record<string, unknown> = {
     userId: new ObjectId(locals.userId),
-    name: { $regex: q, $options: "i" },
+    $or: [
+      { name: { $regex: q, $options: "i" } },
+      { barcode: { $in: barcodeVariants(q) } },
+    ],
   }
 
   const libraryPromise = foodItems.find(filter).sort({ name: 1 }).limit(20).toArray()

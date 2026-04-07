@@ -31,16 +31,28 @@
   let fProtein = $state("")
   let fNetCarbs = $state("")
   let fFat = $state("")
+  let fSaturatedFat = $state("")
+  let fTransFat = $state("")
   let fFiber = $state("")
+  let fAddedSugars = $state("")
+  let fCholesterol = $state("")
+  let fSodium = $state("")
   let fIron = $state("")
   let fCalcium = $state("")
+  let fMagnesium = $state("")
   let fVitaminA = $state("")
   let fVitaminC = $state("")
   let fVitaminB12 = $state("")
+  let fVitaminE = $state("")
+  let fVitaminK = $state("")
   let fFolate = $state("")
   let fPotassium = $state("")
+  let fZinc = $state("")
   let createError = $state("")
   let creating = $state(false)
+  let scanRawJson = $state<Record<string, unknown> | null>(null)
+  let manualBarcode = $state("")
+  let manualLookingUp = $state(false)
 
   $effect(() => {
     selectedCategory = category
@@ -102,13 +114,16 @@
       const data = await res.json()
 
       if (data.match) {
-        onselect(data.foodItem.id, 1, "serving", category)
-        reset()
+        selectedFood = data.foodItem
+        servings = 1
+        selectedCategory = category
+        mode = "confirm"
         return
       }
 
       if (data.nutritionData) {
         scannedBarcode = barcode
+        scanRawJson = data.raw ?? null
         populateFormFromNutritionData(data.nutritionData)
         mode = "create"
         return
@@ -122,6 +137,16 @@
     }
   }
 
+  async function handleManualBarcodeLookup() {
+    const barcode = manualBarcode.trim()
+    if (!barcode) return
+    manualLookingUp = true
+    barcodeError = ""
+    await handleBarcodeScan(barcode)
+    manualLookingUp = false
+    if (mode === "search") manualBarcode = ""
+  }
+
   function populateFormFromNutritionData(data: any) {
     fName = data.name ?? ""
     fBrand = data.brand ?? ""
@@ -131,14 +156,23 @@
     fProtein = data.protein?.toString() ?? "0"
     fNetCarbs = data.netCarbs?.toString() ?? "0"
     fFat = data.fat?.toString() ?? "0"
+    fSaturatedFat = data.saturatedFat?.toString() ?? ""
+    fTransFat = data.transFat?.toString() ?? ""
     fFiber = data.fiber?.toString() ?? ""
+    fAddedSugars = data.addedSugars?.toString() ?? ""
+    fCholesterol = data.cholesterol?.toString() ?? ""
+    fSodium = data.sodium?.toString() ?? ""
     fIron = data.iron?.toString() ?? ""
     fCalcium = data.calcium?.toString() ?? ""
+    fMagnesium = data.magnesium?.toString() ?? ""
     fVitaminA = data.vitaminA?.toString() ?? ""
     fVitaminC = data.vitaminC?.toString() ?? ""
     fVitaminB12 = data.vitaminB12?.toString() ?? ""
+    fVitaminE = data.vitaminE?.toString() ?? ""
+    fVitaminK = data.vitaminK?.toString() ?? ""
     fFolate = data.folate?.toString() ?? ""
     fPotassium = data.potassium?.toString() ?? ""
+    fZinc = data.zinc?.toString() ?? ""
   }
 
   async function handleInlineCreate() {
@@ -159,15 +193,25 @@
       protein: parseFloat(fProtein) || 0,
       netCarbs: parseFloat(fNetCarbs) || 0,
       fat: parseFloat(fFat) || 0,
+      saturatedFat: parseFloat(fSaturatedFat) || null,
+      transFat: parseFloat(fTransFat) || null,
       fiber: parseFloat(fFiber) || null,
+      addedSugars: parseFloat(fAddedSugars) || null,
+      cholesterol: parseFloat(fCholesterol) || null,
+      sodium: parseFloat(fSodium) || null,
       iron: parseFloat(fIron) || null,
       calcium: parseFloat(fCalcium) || null,
+      magnesium: parseFloat(fMagnesium) || null,
       vitaminA: parseFloat(fVitaminA) || null,
       vitaminC: parseFloat(fVitaminC) || null,
       vitaminB12: parseFloat(fVitaminB12) || null,
+      vitaminE: parseFloat(fVitaminE) || null,
+      vitaminK: parseFloat(fVitaminK) || null,
       folate: parseFloat(fFolate) || null,
       potassium: parseFloat(fPotassium) || null,
+      zinc: parseFloat(fZinc) || null,
       source: scannedBarcode ? "openfoodfacts" : "manual",
+      debug: scanRawJson ?? null,
     }
 
     try {
@@ -209,16 +253,28 @@
     fProtein = ""
     fNetCarbs = ""
     fFat = ""
+    fSaturatedFat = ""
+    fTransFat = ""
     fFiber = ""
+    fAddedSugars = ""
+    fCholesterol = ""
+    fSodium = ""
     fIron = ""
     fCalcium = ""
+    fMagnesium = ""
     fVitaminA = ""
     fVitaminC = ""
     fVitaminB12 = ""
+    fVitaminE = ""
+    fVitaminK = ""
     fFolate = ""
     fPotassium = ""
+    fZinc = ""
     createError = ""
     creating = false
+    scanRawJson = null
+    manualBarcode = ""
+    manualLookingUp = false
   }
 
   function handleClose() {
@@ -302,22 +358,52 @@
               <input id="cf-fat" type="number" step="any" bind:value={fFat} />
             </div>
           </div>
-
-          <p class="section-label">Micronutrients</p>
+          <div class="form-row">
+            <div class="form-field">
+              <label class="field-label" for="cf-satfat">Saturated Fat (g)</label>
+              <input id="cf-satfat" type="number" step="any" bind:value={fSaturatedFat} />
+            </div>
+            <div class="form-field">
+              <label class="field-label" for="cf-transfat">Trans Fat (g)</label>
+              <input id="cf-transfat" type="number" step="any" bind:value={fTransFat} />
+            </div>
+          </div>
           <div class="form-row">
             <div class="form-field">
               <label class="field-label" for="cf-fiber">Fiber (g)</label>
               <input id="cf-fiber" type="number" step="any" bind:value={fFiber} />
             </div>
             <div class="form-field">
-              <label class="field-label" for="cf-iron">Iron (mg)</label>
-              <input id="cf-iron" type="number" step="any" bind:value={fIron} />
+              <label class="field-label" for="cf-addsugars">Added Sugars (g)</label>
+              <input id="cf-addsugars" type="number" step="any" bind:value={fAddedSugars} />
+            </div>
+          </div>
+
+          <p class="section-label">Micronutrients</p>
+          <div class="form-row">
+            <div class="form-field">
+              <label class="field-label" for="cf-cholesterol">Cholesterol (mg)</label>
+              <input id="cf-cholesterol" type="number" step="any" bind:value={fCholesterol} />
+            </div>
+            <div class="form-field">
+              <label class="field-label" for="cf-sodium">Sodium (mg)</label>
+              <input id="cf-sodium" type="number" step="any" bind:value={fSodium} />
             </div>
           </div>
           <div class="form-row">
             <div class="form-field">
+              <label class="field-label" for="cf-iron">Iron (mg)</label>
+              <input id="cf-iron" type="number" step="any" bind:value={fIron} />
+            </div>
+            <div class="form-field">
               <label class="field-label" for="cf-calcium">Calcium (mg)</label>
               <input id="cf-calcium" type="number" step="any" bind:value={fCalcium} />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-field">
+              <label class="field-label" for="cf-magnesium">Magnesium (mg)</label>
+              <input id="cf-magnesium" type="number" step="any" bind:value={fMagnesium} />
             </div>
             <div class="form-field">
               <label class="field-label" for="cf-vita">Vitamin A</label>
@@ -336,6 +422,16 @@
           </div>
           <div class="form-row">
             <div class="form-field">
+              <label class="field-label" for="cf-vite">Vitamin E (mg)</label>
+              <input id="cf-vite" type="number" step="any" bind:value={fVitaminE} />
+            </div>
+            <div class="form-field">
+              <label class="field-label" for="cf-vitk">Vitamin K</label>
+              <input id="cf-vitk" type="number" step="any" bind:value={fVitaminK} />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-field">
               <label class="field-label" for="cf-folate">Folate</label>
               <input id="cf-folate" type="number" step="any" bind:value={fFolate} />
             </div>
@@ -343,6 +439,13 @@
               <label class="field-label" for="cf-potas">Potassium (mg)</label>
               <input id="cf-potas" type="number" step="any" bind:value={fPotassium} />
             </div>
+          </div>
+          <div class="form-row">
+            <div class="form-field">
+              <label class="field-label" for="cf-zinc">Zinc (mg)</label>
+              <input id="cf-zinc" type="number" step="any" bind:value={fZinc} />
+            </div>
+            <div class="form-field"></div>
           </div>
 
           {#if createError}
@@ -412,6 +515,18 @@
             {/if}
           </div>
         </div>
+        <div class="barcode-lookup-row">
+          <input
+            class="barcode-input"
+            type="text"
+            placeholder="Enter barcode..."
+            bind:value={manualBarcode}
+            onkeydown={(e) => { if (e.key === "Enter") handleManualBarcodeLookup() }}
+          />
+          <button class="barcode-lookup-btn" onclick={handleManualBarcodeLookup} disabled={manualLookingUp || !manualBarcode.trim()}>
+            {manualLookingUp ? "Looking up..." : "Lookup"}
+          </button>
+        </div>
         {#if barcodeError}
           <p class="barcode-error">{barcodeError}</p>
         {/if}
@@ -445,14 +560,23 @@
               fProtein = ""
               fNetCarbs = ""
               fFat = ""
+              fSaturatedFat = ""
+              fTransFat = ""
               fFiber = ""
+              fAddedSugars = ""
+              fCholesterol = ""
+              fSodium = ""
               fIron = ""
               fCalcium = ""
+              fMagnesium = ""
               fVitaminA = ""
               fVitaminC = ""
               fVitaminB12 = ""
+              fVitaminE = ""
+              fVitaminK = ""
               fFolate = ""
               fPotassium = ""
+              fZinc = ""
               createError = ""
               mode = "create"
             }}
@@ -548,6 +672,56 @@
   .scan-btn:hover {
     color: var(--ink);
     border-color: var(--border-strong);
+  }
+
+  .barcode-lookup-row {
+    display: flex;
+    gap: var(--space-2);
+    align-items: center;
+    padding: 0 var(--space-5) var(--space-2);
+  }
+
+  .barcode-input {
+    flex: 1;
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    padding: var(--space-2) 0;
+    outline: none;
+  }
+
+  .barcode-input:focus {
+    border-bottom-color: var(--border-strong);
+  }
+
+  .barcode-input::placeholder {
+    color: var(--ink-faint);
+  }
+
+  .barcode-lookup-btn {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-light);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color var(--transition-fast), border-color var(--transition-fast);
+  }
+
+  .barcode-lookup-btn:hover:not(:disabled) {
+    color: var(--ink);
+    border-color: var(--border-strong);
+  }
+
+  .barcode-lookup-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
 
   .barcode-error {

@@ -32,14 +32,24 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
   if (body.protein !== undefined) updates.protein = body.protein
   if (body.netCarbs !== undefined) updates.netCarbs = body.netCarbs
   if (body.fat !== undefined) updates.fat = body.fat
+  if (body.saturatedFat !== undefined) updates.saturatedFat = body.saturatedFat
+  if (body.transFat !== undefined) updates.transFat = body.transFat
   if (body.fiber !== undefined) updates.fiber = body.fiber
+  if (body.addedSugars !== undefined) updates.addedSugars = body.addedSugars
+  if (body.cholesterol !== undefined) updates.cholesterol = body.cholesterol
+  if (body.sodium !== undefined) updates.sodium = body.sodium
   if (body.iron !== undefined) updates.iron = body.iron
   if (body.calcium !== undefined) updates.calcium = body.calcium
+  if (body.magnesium !== undefined) updates.magnesium = body.magnesium
   if (body.vitaminA !== undefined) updates.vitaminA = body.vitaminA
   if (body.vitaminC !== undefined) updates.vitaminC = body.vitaminC
   if (body.vitaminB12 !== undefined) updates.vitaminB12 = body.vitaminB12
+  if (body.vitaminE !== undefined) updates.vitaminE = body.vitaminE
+  if (body.vitaminK !== undefined) updates.vitaminK = body.vitaminK
   if (body.folate !== undefined) updates.folate = body.folate
   if (body.potassium !== undefined) updates.potassium = body.potassium
+  if (body.zinc !== undefined) updates.zinc = body.zinc
+  if (body.debug !== undefined) updates.debug = body.debug
 
   const foodItems = await getFoodItemsCollection()
   const result = await foodItems.findOneAndUpdate(

@@ -1,5 +1,5 @@
 import { getFoodItemsCollection, serializeFoodItem } from "$lib/server/shoku"
-import { lookupBarcodeWithRaw } from "$lib/server/nutritionApi"
+import { barcodeVariants, lookupBarcodeWithRaw } from "$lib/server/nutritionApi"
 import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
 import type { RequestHandler } from "./$types"
@@ -11,7 +11,7 @@ export const GET: RequestHandler = async ({ locals, params }) => {
   const foodItems = await getFoodItemsCollection()
 
   const existing = await foodItems.findOne({
-    barcode,
+    barcode: { $in: barcodeVariants(barcode) },
     userId: new ObjectId(locals.userId),
   })
 
