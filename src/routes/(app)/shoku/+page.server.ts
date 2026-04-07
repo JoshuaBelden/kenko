@@ -1,18 +1,19 @@
 import { getFoodItemLogsCollection, getWaterLogCollection, serializeFoodItemLog } from "$lib/server/shoku"
+import { startOfDayTz, endOfDayTz, todayStr } from "$lib/server/dates"
 import { ObjectId } from "mongodb"
 import type { PageServerLoad } from "./$types"
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   if (!locals.userId) return { grouped: {}, totals: { calories: 0, protein: 0, netCarbs: 0, fat: 0 }, waterOunces: 0 }
 
-  const dateStr = url.searchParams.get("date") ?? new Date().toISOString().split("T")[0]
-  const date = new Date(dateStr + "T00:00:00.000Z")
-  const nextDate = new Date(date)
-  nextDate.setUTCDate(nextDate.getUTCDate() + 1)
+  const userTz = locals.userTimezone ?? "America/Los_Angeles"
+  const dateStr = url.searchParams.get("date") ?? todayStr(userTz)
+  const dayStart = startOfDayTz(dateStr, userTz)
+  const dayEnd = endOfDayTz(dateStr, userTz)
 
   const filter: Record<string, unknown> = {
     userId: new ObjectId(locals.userId),
-    date: { $gte: date, $lt: nextDate },
+    date: { $gte: dayStart, $lte: dayEnd },
   }
 
   const foodItemLogs = await getFoodItemLogsCollection()

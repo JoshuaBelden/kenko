@@ -26,7 +26,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 
   const libraryItems = (libraryResult.status === "fulfilled" ? libraryResult.value : []).map((doc) => ({
     ...serializeFoodItem(doc),
-    source: serializeFoodItem(doc).source ?? "library",
+    source: "library",
   }))
 
   const libraryBarcodes = new Set(libraryItems.map((item) => item.barcode).filter(Boolean))

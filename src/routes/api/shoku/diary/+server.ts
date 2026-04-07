@@ -5,6 +5,7 @@ import {
   serializeFoodItemLog,
   type DiaryUnit,
 } from "$lib/server/shoku"
+import { startOfDayTz, endOfDayTz, todayStr } from "$lib/server/dates"
 import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
 import type { RequestHandler } from "./$types"
@@ -15,16 +16,16 @@ const VALID_UNITS: DiaryUnit[] = ["g", "oz", "lb", "ml", "fl_oz", "tsp", "tbsp",
 export const GET: RequestHandler = async ({ locals, url }) => {
   if (!locals.userId) return json({ error: "Unauthorized" }, { status: 401 })
 
+  const userTz = locals.userTimezone ?? "America/Los_Angeles"
   const dateStr = url.searchParams.get("date")
   if (!dateStr) return json({ error: "date query parameter is required" }, { status: 400 })
 
-  const date = new Date(dateStr + "T00:00:00.000Z")
-  const nextDate = new Date(date)
-  nextDate.setUTCDate(nextDate.getUTCDate() + 1)
+  const dayStart = startOfDayTz(dateStr, userTz)
+  const dayEnd = endOfDayTz(dateStr, userTz)
 
   const filter: Record<string, unknown> = {
     userId: new ObjectId(locals.userId),
-    date: { $gte: date, $lt: nextDate },
+    date: { $gte: dayStart, $lte: dayEnd },
   }
 
   const foodItemLogs = await getFoodItemLogsCollection()
@@ -72,9 +73,9 @@ export const POST: RequestHandler = async ({ locals, request }) => {
   const foodItem = await foodItems.findOne({ _id: foodItemId, userId })
   if (!foodItem) return json({ error: "Food item not found" }, { status: 404 })
 
-  const date = body.date
-    ? new Date(body.date + "T00:00:00.000Z")
-    : new Date(new Date().toISOString().split("T")[0] + "T00:00:00.000Z")
+  const userTz = locals.userTimezone ?? "America/Los_Angeles"
+  const dateInput = body.date ?? todayStr(userTz)
+  const date = startOfDayTz(dateInput, userTz)
   const category = body.category && VALID_CATEGORIES.includes(body.category) ? body.category : "uncategorized"
 
   const created = await createFoodItemLog(
