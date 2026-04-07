@@ -153,6 +153,7 @@ export function serializeWorkoutLog(doc: WithId<Document>) {
       reps: s.reps ?? 0,
       rpe: s.rpe ?? null,
       isAdditional: s.isAdditional ?? false,
+      completed: s.completed ?? false,
     })),
     notes: doc.notes ?? null,
     caloriesBurned: doc.caloriesBurned ?? null,
@@ -217,6 +218,7 @@ export async function startWorkoutLog(
         reps: e.targetReps ?? 10,
         rpe: null,
         isAdditional: false,
+        completed: false,
       }))
     })
   }

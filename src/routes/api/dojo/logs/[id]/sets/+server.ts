@@ -17,6 +17,7 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
     reps: s.reps ?? 0,
     rpe: s.rpe ?? null,
     isAdditional: s.isAdditional ?? false,
+    completed: s.completed ?? false,
   }))
 
   const logs = await getWorkoutLogsCollection()

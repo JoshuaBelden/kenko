@@ -179,8 +179,20 @@
       })
   }
 
-  // RPE: show prompt for the final set of an exercise
+  // Toggle set completed state and trigger RPE/rest timer
   function completeSet(exerciseId: string, setNumber: number) {
+    const s = sets.find(s => s.exerciseId === exerciseId && s.setNumber === setNumber)
+    if (!s) return
+
+    // If already completed, toggle it off
+    if (s.completed) {
+      updateSet(exerciseId, setNumber, "completed", false)
+      return
+    }
+
+    // Mark as completed
+    updateSet(exerciseId, setNumber, "completed", true)
+
     const exSets = setsForExercise(exerciseId)
     const target = getTargetForExercise(exerciseId)
     const targetSetCount = target?.targetSets ?? exSets.length
@@ -194,6 +206,10 @@
       // Start rest timer
       startRestTimer(exerciseId)
     }
+  }
+
+  function removeExercise(exerciseId: string) {
+    sets = sets.filter(s => s.exerciseId !== exerciseId)
   }
 
   function submitRpe() {
@@ -417,9 +433,14 @@
               </div>
             {/if}
           </div>
-          {#if target}
-            <span class="target-info">{target.targetSets}x{target.targetReps}{target.targetWeight ? ` @ ${target.targetWeight}lbs` : ""}</span>
-          {/if}
+          <div class="exercise-header-actions">
+            {#if target}
+              <span class="target-info">{target.targetSets}x{target.targetReps}{target.targetWeight ? ` @ ${target.targetWeight}lbs` : ""}</span>
+            {/if}
+            {#if !isCompleted}
+              <button class="remove-exercise-btn" title="Remove exercise" onclick={() => removeExercise(exerciseId)}>&#x2715;</button>
+            {/if}
+          </div>
         </div>
 
         <!-- Sets Table -->
@@ -433,7 +454,7 @@
           </div>
 
           {#each exSets as s, sIdx}
-            <div class="set-row" class:additional={s.isAdditional}>
+            <div class="set-row" class:additional={s.isAdditional} class:completed={s.completed}>
               <span class="col-set">{s.setNumber}</span>
               <span class="col-weight">
                 {#if isCompleted}
@@ -466,7 +487,8 @@
                 {#if !isCompleted}
                   <button
                     class="check-btn"
-                    title="Complete set"
+                    class:checked={s.completed}
+                    title={s.completed ? "Mark incomplete" : "Complete set"}
                     onclick={() => completeSet(exerciseId, s.setNumber)}
                   >&#x2713;</button>
                   <button
@@ -648,6 +670,28 @@
     white-space: nowrap;
   }
 
+  .exercise-header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .remove-exercise-btn {
+    font-size: var(--text-xs);
+    padding: 2px 6px;
+    background: none;
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--ink-faint);
+    transition: all var(--transition-fast);
+  }
+
+  .remove-exercise-btn:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
   /* Sets table */
   .sets-table {
     display: flex;
@@ -680,6 +724,11 @@
     background: var(--paper-warm);
     border-radius: var(--radius-sm);
     padding: var(--space-2);
+  }
+
+  .set-row.completed {
+    border-left: 3px solid var(--accent-green);
+    padding-left: var(--space-2);
   }
 
   .col-set { width: 40px; text-align: center; }
@@ -718,6 +767,12 @@
 
   .check-btn:hover {
     color: var(--accent-green);
+    border-color: var(--accent-green);
+  }
+
+  .check-btn.checked {
+    color: white;
+    background: var(--accent-green);
     border-color: var(--accent-green);
   }
 
