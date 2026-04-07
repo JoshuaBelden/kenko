@@ -2,7 +2,7 @@ import { getJourneysCollection, getWeightLogCollection } from "$lib/server/colle
 import { getFastsCollection } from "$lib/server/danjiki"
 import { startOfDayTz, endOfDayTz, startOfWeekTz, endOfWeekTz, todayStr } from "$lib/server/dates"
 import { getWorkoutLogsCollection, getWorkoutPlansCollection, serializeWorkoutPlan } from "$lib/server/dojo"
-import { getCommitmentsCollection, calculatePeriodProgress, serializeCommitment } from "$lib/server/kata"
+import { getCommitmentsCollection, getCommitmentLogsCollection, serializeCommitment } from "$lib/server/kata"
 import { getFoodItemLogsCollection, getWaterLogCollection } from "$lib/server/shoku"
 import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
@@ -163,21 +163,30 @@ export const GET: RequestHandler = async ({ locals, params }) => {
       ? await commitments.find({ _id: { $in: commitmentIds }, userId }).toArray()
       : []
 
-    const kataData = await Promise.all(
-      selected.map(async (c) => {
-        const progress = await calculatePeriodProgress(
-          c._id,
-          userId,
-          c.period,
-          c.targetValue,
-          journey.startDate,
-        )
-        return {
-          ...serializeCommitment(c),
-          progress,
-        }
-      }),
-    )
+    const logCol = await getCommitmentLogsCollection()
+    const todayLogs = await logCol
+      .aggregate([
+        {
+          $match: {
+            commitmentId: { $in: selected.map((c) => c._id) },
+            userId,
+            date: { $gte: todayStart, $lte: todayEnd },
+          },
+        },
+        { $group: { _id: "$commitmentId", total: { $sum: "$value" } } },
+      ])
+      .toArray()
+
+    const todayTotals = new Map(todayLogs.map((r) => [r._id.toString(), r.total]))
+
+    const kataData = selected.map((c) => {
+      const current = todayTotals.get(c._id.toString()) ?? 0
+      const percentage = c.targetValue > 0 ? Math.round((current / c.targetValue) * 100) : 0
+      return {
+        ...serializeCommitment(c),
+        progress: { current, target: c.targetValue, percentage },
+      }
+    })
 
     result.kata = { commitments: kataData }
   }
