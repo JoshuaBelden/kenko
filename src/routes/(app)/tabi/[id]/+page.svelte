@@ -25,6 +25,48 @@
   // ── Progress tab: calendar state ──
   let calendarMonth = $state(new Date())
   const calendarToday = $derived(localToday(tz))
+  let calendarData = $state<Record<string, any>>({})
+  let calendarLoading = $state(false)
+  let selectedDay = $state<string | null>(null)
+
+  function calendarMonthStr() {
+    const y = calendarMonth.getFullYear()
+    const m = String(calendarMonth.getMonth() + 1).padStart(2, "0")
+    return `${y}-${m}`
+  }
+
+  let lastLoadedMonth = ""
+  $effect(() => {
+    if (activeTab === "progress" && journey) {
+      const monthKey = calendarMonthStr()
+      if (monthKey !== lastLoadedMonth) {
+        lastLoadedMonth = monthKey
+        loadCalendarData(monthKey)
+      }
+    }
+  })
+
+  async function loadCalendarData(monthStr: string) {
+    calendarLoading = true
+    try {
+      const res = await fetch(`/api/journeys/${journey.id}/calendar?month=${monthStr}`)
+      if (res.ok) {
+        const data = await res.json()
+        calendarData = data.days ?? {}
+      }
+    } catch (err) {
+      console.error("Failed to load calendar data:", err)
+    }
+    calendarLoading = false
+  }
+
+  function dayData(dateStr: string) {
+    return calendarData[dateStr] ?? null
+  }
+
+  function dayHasData(dateStr: string): boolean {
+    return !!calendarData[dateStr]
+  }
 
   const calendarRows = $derived.by(() => {
     const year = calendarMonth.getFullYear()
@@ -1291,14 +1333,87 @@
                 <div class="calendar-row" class:calendar-row-alt={row.weekIndex % 2 === 1}>
                   {#each row.days as cell}
                     {#if cell}
-                      <div class="calendar-cell" class:calendar-cell-today={cell.dateStr === calendarToday}>
+                      {@const dd = dayData(cell.dateStr)}
+                      <div
+                        class="calendar-cell"
+                        class:calendar-cell-today={cell.dateStr === calendarToday}
+                        class:calendar-cell-active={dd}
+                        onclick={() => { if (dd) selectedDay = cell.dateStr }}
+                        role={dd ? "button" : undefined}
+                        tabindex={dd ? 0 : undefined}
+                        onkeydown={(e) => { if (dd && (e.key === "Enter" || e.key === " ")) selectedDay = cell.dateStr }}
+                      >
                         <span class="calendar-day-number">{cell.day}</span>
+                        {#if dd}
+                          <div class="cal-icons">
+                            {#if dd.workouts?.some((w: any) => w.type === "strength")}
+                              <svg class="cal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6.5 6.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 1 0 0-7"/><path d="M17.5 6.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 1 0 0-7"/><rect x="9" y="9" width="6" height="2" rx="1"/><line x1="3" y1="10" x2="6.5" y2="10"/><line x1="17.5" y1="10" x2="21" y2="10"/></svg>
+                            {/if}
+                            {#if dd.workouts?.some((w: any) => w.type === "cardio")}
+                              <svg class="cal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="4" r="2"/><path d="M7 22l3-7 2.5 1V22"/><path d="M17 22l-3-7-2.5 1"/><path d="M10 11l-1 5 5.5 2"/><path d="M14 11l1 2-4 3"/></svg>
+                            {/if}
+                            {#if dd.fastCount > 0}
+                              <svg class="cal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                            {/if}
+                            {#if dd.weight}
+                              <svg class="cal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v17"/><path d="M5 8h14"/><path d="M3 21h18"/><circle cx="12" cy="3" r="1"/><path d="M5 8l-2 6a5 5 0 0 0 4 0l-2-6"/><path d="M19 8l-2 6a5 5 0 0 0 4 0l-2-6"/></svg>
+                            {/if}
+                          </div>
+                          {#if dd.workouts?.length > 0}
+                            {@const strengthVol = dd.workouts.filter((w: any) => w.type === "strength").reduce((s: number, w: any) => s + (w.totalVolume ?? 0), 0)}
+                            {@const cardioW = dd.workouts.filter((w: any) => w.type === "cardio")}
+                            {#if strengthVol > 0}
+                              <span class="cal-metric">{(strengthVol / 1000).toFixed(1)}k</span>
+                            {/if}
+                            {#if cardioW.length > 0}
+                              {@const dist = cardioW.reduce((s: number, w: any) => s + (w.cardioDistance ?? 0), 0)}
+                              {#if dist > 0}
+                                <span class="cal-metric">{dist.toFixed(1)} mi</span>
+                              {/if}
+                            {/if}
+                          {/if}
+                          {#if dd.dayRating}
+                            <div class="cal-dots">
+                              {#each Array(5) as _, i}
+                                <span class="cal-dot" class:cal-dot-filled={i < dd.dayRating}></span>
+                              {/each}
+                            </div>
+                          {/if}
+                          {#if dd.commitmentsTotal > 0}
+                            <span class="cal-micro">{dd.commitmentsMet}/{dd.commitmentsTotal}</span>
+                          {/if}
+                          {#if dd.weight}
+                            <span class="cal-micro">{dd.weight} lbs</span>
+                          {/if}
+                          {#if dd.netCalories != null}
+                            <span class="cal-micro" class:cal-deficit={dd.netCalories < 0} class:cal-surplus={dd.netCalories > 0}>
+                              {dd.netCalories > 0 ? "+" : ""}{dd.netCalories} cal
+                            </span>
+                          {/if}
+                        {/if}
                       </div>
                     {:else}
                       <div class="calendar-cell calendar-cell-empty"></div>
                     {/if}
                   {/each}
-                  <div class="calendar-cell calendar-cell-summary"></div>
+                  <div class="calendar-cell calendar-cell-summary">
+                    {#if row.days.filter(Boolean).some((c) => calendarData[c!.dateStr])}
+                      {@const weekDays = row.days.filter(Boolean).map((c) => calendarData[c!.dateStr]).filter(Boolean)}
+                      {@const weekWorkouts = weekDays.reduce((s: number, d: any) => s + (d.workouts?.length ?? 0), 0)}
+                      {@const weekVolume = weekDays.reduce((s: number, d: any) => s + (d.workouts ?? []).reduce((v: number, w: any) => v + (w.totalVolume ?? 0), 0), 0)}
+                      {@const ratedDays = weekDays.filter((d: any) => d.dayRating != null)}
+                      {@const avgRating = ratedDays.length > 0 ? Math.round(ratedDays.reduce((s: number, d: any) => s + d.dayRating, 0) / ratedDays.length * 10) / 10 : null}
+                      {#if weekWorkouts > 0}
+                        <span class="cal-micro">{weekWorkouts} wkt{weekWorkouts !== 1 ? "s" : ""}</span>
+                      {/if}
+                      {#if weekVolume > 0}
+                        <span class="cal-micro">{(weekVolume / 1000).toFixed(1)}k lbs</span>
+                      {/if}
+                      {#if avgRating != null}
+                        <span class="cal-micro">Avg {avgRating}</span>
+                      {/if}
+                    {/if}
+                  </div>
                 </div>
               {/each}
             </div>
@@ -1388,6 +1503,127 @@
         {/if}
       </div>
     </div>
+
+    <!-- Day Detail Modal -->
+    {#if selectedDay && dayData(selectedDay)}
+      {@const sd = dayData(selectedDay)}
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_interactive_supports_focus -->
+      <div class="day-modal-overlay" onclick={() => (selectedDay = null)} role="dialog" aria-modal="true">
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="day-modal" onclick={(e) => e.stopPropagation()}>
+          <div class="day-modal-header">
+            <span class="day-modal-date">
+              {new Date(selectedDay + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+            </span>
+            <button class="day-modal-close" onclick={() => (selectedDay = null)}>&times;</button>
+          </div>
+
+          <!-- Nutrition -->
+          {#if sd.caloriesConsumed > 0 || sd.caloriesBurned > 0}
+            <div class="day-section">
+              <span class="day-section-title">Nutrition</span>
+              <div class="day-section-content">
+                {#if sd.caloriesConsumed > 0}
+                  <span>{sd.caloriesConsumed} cal consumed</span>
+                {/if}
+                {#if sd.caloriesBurned > 0}
+                  <span>{sd.caloriesBurned} cal burned</span>
+                {/if}
+                {#if sd.netCalories != null}
+                  <span class:cal-deficit={sd.netCalories < 0} class:cal-surplus={sd.netCalories > 0}>
+                    Net: {sd.netCalories > 0 ? "+" : ""}{sd.netCalories} cal
+                  </span>
+                {/if}
+              </div>
+            </div>
+          {/if}
+
+          <!-- Workouts -->
+          {#if sd.workouts?.length > 0}
+            <div class="day-section">
+              <span class="day-section-title">Workouts</span>
+              <div class="day-section-content">
+                {#each sd.workouts as w}
+                  <a href="/dojo/session/{w.logId}" class="day-workout-row">
+                    <span class="day-workout-name">{w.sessionName}</span>
+                    {#if w.type === "strength" && w.totalVolume > 0}
+                      <span class="day-workout-stat">{w.totalVolume.toLocaleString()} lbs</span>
+                    {/if}
+                    {#if w.type === "cardio" && w.cardioDistance}
+                      <span class="day-workout-stat">{w.cardioDistance} mi</span>
+                    {/if}
+                    {#if w.caloriesBurned}
+                      <span class="day-workout-stat">{w.caloriesBurned} cal</span>
+                    {/if}
+                    {#if w.hasPRs}
+                      <span class="day-pr-badge">PR</span>
+                    {/if}
+                  </a>
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          <!-- Fast -->
+          {#if sd.fastCount > 0}
+            <div class="day-section">
+              <span class="day-section-title">Fasting</span>
+              <div class="day-section-content">
+                <span>{sd.fastCount} fast{sd.fastCount !== 1 ? "s" : ""} — {Math.round(sd.fastHours * 10) / 10} hours</span>
+              </div>
+            </div>
+          {/if}
+
+          <!-- Commitments -->
+          {#if sd.commitmentsTotal > 0}
+            <div class="day-section">
+              <span class="day-section-title">Commitments</span>
+              <div class="day-section-content">
+                <span>{sd.commitmentsMet} of {sd.commitmentsTotal} met</span>
+              </div>
+            </div>
+          {/if}
+
+          <!-- Journal -->
+          {#if sd.dayRating != null || sd.mood != null || sd.energy != null}
+            <div class="day-section">
+              <span class="day-section-title">Journal</span>
+              <div class="day-section-content">
+                {#if sd.dayRating != null}
+                  <div class="day-rating-row">
+                    <span class="day-rating-label">Day</span>
+                    <DotRating value={sd.dayRating} disabled />
+                  </div>
+                {/if}
+                {#if sd.mood != null}
+                  <div class="day-rating-row">
+                    <span class="day-rating-label">Mood</span>
+                    <StarRating value={sd.mood} disabled />
+                  </div>
+                {/if}
+                {#if sd.energy != null}
+                  <div class="day-rating-row">
+                    <span class="day-rating-label">Energy</span>
+                    <StarRating value={sd.energy} disabled />
+                  </div>
+                {/if}
+              </div>
+            </div>
+          {/if}
+
+          <!-- Weight -->
+          {#if sd.weight}
+            <div class="day-section">
+              <span class="day-section-title">Weight</span>
+              <div class="day-section-content">
+                <span>{sd.weight} lbs</span>
+              </div>
+            </div>
+          {/if}
+        </div>
+      </div>
+    {/if}
   {/if}
 {/if}
 
@@ -2180,11 +2416,23 @@
   .calendar-cell {
     aspect-ratio: 1;
     display: flex;
+    flex-direction: column;
     align-items: flex-start;
     justify-content: flex-start;
     padding: var(--space-1);
     border: 1px solid var(--border);
     transition: background var(--transition-fast);
+    overflow: hidden;
+    gap: 1px;
+    min-height: 0;
+  }
+
+  .calendar-cell-active {
+    cursor: pointer;
+  }
+
+  .calendar-cell-active:hover {
+    background: var(--paper-warm);
   }
 
   .calendar-cell-today {
@@ -2194,12 +2442,200 @@
 
   .calendar-cell-summary {
     border-left: 2px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    justify-content: center;
+    padding: var(--space-1);
   }
 
   .calendar-day-number {
     font-family: var(--font-body);
     font-size: var(--text-sm);
     color: var(--ink);
+    line-height: 1;
+  }
+
+  .cal-icons {
+    display: flex;
+    gap: 2px;
+    flex-wrap: wrap;
+  }
+
+  .cal-icon {
+    width: 12px;
+    height: 12px;
+    color: var(--accent-green);
+    flex-shrink: 0;
+  }
+
+  .cal-metric {
+    font-family: var(--font-body);
+    font-size: 9px;
+    color: var(--ink-light);
+    line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  .cal-dots {
+    display: flex;
+    gap: 2px;
+  }
+
+  .cal-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--border);
+  }
+
+  .cal-dot-filled {
+    background: var(--accent-green);
+  }
+
+  .cal-micro {
+    font-family: var(--font-body);
+    font-size: 8px;
+    color: var(--ink-faint);
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  .cal-deficit {
+    color: var(--accent-green);
+  }
+
+  .cal-surplus {
+    color: var(--accent);
+  }
+
+  /* ── Day Detail Modal ── */
+  .day-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+
+  .day-modal {
+    background: var(--paper-card);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--space-6);
+    max-width: 480px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .day-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .day-modal-date {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  .day-modal-close {
+    background: none;
+    border: none;
+    font-size: var(--text-lg);
+    color: var(--ink-faint);
+    cursor: pointer;
+    padding: var(--space-1);
+  }
+
+  .day-modal-close:hover {
+    color: var(--ink);
+  }
+
+  .day-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .day-section-title {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--ink-faint);
+  }
+
+  .day-section-content {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .day-workout-row {
+    display: flex;
+    gap: var(--space-3);
+    align-items: baseline;
+    text-decoration: none;
+    color: var(--ink);
+    transition: opacity var(--transition-fast);
+  }
+
+  .day-workout-row:hover {
+    opacity: 0.7;
+  }
+
+  .day-workout-name {
+    font-weight: 500;
+    flex: 1;
+  }
+
+  .day-workout-stat {
+    color: var(--ink-light);
+    font-size: var(--text-xs);
+  }
+
+  .day-pr-badge {
+    font-size: 9px;
+    font-weight: 600;
+    padding: 1px 4px;
+    border-radius: var(--radius-pill);
+    background: var(--accent-green);
+    color: white;
+    text-transform: uppercase;
+  }
+
+  .day-rating-row {
+    display: flex;
+    gap: var(--space-3);
+    align-items: center;
+  }
+
+  .day-rating-label {
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+    min-width: 50px;
   }
 
   /* ── Journal ── */

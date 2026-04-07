@@ -1,4 +1,4 @@
-import { getWorkoutLogsCollection, serializeWorkoutLog } from "$lib/server/dojo"
+import { getWorkoutLogsCollection, serializeWorkoutLog, calculateAndStorePerformance } from "$lib/server/dojo"
 import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
 import type { RequestHandler } from "./$types"
@@ -56,5 +56,14 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
   )
 
   if (!result) return json({ error: "Log not found or already completed" }, { status: 404 })
+
+  // Calculate and store performance data (volume, e1RM, personal bests)
+  if (result.planSnapshot?.sessionType === "strength") {
+    await calculateAndStorePerformance(result, new ObjectId(locals.userId))
+    // Re-fetch to get the performance field
+    const updated = await logs.findOne({ _id: result._id })
+    if (updated) return json(serializeWorkoutLog(updated))
+  }
+
   return json(serializeWorkoutLog(result))
 }

@@ -26,6 +26,7 @@
   let cardioDistance = $state<number | null>(log?.cardioDistance ?? null)
   let saving = false
   let completing = $state(false)
+  let recalculating = $state(false)
 
   // Editable dates for completed sessions
   let editingDates = $state(false)
@@ -317,6 +318,29 @@
     addExerciseOpen = false
   }
 
+  async function handleRecalculate() {
+    recalculating = true
+    try {
+      const res = await fetch(`/api/dojo/logs/${log.id}/recalculate`, { method: "POST" })
+      if (res.ok) {
+        log = await res.json()
+      }
+    } catch (err) {
+      console.error("Failed to recalculate:", err)
+    }
+    recalculating = false
+  }
+
+  function exercisePerf(exerciseId: string) {
+    return (log?.performance?.exercisePerformance ?? []).find(
+      (ep: any) => ep.exerciseId === exerciseId,
+    )
+  }
+
+  function formatVolume(v: number): string {
+    return v.toLocaleString() + " lbs"
+  }
+
   function muscleLabel(muscle: string): string {
     return muscle?.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) ?? ""
   }
@@ -341,6 +365,55 @@
 
   {#if isCompleted}
     <div class="completed-banner">Session completed</div>
+
+    {#if log.performance}
+      <div class="perf-card-wrap">
+      <Card>
+        <div class="perf-summary">
+          <div class="perf-stats">
+            {#if log.performance.totalVolume > 0}
+              <div class="perf-stat">
+                <span class="perf-stat-value">{formatVolume(log.performance.totalVolume)}</span>
+                <span class="perf-stat-label">Total Volume</span>
+              </div>
+            {/if}
+            <div class="perf-stat">
+              <span class="perf-stat-value">{log.performance.totalReps.toLocaleString()}</span>
+              <span class="perf-stat-label">Total Reps</span>
+            </div>
+            {#if log.caloriesBurned}
+              <div class="perf-stat">
+                <span class="perf-stat-value">{log.caloriesBurned}</span>
+                <span class="perf-stat-label">Calories Burned</span>
+              </div>
+            {/if}
+          </div>
+          {#if log.performance.exercisePerformance.some((ep: any) => (ep.personalBests ?? []).length > 0)}
+            <div class="perf-prs">
+              <span class="perf-pr-title">Personal Records</span>
+              {#each log.performance.exercisePerformance.filter((ep: any) => (ep.personalBests ?? []).length > 0) as ep}
+                <div class="perf-pr-row">
+                  <span class="perf-pr-name">{ep.exerciseName}</span>
+                  <div class="perf-pr-tags">
+                    {#each ep.personalBests as pb}
+                      <span class="perf-pr-tag">
+                        {pb === "best_set_volume" ? "Best Volume" : pb === "best_e1rm" ? "Best 1RM" : pb === "most_reps" ? "Most Reps" : pb === "heaviest_weight" ? "Heaviest Weight" : pb}
+                      </span>
+                    {/each}
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+          <div class="perf-actions">
+            <button class="recalc-btn" onclick={handleRecalculate} disabled={recalculating}>
+              {recalculating ? "Recalculating..." : "Recalculate"}
+            </button>
+          </div>
+        </div>
+      </Card>
+      </div>
+    {/if}
 
     {#if editingDates}
       <div class="date-editor-wrapper">
@@ -421,15 +494,32 @@
     {@const target = getTargetForExercise(exerciseId)}
     {@const exSets = setsForExercise(exerciseId)}
     {@const meta = exerciseMeta(exerciseId)}
+    {@const perf = exercisePerf(exerciseId)}
     <Card>
       <div class="exercise-block">
         <div class="exercise-header">
           <div class="exercise-title">
-            <h3 class="exercise-name">{exerciseName(exerciseId)}</h3>
+            <div class="exercise-name-row">
+              <h3 class="exercise-name">{exerciseName(exerciseId)}</h3>
+              {#if isCompleted && perf && (perf.personalBests ?? []).length > 0}
+                <span class="pr-badge">PR</span>
+              {/if}
+            </div>
             {#if meta}
               <div class="exercise-badges">
                 <span class="badge">{muscleLabel(meta.muscleGroup?.muscle)}</span>
                 <span class="badge eq">{equipmentLabel(meta.equipment)}</span>
+              </div>
+            {/if}
+            {#if isCompleted && perf}
+              <div class="exercise-perf-row">
+                {#if !perf.isBodyweight && perf.totalVolume > 0}
+                  <span class="exercise-perf-item">{formatVolume(perf.totalVolume)}</span>
+                {/if}
+                {#if perf.e1RM}
+                  <span class="exercise-perf-item">Est. 1RM: {perf.e1RM} lbs</span>
+                {/if}
+                <span class="exercise-perf-item">{perf.totalReps} reps</span>
               </div>
             {/if}
           </div>
@@ -535,6 +625,7 @@
 
   <!-- Cardio Distance -->
   {#if isCardio}
+    <div class="cardio-distance-wrap">
     {#if !isCompleted}
       <Card>
         <div class="form-field">
@@ -550,6 +641,7 @@
         </div>
       </Card>
     {/if}
+    </div>
   {/if}
 
   <!-- Notes & Complete -->
@@ -616,6 +708,148 @@
     color: white;
     border-radius: var(--radius-sm);
     margin-bottom: var(--space-4);
+  }
+
+  .perf-card-wrap,
+  .cardio-distance-wrap {
+    margin-bottom: var(--space-4);
+  }
+
+  .perf-summary {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .perf-stats {
+    display: flex;
+    gap: var(--space-6);
+    flex-wrap: wrap;
+  }
+
+  .perf-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .perf-stat-value {
+    font-family: var(--font-display);
+    font-size: var(--text-xl);
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  .perf-stat-label {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--ink-faint);
+  }
+
+  .perf-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .recalc-btn {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    padding: var(--space-1) var(--space-3);
+    background: none;
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-pill);
+    color: var(--ink-light);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .recalc-btn:hover {
+    border-color: var(--border-strong);
+    color: var(--ink);
+  }
+
+  .recalc-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .perf-prs {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding-top: var(--space-3);
+    border-top: 0.5px solid var(--border);
+  }
+
+  .perf-pr-title {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--ink-faint);
+  }
+
+  .perf-pr-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .perf-pr-name {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  .perf-pr-tags {
+    display: flex;
+    gap: var(--space-1);
+    flex-wrap: wrap;
+  }
+
+  .perf-pr-tag {
+    font-family: var(--font-body);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: var(--radius-pill);
+    background: var(--accent-green);
+    color: white;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .exercise-name-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .pr-badge {
+    font-family: var(--font-body);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: var(--radius-pill);
+    background: var(--accent-green);
+    color: white;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  .exercise-perf-row {
+    display: flex;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+
+  .exercise-perf-item {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink-light);
   }
 
   .exercise-block {

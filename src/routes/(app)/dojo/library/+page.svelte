@@ -17,6 +17,9 @@
   let editingId = $state<string | null>(null)
   let deletingId = $state<string | null>(null)
   let formError = $state("")
+  let expandedId = $state<string | null>(null)
+  let perfData = $state<any>(null)
+  let perfLoading = $state(false)
 
   // Form fields
   let fName = $state("")
@@ -179,6 +182,28 @@
     await invalidateAll()
   }
 
+  async function toggleExpand(id: string) {
+    if (expandedId === id) {
+      expandedId = null
+      perfData = null
+      return
+    }
+    expandedId = id
+    perfData = null
+    perfLoading = true
+    try {
+      const res = await fetch(`/api/dojo/exercises/${id}/performance`)
+      if (res.ok) perfData = await res.json()
+    } catch (err) {
+      console.error("Failed to load performance:", err)
+    }
+    perfLoading = false
+  }
+
+  function formatPBDate(iso: string): string {
+    return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  }
+
   async function handleDelete(id: string) {
     const res = await fetch(`/api/dojo/exercises/${id}`, { method: "DELETE" })
     if (res.status === 409) {
@@ -291,7 +316,10 @@
         <Card>
           <div class="exercise-item">
             <div class="exercise-info">
-              <span class="exercise-name">{exercise.name}</span>
+              <button class="exercise-name-btn" onclick={() => toggleExpand(exercise.id)}>
+                <span class="exercise-name">{exercise.name}</span>
+                <span class="expand-arrow">{expandedId === exercise.id ? "▾" : "▸"}</span>
+              </button>
               <div class="exercise-meta">
                 <span class="badge muscle">{muscleLabel(exercise.muscleGroup.muscle)}</span>
                 <span class="badge equipment">{equipmentLabel(exercise.equipment)}</span>
@@ -311,6 +339,77 @@
               {/if}
             </div>
           </div>
+
+          {#if expandedId === exercise.id}
+            <div class="exercise-detail">
+              {#if perfLoading}
+                <p class="detail-loading">Loading...</p>
+              {:else if perfData}
+                {@const pbs = perfData.exercise.personalBests}
+                {@const isBodyweight = exercise.equipment === "bodyweight"}
+                {#if pbs}
+                  <div class="pb-section">
+                    <h4 class="pb-title">Personal Bests</h4>
+                    <div class="pb-grid">
+                      {#if !isBodyweight && pbs.bestSetVolume}
+                        <div class="pb-card">
+                          <span class="pb-value">{pbs.bestSetVolume.value.toLocaleString()} lbs</span>
+                          <span class="pb-label">Best Set Volume</span>
+                          <a href="/dojo/session/{pbs.bestSetVolume.workoutLogId}" class="pb-date">{formatPBDate(pbs.bestSetVolume.achievedAt)}</a>
+                        </div>
+                      {/if}
+                      {#if !isBodyweight && pbs.bestE1RM}
+                        <div class="pb-card">
+                          <span class="pb-value">{pbs.bestE1RM.value} lbs</span>
+                          <span class="pb-label">Est. 1RM</span>
+                          <a href="/dojo/session/{pbs.bestE1RM.workoutLogId}" class="pb-date">{formatPBDate(pbs.bestE1RM.achievedAt)}</a>
+                        </div>
+                      {/if}
+                      {#if pbs.mostReps}
+                        <div class="pb-card">
+                          <span class="pb-value">{pbs.mostReps.value}</span>
+                          <span class="pb-label">Most Reps</span>
+                          <a href="/dojo/session/{pbs.mostReps.workoutLogId}" class="pb-date">{formatPBDate(pbs.mostReps.achievedAt)}</a>
+                        </div>
+                      {/if}
+                      {#if !isBodyweight && pbs.heaviestWeight}
+                        <div class="pb-card">
+                          <span class="pb-value">{pbs.heaviestWeight.value} lbs</span>
+                          <span class="pb-label">Heaviest Weight</span>
+                          <a href="/dojo/session/{pbs.heaviestWeight.workoutLogId}" class="pb-date">{formatPBDate(pbs.heaviestWeight.achievedAt)}</a>
+                        </div>
+                      {/if}
+                    </div>
+                  </div>
+                {:else}
+                  <p class="detail-empty">No personal bests recorded yet.</p>
+                {/if}
+
+                {#if perfData.history.length > 0}
+                  <div class="history-section">
+                    <h4 class="pb-title">Recent Sessions</h4>
+                    <div class="history-list">
+                      {#each perfData.history.slice(0, 10) as entry}
+                        <a href="/dojo/session/{entry.logId}" class="history-row">
+                          <span class="history-date">{formatPBDate(entry.date)}</span>
+                          <span class="history-session">{entry.sessionName}</span>
+                          {#if !isBodyweight && entry.totalVolume > 0}
+                            <span class="history-stat">{entry.totalVolume.toLocaleString()} lbs</span>
+                          {/if}
+                          {#if entry.e1RM}
+                            <span class="history-stat">1RM: {entry.e1RM}</span>
+                          {/if}
+                          <span class="history-stat">{entry.totalReps} reps</span>
+                        </a>
+                      {/each}
+                    </div>
+                  </div>
+                {/if}
+              {:else}
+                <p class="detail-empty">No performance data available.</p>
+              {/if}
+            </div>
+          {/if}
         </Card>
       {/each}
     </div>
@@ -567,5 +666,131 @@
     color: var(--ink-faint);
     font-family: var(--font-body);
     font-size: var(--text-sm);
+  }
+
+  .exercise-name-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: inherit;
+  }
+
+  .expand-arrow {
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+  }
+
+  .exercise-detail {
+    margin-top: var(--space-4);
+    padding-top: var(--space-4);
+    border-top: 0.5px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .detail-loading, .detail-empty {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-faint);
+  }
+
+  .pb-section, .history-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .pb-title {
+    font-family: var(--font-display);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--ink-light);
+  }
+
+  .pb-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: var(--space-3);
+  }
+
+  .pb-card {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--space-3);
+    background: var(--paper-warm);
+    border-radius: var(--radius-sm);
+  }
+
+  .pb-value {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  .pb-label {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-faint);
+  }
+
+  .pb-date {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--accent-green);
+    text-decoration: none;
+  }
+
+  .pb-date:hover {
+    text-decoration: underline;
+  }
+
+  .history-list {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .history-row {
+    display: flex;
+    gap: var(--space-3);
+    padding: var(--space-2) 0;
+    border-bottom: 0.5px solid var(--border);
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink);
+    text-decoration: none;
+    transition: opacity var(--transition-fast);
+  }
+
+  .history-row:hover {
+    opacity: 0.7;
+  }
+
+  .history-date {
+    color: var(--ink-faint);
+    min-width: 80px;
+  }
+
+  .history-session {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .history-stat {
+    color: var(--ink-light);
+    white-space: nowrap;
   }
 </style>

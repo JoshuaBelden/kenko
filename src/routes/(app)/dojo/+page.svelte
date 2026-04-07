@@ -146,11 +146,17 @@
               {:else}
                 <span class="log-sets">{log.sets.length} sets</span>
               {/if}
+              {#if log.performance?.totalVolume}
+                <span class="log-sets">{log.performance.totalVolume.toLocaleString()} lbs</span>
+              {/if}
               {#if log.cardioDistance}
                 <span class="log-sets">{log.cardioDistance} mi</span>
               {/if}
               {#if log.caloriesBurned}
                 <span class="log-sets">{log.caloriesBurned} cal</span>
+              {/if}
+              {#if log.performance?.exercisePerformance?.some((ep: any) => (ep.personalBests ?? []).length > 0)}
+                <span class="log-pr-badge">PR</span>
               {/if}
             </div>
           </a>
@@ -247,6 +253,18 @@
     font-family: var(--font-body);
     font-size: var(--text-xs);
     color: var(--ink-faint);
+  }
+
+  .log-pr-badge {
+    font-family: var(--font-body);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: var(--radius-pill);
+    background: var(--accent-green);
+    color: white;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
   }
 
   .log-actions {
