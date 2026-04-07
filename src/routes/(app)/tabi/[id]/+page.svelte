@@ -28,6 +28,7 @@
   let calendarData = $state<Record<string, any>>({})
   let calendarLoading = $state(false)
   let selectedDay = $state<string | null>(null)
+  let progressSidebarOpen = $state(false)
 
   function calendarMonthStr() {
     const y = calendarMonth.getFullYear()
@@ -1312,8 +1313,8 @@
 
   <!-- ════════════ PROGRESS TAB ════════════ -->
   {:else if activeTab === "progress"}
-    <div class="progress-layout">
-      <!-- Left: Calendar (2/3) -->
+    <div class="progress-layout" class:progress-sidebar-collapsed={!progressSidebarOpen}>
+      <!-- Left: Calendar -->
       <div class="progress-main">
         <Card>
           <div class="calendar-widget">
@@ -1343,54 +1344,62 @@
                         tabindex={dd ? 0 : undefined}
                         onkeydown={(e) => { if (dd && (e.key === "Enter" || e.key === " ")) selectedDay = cell.dateStr }}
                       >
+                        <!-- Top-left: day number -->
                         <span class="calendar-day-number">{cell.day}</span>
-                        {#if dd}
-                          <div class="cal-icons">
-                            {#if dd.workouts?.some((w: any) => w.type === "strength")}
-                              <svg class="cal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6.5 6.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 1 0 0-7"/><path d="M17.5 6.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 1 0 0-7"/><rect x="9" y="9" width="6" height="2" rx="1"/><line x1="3" y1="10" x2="6.5" y2="10"/><line x1="17.5" y1="10" x2="21" y2="10"/></svg>
-                            {/if}
-                            {#if dd.workouts?.some((w: any) => w.type === "cardio")}
-                              <svg class="cal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="4" r="2"/><path d="M7 22l3-7 2.5 1V22"/><path d="M17 22l-3-7-2.5 1"/><path d="M10 11l-1 5 5.5 2"/><path d="M14 11l1 2-4 3"/></svg>
-                            {/if}
-                            {#if dd.fastCount > 0}
-                              <svg class="cal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                            {/if}
-                            {#if dd.weight}
-                              <svg class="cal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v17"/><path d="M5 8h14"/><path d="M3 21h18"/><circle cx="12" cy="3" r="1"/><path d="M5 8l-2 6a5 5 0 0 0 4 0l-2-6"/><path d="M19 8l-2 6a5 5 0 0 0 4 0l-2-6"/></svg>
-                            {/if}
-                          </div>
-                          {#if dd.workouts?.length > 0}
-                            {@const strengthVol = dd.workouts.filter((w: any) => w.type === "strength").reduce((s: number, w: any) => s + (w.totalVolume ?? 0), 0)}
-                            {@const cardioW = dd.workouts.filter((w: any) => w.type === "cardio")}
-                            {#if strengthVol > 0}
-                              <span class="cal-metric">{(strengthVol / 1000).toFixed(1)}k</span>
-                            {/if}
-                            {#if cardioW.length > 0}
-                              {@const dist = cardioW.reduce((s: number, w: any) => s + (w.cardioDistance ?? 0), 0)}
-                              {#if dist > 0}
-                                <span class="cal-metric">{dist.toFixed(1)} mi</span>
-                              {/if}
-                            {/if}
-                          {/if}
-                          {#if dd.dayRating}
+                        <!-- Top-right: day rating -->
+                        <div class="cal-rating">
+                          {#if dd?.dayRating}
                             <div class="cal-dots">
                               {#each Array(5) as _, i}
                                 <span class="cal-dot" class:cal-dot-filled={i < dd.dayRating}></span>
                               {/each}
                             </div>
                           {/if}
-                          {#if dd.commitmentsTotal > 0}
-                            <span class="cal-micro">{dd.commitmentsMet}/{dd.commitmentsTotal}</span>
+                        </div>
+                        <!-- Bottom-left: stats -->
+                        <div class="cal-stats">
+                          {#if dd}
+                            {#if dd.workouts?.length > 0}
+                              {@const strengthVol = dd.workouts.filter((w: any) => w.type === "strength").reduce((s: number, w: any) => s + (w.totalVolume ?? 0), 0)}
+                              {@const cardioW = dd.workouts.filter((w: any) => w.type === "cardio")}
+                              {#if strengthVol > 0}
+                                <div class="cal-stat-row">
+                                  <svg class="cal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6.5 6.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 1 0 0-7"/><path d="M17.5 6.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 1 0 0-7"/><rect x="9" y="9" width="6" height="2" rx="1"/><line x1="3" y1="10" x2="6.5" y2="10"/><line x1="17.5" y1="10" x2="21" y2="10"/></svg>
+                                  <span class="cal-micro">{(strengthVol / 1000).toFixed(1)}k lbs</span>
+                                </div>
+                              {/if}
+                              {#if cardioW.length > 0}
+                                {@const dist = cardioW.reduce((s: number, w: any) => s + (w.cardioDistance ?? 0), 0)}
+                                {#if dist > 0}
+                                  <div class="cal-stat-row">
+                                    <svg class="cal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="4" r="2"/><path d="M7 22l3-7 2.5 1V22"/><path d="M17 22l-3-7-2.5 1"/><path d="M10 11l-1 5 5.5 2"/><path d="M14 11l1 2-4 3"/></svg>
+                                    <span class="cal-micro">{dist.toFixed(1)} mi</span>
+                                  </div>
+                                {/if}
+                              {/if}
+                            {/if}
+                            {#if dd.fastCount > 0}
+                              <div class="cal-stat-row">
+                                <svg class="cal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                                <span class="cal-micro">{dd.fastHours ? `${Math.round(dd.fastHours * 10) / 10}h` : ""}</span>
+                              </div>
+                            {/if}
+                            {#if dd.weight}
+                              <div class="cal-stat-row">
+                                <svg class="cal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v17"/><path d="M5 8h14"/><path d="M3 21h18"/><circle cx="12" cy="3" r="1"/><path d="M5 8l-2 6a5 5 0 0 0 4 0l-2-6"/><path d="M19 8l-2 6a5 5 0 0 0 4 0l-2-6"/></svg>
+                                <span class="cal-micro">{dd.weight} lbs</span>
+                              </div>
+                            {/if}
                           {/if}
-                          {#if dd.weight}
-                            <span class="cal-micro">{dd.weight} lbs</span>
-                          {/if}
-                          {#if dd.netCalories != null}
-                            <span class="cal-micro" class:cal-deficit={dd.netCalories < 0} class:cal-surplus={dd.netCalories > 0}>
+                        </div>
+                        <!-- Bottom-right: net calories -->
+                        <div class="cal-net">
+                          {#if dd?.netCalories != null && cell.dateStr !== calendarToday}
+                            <span class="cal-net-calories" class:cal-deficit={dd.netCalories < 0} class:cal-surplus={dd.netCalories > 0}>
                               {dd.netCalories > 0 ? "+" : ""}{dd.netCalories} cal
                             </span>
                           {/if}
-                        {/if}
+                        </div>
                       </div>
                     {:else}
                       <div class="calendar-cell calendar-cell-empty"></div>
@@ -1421,8 +1430,18 @@
         </Card>
       </div>
 
-      <!-- Right: Widgets (1/3) -->
+      <!-- Right: Widgets -->
       <div class="progress-sidebar">
+        <button class="sidebar-toggle" onclick={() => (progressSidebarOpen = !progressSidebarOpen)} aria-label={progressSidebarOpen ? "Collapse widgets" : "Expand widgets"}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            {#if progressSidebarOpen}
+              <polyline points="9 18 15 12 9 6" />
+            {:else}
+              <polyline points="15 18 9 12 15 6" />
+            {/if}
+          </svg>
+        </button>
+        {#if progressSidebarOpen}
         {#if progressWeightChart}
           {@const wc = progressWeightChart}
           {@const cW = 600}
@@ -1500,6 +1519,7 @@
               </svg>
             </div>
           </Card>
+        {/if}
         {/if}
       </div>
     </div>
@@ -2353,8 +2373,12 @@
   @media (min-width: 768px) {
     .progress-layout {
       display: grid;
-      grid-template-columns: 2fr 1fr;
+      grid-template-columns: 1fr auto;
       gap: var(--space-6);
+    }
+
+    .progress-layout:not(.progress-sidebar-collapsed) {
+      grid-template-columns: 2fr 1fr;
     }
   }
 
@@ -2366,6 +2390,27 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
+  }
+
+  .sidebar-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    align-self: flex-end;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--paper);
+    color: var(--ink-light);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .sidebar-toggle:hover {
+    color: var(--ink);
+    background: var(--paper-warm);
   }
 
   /* ── Calendar ── */
@@ -2415,15 +2460,13 @@
 
   .calendar-cell {
     aspect-ratio: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    justify-content: flex-start;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto 1fr;
     padding: var(--space-1);
     border: 1px solid var(--border);
     transition: background var(--transition-fast);
     overflow: hidden;
-    gap: 1px;
     min-height: 0;
   }
 
@@ -2456,33 +2499,40 @@
     line-height: 1;
   }
 
-  .cal-icons {
+  .cal-rating {
+    justify-self: end;
+    align-self: start;
+  }
+
+  .cal-stats {
     display: flex;
+    flex-direction: column;
+    gap: 1px;
+    align-self: end;
+  }
+
+  .cal-net {
+    align-self: end;
+    justify-self: end;
+  }
+
+  .cal-stat-row {
+    display: flex;
+    align-items: center;
     gap: 2px;
-    flex-wrap: wrap;
   }
 
   .cal-icon {
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
     color: var(--accent-green);
     flex-shrink: 0;
-  }
-
-  .cal-metric {
-    font-family: var(--font-body);
-    font-size: 9px;
-    color: var(--ink-light);
-    line-height: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100%;
   }
 
   .cal-dots {
     display: flex;
     gap: 2px;
+    margin-left: auto;
   }
 
   .cal-dot {
@@ -2498,13 +2548,20 @@
 
   .cal-micro {
     font-family: var(--font-body);
-    font-size: 8px;
-    color: var(--ink-faint);
-    line-height: 1.1;
+    font-size: 11px;
+    color: var(--ink-light);
+    line-height: 1.2;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 100%;
+  }
+
+  .cal-net-calories {
+    font-family: var(--font-body);
+    font-size: 11px;
+    line-height: 1.2;
+    white-space: nowrap;
   }
 
   .cal-deficit {
