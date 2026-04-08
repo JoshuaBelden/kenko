@@ -467,6 +467,18 @@
     }
   })
 
+  function weatherIcon(code: number): string {
+    if (code === 0) return "\u2600\uFE0F"
+    if (code <= 3) return "\u26C5"
+    if (code <= 48) return "\uD83C\uDF2B\uFE0F"
+    if (code <= 57) return "\uD83C\uDF27\uFE0F"
+    if (code <= 67) return "\uD83C\uDF27\uFE0F"
+    if (code <= 77) return "\u2744\uFE0F"
+    if (code <= 82) return "\uD83C\uDF26\uFE0F"
+    if (code <= 86) return "\uD83C\uDF28\uFE0F"
+    return "\u26C8\uFE0F"
+  }
+
   // ── Journal state ──
   let journalDate = $state("")
   let journalEntry = $state<any>(null)
@@ -1185,6 +1197,17 @@
           </div>
         </Card>
       {:else}
+        {#if journalEntry?.weather}
+          <div class="journal-weather">
+            <span class="weather-icon">{weatherIcon(journalEntry.weather.weatherCode)}</span>
+            <span class="weather-temps">{journalEntry.weather.temperatureMax}° / {journalEntry.weather.temperatureMin}°F</span>
+            <span class="weather-label">{journalEntry.weather.weatherLabel}</span>
+            {#if journalEntry.weather.precipitation > 0}
+              <span class="weather-precip">{journalEntry.weather.precipitation}mm</span>
+            {/if}
+          </div>
+        {/if}
+
         <!-- Morning / Evening tab toggle -->
         <nav class="journal-tabs">
           <button class="journal-tab" class:journal-tab-active={journalTab === "morning"} onclick={() => (journalTab = "morning")}>
@@ -1346,6 +1369,10 @@
                       >
                         <!-- Top-left: day number -->
                         <span class="calendar-day-number">{cell.day}</span>
+                        <!-- Top-center: weather -->
+                        {#if dd?.weather}
+                          <span class="cal-weather">{weatherIcon(dd.weather.weatherCode)} {dd.weather.temperatureMax}°/{dd.weather.temperatureMin}°</span>
+                        {/if}
                         <!-- Top-right: day rating -->
                         <div class="cal-rating">
                           {#if dd?.dayRating}
@@ -2461,7 +2488,7 @@
   .calendar-cell {
     aspect-ratio: 1;
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr auto 1fr;
     grid-template-rows: auto 1fr;
     padding: var(--space-1);
     border: 1px solid var(--border);
@@ -2499,12 +2526,20 @@
     line-height: 1;
   }
 
+  .cal-weather {
+    justify-self: center;
+    align-self: start;
+    font-size: var(--text-xs);
+    line-height: 1;
+  }
+
   .cal-rating {
     justify-self: end;
     align-self: start;
   }
 
   .cal-stats {
+    grid-column: 1 / 3;
     display: flex;
     flex-direction: column;
     gap: 1px;
@@ -2512,6 +2547,7 @@
   }
 
   .cal-net {
+    grid-column: 3;
     align-self: end;
     justify-self: end;
   }
@@ -2761,6 +2797,33 @@
     display: flex;
     justify-content: center;
     gap: var(--space-3);
+  }
+
+  .journal-weather {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    background: var(--surface);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--space-4);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-light);
+  }
+
+  .weather-icon {
+    font-size: var(--text-lg);
+  }
+
+  .weather-temps {
+    font-weight: 500;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .weather-precip {
+    color: var(--ink-faint);
   }
 
   .journal-tabs {

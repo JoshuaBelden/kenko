@@ -1,6 +1,7 @@
 import type { Document, WithId } from "mongodb"
 import { ObjectId } from "mongodb"
 import { getJournalEntriesCollection, getWeightLogCollection, getUsersCollection } from "./collections"
+import type { WeatherData } from "./weatherApi"
 
 export async function getJournalEntry(userId: ObjectId, journeyId: ObjectId, date: string) {
   const entries = await getJournalEntriesCollection()
@@ -29,6 +30,7 @@ export async function createJournalEntry(userId: ObjectId, journeyId: ObjectId, 
       dayRating: null,
       notes: null,
     },
+    weather: null,
     createdAt: now,
     updatedAt: now,
   }
@@ -62,6 +64,15 @@ export async function updateEvening(entryId: ObjectId, userId: ObjectId, fields:
     { returnDocument: "after" },
   )
   return result
+}
+
+export async function updateWeather(entryId: ObjectId, userId: ObjectId, weather: WeatherData) {
+  const entries = await getJournalEntriesCollection()
+  return entries.findOneAndUpdate(
+    { _id: entryId, userId },
+    { $set: { weather, updatedAt: new Date() } },
+    { returnDocument: "after" },
+  )
 }
 
 export async function upsertWeightLog(userId: ObjectId, date: string, weight: number) {
@@ -124,6 +135,7 @@ export function serializeJournalEntry(doc: WithId<Document>) {
       dayRating: null,
       notes: null,
     },
+    weather: doc.weather ?? null,
     createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
     updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
   }

@@ -30,6 +30,12 @@ export const actions: Actions = {
     const tdeeOverrideRaw = data.get("tdeeOverride") as string | null
     const useTdeeOverride = data.get("useTdeeOverride") === "on"
     const timezone = (data.get("timezone") as string)?.trim() || undefined
+    const zipCode = (data.get("zipCode") as string)?.trim() || undefined
+    const latitudeRaw = data.get("latitude") as string | null
+    const longitudeRaw = data.get("longitude") as string | null
+
+    const latitude = latitudeRaw ? Number(latitudeRaw) : undefined
+    const longitude = longitudeRaw ? Number(longitudeRaw) : undefined
 
     if (!firstName || !lastName) {
       return fail(400, { profileError: "First and last name are required." })
@@ -49,6 +55,14 @@ export const actions: Actions = {
       } catch {
         return fail(400, { profileError: "Invalid timezone." })
       }
+    }
+
+    if (latitude !== undefined && (isNaN(latitude) || latitude < -90 || latitude > 90)) {
+      return fail(400, { profileError: "Latitude must be between -90 and 90." })
+    }
+
+    if (longitude !== undefined && (isNaN(longitude) || longitude < -180 || longitude > 180)) {
+      return fail(400, { profileError: "Longitude must be between -180 and 180." })
     }
 
     let tdeeOverride: number | null = null
@@ -77,6 +91,9 @@ export const actions: Actions = {
             activityLevel: activityLevel || undefined,
             tdeeOverride,
             timezone,
+            zipCode,
+            latitude,
+            longitude,
           },
           profileComplete: true,
           updatedAt: new Date(),

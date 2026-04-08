@@ -21,6 +21,31 @@
   let useTdeeOverride = $state(false)
   let tdeeOverrideValue = $state("")
   let timezoneValue = $state(Intl.DateTimeFormat().resolvedOptions().timeZone)
+  let latitudeValue = $state("")
+  let longitudeValue = $state("")
+  let zipLookupValue = $state("")
+  let zipLookupError = $state("")
+  let zipLookupLoading = $state(false)
+
+  async function lookupZip() {
+    if (!zipLookupValue.trim()) return
+    zipLookupError = ""
+    zipLookupLoading = true
+    try {
+      const res = await fetch(`/api/geocode?zip=${encodeURIComponent(zipLookupValue.trim())}`)
+      const data = await res.json()
+      if (!res.ok) {
+        zipLookupError = data.error ?? "Lookup failed"
+        return
+      }
+      latitudeValue = String(data.latitude)
+      longitudeValue = String(data.longitude)
+    } catch {
+      zipLookupError = "Lookup failed. Please try again."
+    } finally {
+      zipLookupLoading = false
+    }
+  }
 
   // Sync from profile data
   $effect(() => {
@@ -38,6 +63,9 @@
       useTdeeOverride = p.tdeeOverride != null
       tdeeOverrideValue = p.tdeeOverride?.toString() ?? ""
       timezoneValue = p.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone
+      zipLookupValue = p.zipCode ?? ""
+      latitudeValue = p.latitude?.toString() ?? ""
+      longitudeValue = p.longitude?.toString() ?? ""
     }
   })
 
@@ -225,6 +253,36 @@
             <option value={tz.value}>{tz.label}</option>
           {/each}
         </select>
+      </div>
+
+      <!-- Location -->
+      <div class="input-group">
+        <span class="input-label">Location</span>
+        <div class="zip-lookup-row">
+          <input
+            type="text"
+            name="zipCode"
+            placeholder="Zip code"
+            bind:value={zipLookupValue}
+            class="zip-input"
+          />
+          <button type="button" class="zip-lookup-btn" onclick={lookupZip} disabled={zipLookupLoading}>
+            {zipLookupLoading ? "Looking up..." : "Look up"}
+          </button>
+        </div>
+        {#if zipLookupError}
+          <p class="form-error">{zipLookupError}</p>
+        {/if}
+        <div class="form-row">
+          <div class="input-group">
+            <label class="input-label" for="latitude">Latitude</label>
+            <input type="number" id="latitude" name="latitude" step="any" bind:value={latitudeValue} placeholder="e.g. 45.5152" />
+          </div>
+          <div class="input-group">
+            <label class="input-label" for="longitude">Longitude</label>
+            <input type="number" id="longitude" name="longitude" step="any" bind:value={longitudeValue} placeholder="e.g. -122.6784" />
+          </div>
+        </div>
       </div>
 
       <!-- Activity Level -->
@@ -450,6 +508,70 @@
 
   input[type="date"]:focus {
     border-bottom-color: var(--border-strong);
+  }
+
+  input[type="number"] {
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    font-weight: 400;
+    color: var(--ink);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    padding: var(--space-3) 0;
+    outline: none;
+    transition: border-color var(--transition-fast);
+    width: 100%;
+  }
+
+  input[type="number"]:focus {
+    border-bottom-color: var(--border-strong);
+  }
+
+  .zip-lookup-row {
+    display: flex;
+    gap: var(--space-2);
+    align-items: center;
+  }
+
+  .zip-input {
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    color: var(--ink);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    padding: var(--space-3) 0;
+    outline: none;
+    transition: border-color var(--transition-fast);
+    flex: 1;
+  }
+
+  .zip-input:focus {
+    border-bottom-color: var(--border-strong);
+  }
+
+  .zip-lookup-btn {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--accent);
+    background: transparent;
+    border: 0.5px solid var(--accent);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-4);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all var(--transition-fast);
+  }
+
+  .zip-lookup-btn:hover:not(:disabled) {
+    background: var(--accent);
+    color: var(--surface);
+  }
+
+  .zip-lookup-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   select {

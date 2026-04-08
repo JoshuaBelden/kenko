@@ -21,6 +21,9 @@ declare global {
           activityLevel?: "sedentary" | "lightly_active" | "moderately_active" | "very_active" | "extremely_active"
           tdeeOverride?: number | null
           timezone?: string
+          zipCode?: string
+          latitude?: number
+          longitude?: number
         } | null
       } | null
       activeJourneys: Array<{

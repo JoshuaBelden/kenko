@@ -146,6 +146,7 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
         commitmentsMet: 0,
         commitmentsTotal: totalCommitments,
         weight: null,
+        weather: null,
         caloriesConsumed: 0,
         caloriesBurned: 0,
       }
@@ -189,6 +190,7 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
     day.energy = entry.evening?.energy ?? day.energy
     day.morningNotes = entry.morning?.notes ?? day.morningNotes
     day.eveningNotes = entry.evening?.notes ?? day.eveningNotes
+    day.weather = entry.weather ?? day.weather
   }
 
   // Commitment logs — count distinct commitments met per day
