@@ -26,12 +26,15 @@
   }
 
   let foods = $state(page.data.foods ?? [])
+  let categories = $state((page.data as any).categories ?? [])
   $effect(() => {
     foods = page.data.foods ?? []
+    categories = (page.data as any).categories ?? []
   })
 
   let searchQuery = $state("")
   let sourceFilter = $state("")
+  let categoryFilter = $state("")
   let creating = $state(page.url.searchParams.get("create") === "1")
   let editingId = $state<string | null>(null)
   let expandedId = $state<string | null>(null)
@@ -76,6 +79,7 @@
   let fFolate = $state("")
   let fPotassium = $state("")
   let fZinc = $state("")
+  let fCategoryId = $state("")
 
   const SOURCE_LABELS: Record<string, string> = {
     manual: "Manual",
@@ -88,7 +92,8 @@
     foods.filter((f: any) => {
       const matchesSearch = !searchQuery || f.name.toLowerCase().includes(searchQuery.toLowerCase())
       const matchesSource = !sourceFilter || f.source === sourceFilter
-      return matchesSearch && matchesSource
+      const matchesCategory = !categoryFilter || f.categoryId === categoryFilter
+      return matchesSearch && matchesSource && matchesCategory
     }),
   )
 
@@ -185,6 +190,7 @@
     fZinc = ""
     formError = ""
     duplicateWarning = ""
+    fCategoryId = ""
     fBarcode = null
     scanRawJson = null
     scanError = ""
@@ -231,6 +237,7 @@
       folate: numOrNull(fFolate),
       potassium: numOrNull(fPotassium),
       zinc: numOrNull(fZinc),
+      categoryId: fCategoryId || null,
     }
   }
 
@@ -286,6 +293,7 @@
     fFolate = food.folate?.toString() ?? ""
     fPotassium = food.potassium?.toString() ?? ""
     fZinc = food.zinc?.toString() ?? ""
+    fCategoryId = food.categoryId ?? ""
     formError = ""
   }
 
@@ -349,6 +357,14 @@
       <option value="openfoodfacts">Open Food Facts</option>
       <option value="usda">USDA</option>
     </select>
+    {#if categories.length > 0}
+      <select class="source-select" bind:value={categoryFilter}>
+        <option value="">All categories</option>
+        {#each categories as cat}
+          <option value={cat.id}>{cat.name}</option>
+        {/each}
+      </select>
+    {/if}
   </div>
   {#if !creating && !editingId && !scanning}
     <div class="action-buttons">
@@ -457,6 +473,12 @@
                 <span class="food-name">{food.name}</span>
                 {#if food.brand}
                   <span class="food-brand">{food.brand}</span>
+                {/if}
+                {#if food.categoryId}
+                  {@const cat = categories.find((c: any) => c.id === food.categoryId)}
+                  {#if cat}
+                    <span class="food-brand">{cat.name}</span>
+                  {/if}
                 {/if}
               </div>
               <div class="food-meta">
@@ -569,6 +591,17 @@
           </select>
         </div>
       </div>
+      {#if categories.length > 0}
+        <div class="form-field">
+          <label class="field-label" for="food-category">Category</label>
+          <select id="food-category" bind:value={fCategoryId}>
+            <option value="">None</option>
+            {#each categories as cat}
+              <option value={cat.id}>{cat.name}</option>
+            {/each}
+          </select>
+        </div>
+      {/if}
       <div class="serving-row">
         <span class="serving-label">1 serving =</span>
         <div class="form-field serving-field">

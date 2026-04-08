@@ -49,6 +49,7 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
   if (body.folate !== undefined) updates.folate = body.folate
   if (body.potassium !== undefined) updates.potassium = body.potassium
   if (body.zinc !== undefined) updates.zinc = body.zinc
+  if (body.categoryId !== undefined) updates.categoryId = body.categoryId ? new ObjectId(body.categoryId) : null
   if (body.debug !== undefined) updates.debug = body.debug
 
   const foodItems = await getFoodItemsCollection()

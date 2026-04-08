@@ -1,18 +1,20 @@
-import { getFoodItemLogsCollection, getWaterLogCollection, serializeFoodItemLog } from "$lib/server/shoku"
+import { getFoodItemLogsCollection, getFoodItemsCollection, getMealBuildLogCollection, getWaterLogCollection, serializeFoodItemLog } from "$lib/server/shoku"
+import { getJourneysCollection } from "$lib/server/collections"
 import { startOfDayTz, endOfDayTz, todayStr } from "$lib/server/dates"
 import { ObjectId } from "mongodb"
 import type { PageServerLoad } from "./$types"
 
 export const load: PageServerLoad = async ({ locals, url }) => {
-  if (!locals.userId) return { grouped: {}, totals: { calories: 0, protein: 0, netCarbs: 0, fat: 0 }, waterOunces: 0 }
+  if (!locals.userId) return { grouped: {}, totals: { calories: 0, protein: 0, netCarbs: 0, fat: 0 }, waterOunces: 0, mealBuilds: [], selectedMealBuild: null }
 
+  const userId = new ObjectId(locals.userId)
   const userTz = locals.userTimezone ?? "America/Los_Angeles"
   const dateStr = url.searchParams.get("date") ?? todayStr(userTz)
   const dayStart = startOfDayTz(dateStr, userTz)
   const dayEnd = endOfDayTz(dateStr, userTz)
 
   const filter: Record<string, unknown> = {
-    userId: new ObjectId(locals.userId),
+    userId,
     date: { $gte: dayStart, $lte: dayEnd },
   }
 
@@ -44,10 +46,90 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
   const waterLog = await getWaterLogCollection()
   const waterDoc = await waterLog.findOne({
-    userId: new ObjectId(locals.userId),
+    userId,
     date: dateStr,
   })
   const waterOunces = waterDoc?.ounces ?? 0
 
-  return { grouped, totals, date: dateStr, waterOunces }
+  // Load meal builds from active journey
+  let mealBuilds: { id: string; name: string }[] = []
+  let selectedMealBuild: any = null
+  let activeJourneyId: string | null = null
+
+  const now = new Date()
+  const journeysCol = await getJourneysCollection()
+  const activeJourney = await journeysCol.findOne({
+    userId,
+    status: "active",
+    startDate: { $lte: now },
+    endDate: { $gte: now },
+  })
+
+  if (activeJourney?.shokuMealBuilds?.length) {
+    activeJourneyId = activeJourney._id.toString()
+    mealBuilds = activeJourney.shokuMealBuilds.map((b: any) => ({
+      id: (b._id ?? b.id).toString(),
+      name: b.name,
+    }))
+
+    // Check for persisted meal build selection
+    const mealBuildLogCol = await getMealBuildLogCollection()
+    const mealBuildDoc = await mealBuildLogCol.findOne({ userId, date: dateStr })
+    const selectedId = mealBuildDoc?.mealBuildId?.toString() ?? null
+
+    if (selectedId) {
+      const build = activeJourney.shokuMealBuilds.find(
+        (b: any) => (b._id ?? b.id).toString() === selectedId,
+      )
+      if (build) {
+        // Collect all foodItemIds across all meals
+        const allFoodIds = new Set<string>()
+        for (const meal of ["breakfast", "lunch", "dinner", "snack"]) {
+          for (const item of build.meals?.[meal] ?? []) {
+            allFoodIds.add(item.foodItemId.toString())
+          }
+        }
+
+        // Resolve food items
+        const foodsCol = await getFoodItemsCollection()
+        const foodDocs = await foodsCol
+          .find({ _id: { $in: [...allFoodIds].map((id) => new ObjectId(id)) } })
+          .toArray()
+        const foodMap = new Map(foodDocs.map((f) => [f._id.toString(), f]))
+
+        // Build the resolved structure
+        const resolveMealItems = (items: any[]) =>
+          (items ?? [])
+            .map((item: any) => {
+              const food = foodMap.get(item.foodItemId.toString())
+              if (!food) return null
+              return {
+                foodItemId: item.foodItemId.toString(),
+                foodName: food.name,
+                servingSize: item.servingSize ?? 1,
+                servingUnit: item.servingUnit ?? "serving",
+                macroType: item.macroType,
+                calories: food.calories ?? 0,
+                protein: food.protein ?? 0,
+                netCarbs: food.netCarbs ?? 0,
+                fat: food.fat ?? 0,
+              }
+            })
+            .filter(Boolean)
+
+        selectedMealBuild = {
+          id: (build._id ?? build.id).toString(),
+          name: build.name,
+          meals: {
+            breakfast: resolveMealItems(build.meals?.breakfast),
+            lunch: resolveMealItems(build.meals?.lunch),
+            dinner: resolveMealItems(build.meals?.dinner),
+            snack: resolveMealItems(build.meals?.snack),
+          },
+        }
+      }
+    }
+  }
+
+  return { grouped, totals, date: dateStr, waterOunces, mealBuilds, selectedMealBuild, activeJourneyId }
 }

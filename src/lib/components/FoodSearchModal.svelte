@@ -4,11 +4,13 @@
   interface Props {
     open: boolean
     category: string
+    categories?: any[]
+    context?: "diary" | "meal-plan"
     onclose: () => void
     onselect: (foodId: string, quantity: number, unit: string, category: string) => void
   }
 
-  let { open, category, onclose, onselect }: Props = $props()
+  let { open, category, categories = [], context = "diary", onclose, onselect }: Props = $props()
 
   let mode = $state<"search" | "scanner" | "create" | "confirm">("search")
   let query = $state("")
@@ -48,6 +50,7 @@
   let fFolate = $state("")
   let fPotassium = $state("")
   let fZinc = $state("")
+  let fCategoryId = $state("")
   let createError = $state("")
   let creating = $state(false)
   let scanRawJson = $state<Record<string, unknown> | null>(null)
@@ -210,6 +213,7 @@
       folate: parseFloat(fFolate) || null,
       potassium: parseFloat(fPotassium) || null,
       zinc: parseFloat(fZinc) || null,
+      categoryId: fCategoryId || null,
       source: scannedBarcode ? "openfoodfacts" : "manual",
       debug: scanRawJson ?? null,
     }
@@ -270,6 +274,7 @@
     fFolate = ""
     fPotassium = ""
     fZinc = ""
+    fCategoryId = ""
     createError = ""
     creating = false
     scanRawJson = null
@@ -336,6 +341,17 @@
               <input id="cf-serving" type="number" step="any" placeholder="100" bind:value={fServingSize} />
             </div>
           </div>
+          {#if categories.length > 0 && context !== "meal-plan"}
+            <div class="form-field">
+              <label class="field-label" for="cf-category">Category</label>
+              <select id="cf-category" bind:value={fCategoryId}>
+                <option value="">None</option>
+                {#each categories as cat}
+                  <option value={cat.id}>{cat.name}</option>
+                {/each}
+              </select>
+            </div>
+          {/if}
 
           <p class="section-label">Macronutrients</p>
           <div class="form-row">
@@ -475,19 +491,21 @@
               <label class="field-label" for="log-servings">Servings</label>
               <input id="log-servings" type="number" min="0.1" step="any" bind:value={servings} />
             </div>
-            <div class="form-field">
-              <label class="field-label" for="log-cat">Category</label>
-              <select id="log-cat" bind:value={selectedCategory}>
-                <option value="breakfast">Breakfast</option>
-                <option value="lunch">Lunch</option>
-                <option value="dinner">Dinner</option>
-                <option value="snack">Snack</option>
-                <option value="uncategorized">Uncategorized</option>
-              </select>
-            </div>
+            {#if context !== "meal-plan"}
+              <div class="form-field">
+                <label class="field-label" for="log-cat">Category</label>
+                <select id="log-cat" bind:value={selectedCategory}>
+                  <option value="breakfast">Breakfast</option>
+                  <option value="lunch">Lunch</option>
+                  <option value="dinner">Dinner</option>
+                  <option value="snack">Snack</option>
+                  <option value="uncategorized">Uncategorized</option>
+                </select>
+              </div>
+            {/if}
           </div>
           <div class="form-actions">
-            <Button variant="primary" onclick={confirmSelection}>Add to diary</Button>
+            <Button variant="primary" onclick={confirmSelection}>{context === "meal-plan" ? "Add to Meal Plan" : "Add to diary"}</Button>
           </div>
         </div>
 

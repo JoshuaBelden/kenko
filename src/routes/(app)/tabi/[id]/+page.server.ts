@@ -4,6 +4,7 @@ import { getCommitmentsCollection, serializeCommitment } from "$lib/server/kata"
 import { serializeJourney } from "$lib/server/journeys"
 import { getUsersCollection } from "$lib/server/collections"
 import { calculateTdee, type ActivityLevel } from "$lib/server/tdee"
+import { getFoodItemsCollection, getFoodItemCategoriesCollection, serializeFoodItem, serializeFoodItemCategory } from "$lib/server/shoku"
 import { error } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
 import type { PageServerLoad } from "./$types"
@@ -44,10 +45,31 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
     }
   }
 
+  // Load food item categories for meal planning
+  const categoriesCol = await getFoodItemCategoriesCollection()
+  const categories = await categoriesCol.find({ userId }).sort({ sortOrder: 1, name: 1 }).toArray()
+
+  // Resolve food items referenced in meal plan
+  const mealPlanFoodIds = (journey.shokuMealPlan?.items ?? []).map((i: any) => i.foodItemId)
+  const mealBuildFoodIds = (journey.shokuMealBuilds ?? []).flatMap((b: any) =>
+    ["breakfast", "lunch", "dinner", "snack"].flatMap((meal) =>
+      (b.meals?.[meal] ?? []).map((i: any) => i.foodItemId)
+    )
+  )
+  const allFoodIds = [...new Set([...mealPlanFoodIds, ...mealBuildFoodIds].map((id: any) => id.toString()))]
+  let mealPlanFoods: any[] = []
+  if (allFoodIds.length > 0) {
+    const foodItems = await getFoodItemsCollection()
+    const foods = await foodItems.find({ _id: { $in: allFoodIds.map((id: string) => new ObjectId(id)) } }).toArray()
+    mealPlanFoods = foods.map(serializeFoodItem)
+  }
+
   return {
     journey: serializeJourney(journey),
     allPlans: allPlans.map(serializeWorkoutPlan),
     allCommitments: allCommitments.map(serializeCommitment),
     tdee,
+    categories: categories.map(serializeFoodItemCategory),
+    mealPlanFoods,
   }
 }

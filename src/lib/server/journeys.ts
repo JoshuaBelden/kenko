@@ -45,6 +45,46 @@ export function serializeJourney(doc: WithId<Document>) {
           commitmentIds: (doc.kataTargets.commitmentIds ?? []).map((id: any) => id.toString()),
         }
       : null,
+    shokuMealPlan: doc.shokuMealPlan
+      ? {
+          items: (doc.shokuMealPlan.items ?? []).map((item: any) => ({
+            foodItemId: item.foodItemId?.toString() ?? item.foodItemId,
+            macroType: item.macroType,
+          })),
+        }
+      : null,
+    shokuMealBuilds: (doc.shokuMealBuilds ?? []).map((build: any) => ({
+      id: build._id?.toString() ?? build.id,
+      name: build.name,
+      meals: {
+        breakfast: (build.meals?.breakfast ?? []).map((item: any) => ({
+          foodItemId: item.foodItemId?.toString() ?? item.foodItemId,
+          servingSize: item.servingSize,
+          servingUnit: item.servingUnit,
+          macroType: item.macroType,
+        })),
+        lunch: (build.meals?.lunch ?? []).map((item: any) => ({
+          foodItemId: item.foodItemId?.toString() ?? item.foodItemId,
+          servingSize: item.servingSize,
+          servingUnit: item.servingUnit,
+          macroType: item.macroType,
+        })),
+        dinner: (build.meals?.dinner ?? []).map((item: any) => ({
+          foodItemId: item.foodItemId?.toString() ?? item.foodItemId,
+          servingSize: item.servingSize,
+          servingUnit: item.servingUnit,
+          macroType: item.macroType,
+        })),
+        snack: (build.meals?.snack ?? []).map((item: any) => ({
+          foodItemId: item.foodItemId?.toString() ?? item.foodItemId,
+          servingSize: item.servingSize,
+          servingUnit: item.servingUnit,
+          macroType: item.macroType,
+        })),
+      },
+      createdAt: build.createdAt instanceof Date ? build.createdAt.toISOString() : build.createdAt,
+      updatedAt: build.updatedAt instanceof Date ? build.updatedAt.toISOString() : build.updatedAt,
+    })),
     createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
     updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
   }

@@ -9,12 +9,21 @@
   let totals = $state(page.data.totals ?? { calories: 0, protein: 0, netCarbs: 0, fat: 0 })
   let currentDate = $state(page.data.date ?? new Date().toISOString().split("T")[0])
   let waterOunces = $state(page.data.waterOunces ?? 0)
+  let mealBuilds = $state<any[]>([])
+  let selectedMealBuild = $state<any>(null)
+  let selectedMealId = $state("")
+  let activeJourneyId = $state<string | null>(null)
 
   $effect(() => {
-    grouped = page.data.grouped ?? {}
-    totals = page.data.totals ?? { calories: 0, protein: 0, netCarbs: 0, fat: 0 }
-    currentDate = page.data.date ?? new Date().toISOString().split("T")[0]
-    waterOunces = page.data.waterOunces ?? 0
+    const d = page.data as any
+    grouped = d.grouped ?? {}
+    totals = d.totals ?? { calories: 0, protein: 0, netCarbs: 0, fat: 0 }
+    currentDate = d.date ?? new Date().toISOString().split("T")[0]
+    waterOunces = d.waterOunces ?? 0
+    mealBuilds = d.mealBuilds ?? []
+    selectedMealBuild = d.selectedMealBuild ?? null
+    selectedMealId = d.selectedMealBuild?.id ?? ""
+    activeJourneyId = d.activeJourneyId ?? null
   })
 
   // Food search modal state
@@ -90,6 +99,27 @@
     const d = new Date(currentDate + "T00:00:00")
     d.setDate(d.getDate() + 1)
     navigateDate(d.toISOString().split("T")[0])
+  }
+
+  async function useMealBuild() {
+    const id = selectedMealId || null
+    await fetch("/api/shoku/meal-build-log", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mealBuildId: id, journeyId: activeJourneyId, date: currentDate }),
+    })
+    await invalidateAll()
+  }
+
+  async function addFromMealBuild(hint: any, category: string) {
+    await handleFoodSelect(hint.foodItemId, hint.servingSize, hint.servingUnit, category)
+  }
+
+  function visibleHints(categoryKey: string) {
+    if (!selectedMealBuild?.meals?.[categoryKey]) return []
+    const entries = grouped[categoryKey] ?? []
+    const loggedFoodIds = new Set(entries.map((e: any) => e.foodItemId))
+    return selectedMealBuild.meals[categoryKey].filter((h: any) => !loggedFoodIds.has(h.foodItemId))
   }
 
   function openSearch(cat: string) {
@@ -186,6 +216,19 @@
   <button class="btn-quick" onclick={() => (quickAddOpen = !quickAddOpen)}>Quick add</button>
 </section>
 
+<!-- Meal build selector -->
+{#if mealBuilds.length > 0}
+  <section class="meal-selector">
+    <select class="meal-select" bind:value={selectedMealId}>
+      <option value="">No meal plan</option>
+      {#each mealBuilds as build}
+        <option value={build.id}>{build.name}</option>
+      {/each}
+    </select>
+    <Button variant="secondary" onclick={useMealBuild}>Use</Button>
+  </section>
+{/if}
+
 <!-- Macro summary -->
 <section class="macro-bar">
   <Card>
@@ -242,6 +285,14 @@
     </div>
 
       <div class="entries-stack">
+        {#each visibleHints(cat.key) as hint}
+          <div class="meal-hint">
+            <button class="hint-add-btn" onclick={() => addFromMealBuild(hint, cat.key)}>Add</button>
+            <span class="hint-name">{hint.foodName}</span>
+            <span class="hint-detail">{hint.servingSize} {hint.servingSize === 1 ? "serving" : "servings"}</span>
+            <span class="hint-macros">{Math.round(hint.protein * hint.servingSize)}P &middot; {Math.round(hint.netCarbs * hint.servingSize)}C &middot; {Math.round(hint.fat * hint.servingSize)}F</span>
+          </div>
+        {/each}
         {#each entries as entry (entry.id)}
           <Card>
             {#if editingId === entry.id}
@@ -333,6 +384,90 @@
 <style>
   .section {
     margin-bottom: var(--space-6);
+  }
+
+  /* Meal selector */
+  .meal-selector {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin-bottom: var(--space-6);
+  }
+
+  .meal-select {
+    flex: 1;
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    padding: var(--space-2) 0;
+    outline: none;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b6b6b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0 center;
+    padding-right: var(--space-5);
+  }
+
+  .meal-select:focus {
+    border-bottom-color: var(--border-strong);
+  }
+
+  /* Meal hints */
+  .meal-hint {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    margin-bottom: var(--space-1);
+  }
+
+  .hint-add-btn {
+    background: none;
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-1) var(--space-2);
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    color: var(--accent);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    flex-shrink: 0;
+  }
+
+  .hint-add-btn:hover {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+
+  .hint-name {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-light);
+    flex: 1;
+  }
+
+  .hint-detail {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+  }
+
+  .hint-macros {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
 
   /* Date nav */

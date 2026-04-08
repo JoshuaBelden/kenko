@@ -117,5 +117,7 @@ export async function ensureIndexes(): Promise<void> {
     db.collection("fasts").createIndex({ userId: 1, startedAt: -1 }),
     db.collection("fasts").createIndex({ userId: 1, status: 1 }),
     db.collection("fasts").createIndex({ journeyIds: 1 }),
+    db.collection("foodItemCategories").createIndex({ userId: 1, sortOrder: 1 }),
+    db.collection("mealBuildLog").createIndex({ userId: 1, date: 1 }, { unique: true }),
   ])
 }

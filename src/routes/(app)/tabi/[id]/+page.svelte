@@ -2,6 +2,7 @@
   import { goto, invalidateAll } from "$app/navigation"
   import { page } from "$app/state"
   import { Button, Card, ProgressBar, StarRating, DotRating, TipTapEditor } from "$lib/components"
+  import SettingsTabs from "$lib/components/settings/SettingsTabs.svelte"
   import { localToday, localDateStr, localTimeStr, toDatetime } from "$lib/dates"
   import { formatDate } from "$lib/format"
   import { icons } from "$lib/icons"
@@ -12,6 +13,8 @@
   const allPlans = $derived(data.allPlans ?? [])
   const allCommitments = $derived(data.allCommitments ?? [])
   const tdee = $derived(data.tdee as number | null)
+  const categories = $derived(data.categories ?? [])
+  const mealPlanFoods = $derived(data.mealPlanFoods ?? [])
 
   // Determine if newly created (no targets configured)
   const hasAnyTargets = $derived(
@@ -152,18 +155,6 @@
   let fatValue = $state("")
   let dailyWaterTargetOz = $state("")
 
-  const WEIGHT_GOAL_OPTIONS = [
-    { value: "-2", label: "Lose 2 lb/week" },
-    { value: "-1.5", label: "Lose 1.5 lb/week" },
-    { value: "-1", label: "Lose 1 lb/week" },
-    { value: "-0.5", label: "Lose 0.5 lb/week" },
-    { value: "0", label: "Maintain weight" },
-    { value: "0.5", label: "Gain 0.5 lb/week" },
-    { value: "1", label: "Gain 1 lb/week" },
-    { value: "1.5", label: "Gain 1.5 lb/week" },
-    { value: "2", label: "Gain 2 lb/week" },
-  ] as const
-
   // Danjiki settings
   let weeklyFastingHours = $state("")
 
@@ -175,65 +166,45 @@
   // Kata settings
   let selectedCommitmentIds = $state<string[]>([])
 
-  // Computed calorie target from weight goal + TDEE
-  const deficitPerDay = $derived(() => {
-    const goal = Number(weightGoalLbsPerWeek)
-    if (!goal) return 0
-    return Math.round(goal * 500) // 1lb = 3500 kcal / 7 days = 500
-  })
+  // Meal plan settings
+  let mealPlanItems = $state<any[]>([])
+  let mealBuilds = $state<any[]>([])
 
-  const calculatedCalorieTarget = $derived(() => {
-    if (!tdee) return null
-    const deficit = deficitPerDay()
-    return tdee + deficit // deficit is negative for loss
-  })
-
+  // Effective calorie target (needed for saveSettings)
   const effectiveCalorieTarget = $derived(() => {
     if (dailyCalorieOverride && dailyCalorieTarget) return Number(dailyCalorieTarget)
-    return calculatedCalorieTarget()
+    if (!tdee) return null
+    const goal = Number(weightGoalLbsPerWeek)
+    const deficit = goal ? Math.round(goal * 500) : 0
+    return tdee + deficit
   })
 
-  // Macro conversions
-  function macroGramsFromPct(pct: number, caloriesPerGram: number): number | null {
-    const cal = effectiveCalorieTarget()
-    if (!cal) return null
-    return Math.round((cal * (pct / 100)) / caloriesPerGram)
+  function handleSettingsChange(field: string, value: any) {
+    switch (field) {
+      case "name": settingsName = value; break
+      case "description": settingsDesc = value; break
+      case "statement": settingsStatement = value; break
+      case "startDate": settingsStartDate = value; break
+      case "startTime": settingsStartTime = value; break
+      case "endDate": settingsEndDate = value; break
+      case "endTime": settingsEndTime = value; break
+      case "weightGoalLbsPerWeek": weightGoalLbsPerWeek = value; break
+      case "dailyCalorieOverride": dailyCalorieOverride = value; break
+      case "dailyCalorieTarget": dailyCalorieTarget = value; break
+      case "macroMode": macroMode = value; break
+      case "proteinValue": proteinValue = value; break
+      case "carbsValue": carbsValue = value; break
+      case "fatValue": fatValue = value; break
+      case "dailyWaterTargetOz": dailyWaterTargetOz = value; break
+      case "weeklyFastingHours": weeklyFastingHours = value; break
+      case "selectedPlanIds": selectedPlanIds = value; break
+      case "sessionsPerWeek": dojoSessionsPerWeek = value; break
+      case "weeklyCalorieBurn": dojoWeeklyCalorieBurn = value; break
+      case "selectedCommitmentIds": selectedCommitmentIds = value; break
+      case "mealPlanItems": mealPlanItems = value; break
+      case "mealBuilds": mealBuilds = value; break
+    }
   }
-
-  function macroPctFromGrams(grams: number, caloriesPerGram: number): number | null {
-    const cal = effectiveCalorieTarget()
-    if (!cal) return null
-    return Math.round(((grams * caloriesPerGram) / cal) * 100)
-  }
-
-  const proteinRef = $derived(() => {
-    const v = Number(proteinValue)
-    if (!v) return null
-    return macroMode === "percentage"
-      ? `${macroGramsFromPct(v, 4) ?? "—"}g`
-      : `${macroPctFromGrams(v, 4) ?? "—"}%`
-  })
-
-  const carbsRef = $derived(() => {
-    const v = Number(carbsValue)
-    if (!v) return null
-    return macroMode === "percentage"
-      ? `${macroGramsFromPct(v, 4) ?? "—"}g`
-      : `${macroPctFromGrams(v, 4) ?? "—"}%`
-  })
-
-  const fatRef = $derived(() => {
-    const v = Number(fatValue)
-    if (!v) return null
-    return macroMode === "percentage"
-      ? `${macroGramsFromPct(v, 9) ?? "—"}g`
-      : `${macroPctFromGrams(v, 9) ?? "—"}%`
-  })
-
-  const macroPctTotal = $derived(() => {
-    if (macroMode !== "percentage") return null
-    return (Number(proteinValue) || 0) + (Number(carbsValue) || 0) + (Number(fatValue) || 0)
-  })
 
   // Sync settings from journey data — only on load and after save
   let syncVersion = $state(0)
@@ -287,6 +258,9 @@
     if (k) {
       selectedCommitmentIds = k.commitmentIds ?? []
     }
+
+    mealPlanItems = j.shokuMealPlan?.items ?? []
+    mealBuilds = j.shokuMealBuilds ?? []
   })
 
   async function saveSettings() {
@@ -344,6 +318,14 @@
       ? { commitmentIds: selectedCommitmentIds }
       : null
 
+    const shokuMealPlan = mealPlanItems.length > 0
+      ? { items: mealPlanItems }
+      : null
+
+    const shokuMealBuilds = mealBuilds.length > 0
+      ? mealBuilds
+      : []
+
     const res = await fetch(`/api/journeys/${journey.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -357,6 +339,8 @@
         danjikiTargets,
         dojoTargets,
         kataTargets,
+        shokuMealPlan,
+        shokuMealBuilds,
       }),
     })
 
@@ -381,8 +365,6 @@
     goto("/tabi")
   }
 
-  let confirmingArchive = $state(false)
-
   async function unarchiveJourney() {
     await fetch(`/api/journeys/${journey.id}`, {
       method: "PUT",
@@ -391,8 +373,6 @@
     })
     await invalidateAll()
   }
-
-  let confirmingDelete = $state(false)
 
   async function deleteJourney() {
     await fetch(`/api/journeys/${journey.id}`, { method: "DELETE" })
@@ -635,9 +615,7 @@
 
   const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
-  function toggleArrayItem(arr: string[], item: string): string[] {
-    return arr.includes(item) ? arr.filter((i) => i !== item) : [...arr, item]
-  }
+
 </script>
 
 <!-- Page header -->
@@ -685,294 +663,46 @@
 {/if}
 
 {#if showSettings}
-  <!-- ════════════ SETTINGS ════════════ -->
-  <div class="settings-panel">
-    <h2 class="section-title">Journey Settings</h2>
-
-    <!-- General -->
-    <Card>
-      <h3 class="card-title">General</h3>
-      <div class="settings-fields">
-        <div class="field">
-          <label class="field-label" for="s-name">Journey name</label>
-          <input id="s-name" bind:value={settingsName} placeholder="Journey name" />
-        </div>
-        <div class="field-row">
-          <div class="field">
-            <label class="field-label" for="s-start">Start date</label>
-            <input id="s-start" type="date" bind:value={settingsStartDate} />
-          </div>
-          <div class="field">
-            <label class="field-label" for="s-start-time">Start time</label>
-            <input id="s-start-time" type="time" bind:value={settingsStartTime} />
-          </div>
-        </div>
-        <div class="field-row">
-          <div class="field">
-            <label class="field-label" for="s-end">End date</label>
-            <input id="s-end" type="date" bind:value={settingsEndDate} />
-          </div>
-          <div class="field">
-            <label class="field-label" for="s-end-time">End time</label>
-            <input id="s-end-time" type="time" bind:value={settingsEndTime} />
-          </div>
-        </div>
-        <div class="field">
-          <label class="field-label" for="s-desc">Description</label>
-          <input id="s-desc" bind:value={settingsDesc} placeholder="Optional description" />
-        </div>
-        <div class="field">
-          <span class="field-label">Why this journey matters</span>
-          <TipTapEditor
-            content={settingsStatement}
-            onblur={(html) => { settingsStatement = html }}
-            placeholder="What drives this journey..."
-          />
-        </div>
-      </div>
-    </Card>
-
-    <!-- Shoku -->
-    <Card>
-      <h3 class="card-title">Shoku — Nutrition</h3>
-      {#if !tdee}
-        <p class="module-hint">
-          Set up your <a href="/profile">profile</a> with body metrics to enable TDEE-based calorie
-          targets.
-        </p>
-      {/if}
-      <div class="settings-fields">
-        <div class="field">
-          <label class="field-label" for="s-weight-goal">Weight goal</label>
-          <select id="s-weight-goal" bind:value={weightGoalLbsPerWeek}>
-            {#each WEIGHT_GOAL_OPTIONS as opt}
-              <option value={opt.value}>{opt.label}</option>
-            {/each}
-          </select>
-          {#if Number(weightGoalLbsPerWeek) !== 0 && tdee}
-            <p class="field-hint">
-              {Number(weightGoalLbsPerWeek) < 0 ? "To lose" : "To gain"}
-              {Math.abs(Number(weightGoalLbsPerWeek))}lb/week you need a
-              {Math.abs(deficitPerDay())} kcal/day {Number(weightGoalLbsPerWeek) < 0 ? "deficit" : "surplus"}.
-              Your TDEE is {tdee.toLocaleString()} kcal so your daily target is
-              {calculatedCalorieTarget()?.toLocaleString() ?? "—"} kcal.
-            </p>
-          {/if}
-        </div>
-
-        <div class="field">
-          <label class="override-toggle">
-            <input type="checkbox" bind:checked={dailyCalorieOverride} />
-            <span>Override daily calorie target</span>
-          </label>
-          {#if dailyCalorieOverride}
-            <input
-              type="number"
-              bind:value={dailyCalorieTarget}
-              placeholder="Custom daily calories"
-            />
-          {/if}
-        </div>
-
-        <!-- Macros -->
-        <div class="macro-section">
-          <div class="macro-header">
-            <span class="field-label">Macro targets</span>
-            <div class="macro-mode-toggle">
-              <button
-                class="macro-mode-btn"
-                class:macro-mode-btn-active={macroMode === "percentage"}
-                onclick={() => (macroMode = "percentage")}
-              >Percentage</button>
-              <button
-                class="macro-mode-btn"
-                class:macro-mode-btn-active={macroMode === "grams"}
-                onclick={() => (macroMode = "grams")}
-              >Grams</button>
-            </div>
-          </div>
-          {#each [
-            { name: "Protein", value: proteinValue, ref: proteinRef, setValue: (v: string) => (proteinValue = v) },
-            { name: "Carbs", value: carbsValue, ref: carbsRef, setValue: (v: string) => (carbsValue = v) },
-            { name: "Fat", value: fatValue, ref: fatRef, setValue: (v: string) => (fatValue = v) },
-          ] as macro}
-            <div class="macro-row">
-              <span class="macro-name">{macro.name}</span>
-              <input
-                type="number"
-                class="macro-input"
-                value={macro.value}
-                oninput={(e) => macro.setValue(e.currentTarget.value)}
-                placeholder={macroMode === "percentage" ? "%" : "g"}
-              />
-              <span class="macro-unit">{macroMode === "percentage" ? "%" : "g"}</span>
-              {#if macro.ref()}
-                <span class="macro-ref">= {macro.ref()}</span>
-              {/if}
-            </div>
-          {/each}
-          {#if macroMode === "percentage"}
-            {@const total = macroPctTotal()}
-            <div class="macro-total" class:macro-total-ok={total === 100} class:macro-total-warn={total !== null && total !== 0 && total !== 100}>
-              <span>Total: {total ?? 0}%</span>
-              {#if total !== null && total !== 0 && total !== 100}
-                <span class="macro-total-hint">({total < 100 ? `${100 - total}% remaining` : `${total - 100}% over`})</span>
-              {/if}
-            </div>
-          {/if}
-        </div>
-
-        <div class="field">
-          <label class="field-label" for="s-water">Daily water target (oz)</label>
-          <input id="s-water" type="number" bind:value={dailyWaterTargetOz} placeholder="e.g. 64" />
-        </div>
-      </div>
-    </Card>
-
-    <!-- Danjiki -->
-    <Card>
-      <h3 class="card-title">Danjiki — Fasting</h3>
-      <div class="settings-fields">
-        <div class="field">
-          <label class="field-label" for="s-fasting">Weekly fasting hours target</label>
-          <input
-            id="s-fasting"
-            type="number"
-            bind:value={weeklyFastingHours}
-            placeholder="e.g. 16"
-          />
-        </div>
-      </div>
-    </Card>
-
-    <!-- Dojo -->
-    <Card>
-      <h3 class="card-title">Dojo — Training</h3>
-      {#if allPlans.length === 0}
-        <p class="module-hint">
-          <a href="/dojo/plans">Add workout plans</a> to configure training targets.
-        </p>
-      {:else}
-        <div class="settings-fields">
-          <div class="field">
-            <span class="field-label">Workout plans</span>
-            <div class="checkbox-list">
-              {#each allPlans as plan}
-                <label class="checkbox-item">
-                  <input
-                    type="checkbox"
-                    checked={selectedPlanIds.includes(plan.id)}
-                    onchange={() => (selectedPlanIds = toggleArrayItem(selectedPlanIds, plan.id))}
-                  />
-                  <span>{plan.name}</span>
-                </label>
-              {/each}
-            </div>
-          </div>
-          <div class="field-row">
-            <div class="field">
-              <label class="field-label" for="s-sessions">Sessions/week</label>
-              <input
-                id="s-sessions"
-                type="number"
-                bind:value={dojoSessionsPerWeek}
-                placeholder="Optional"
-              />
-            </div>
-            <div class="field">
-              <label class="field-label" for="s-burn">Weekly calorie burn target</label>
-              <input
-                id="s-burn"
-                type="number"
-                bind:value={dojoWeeklyCalorieBurn}
-                placeholder="Optional"
-              />
-            </div>
-          </div>
-        </div>
-      {/if}
-    </Card>
-
-    <!-- Kata -->
-    <Card>
-      <h3 class="card-title">Kata — Commitments</h3>
-      {#if allCommitments.length === 0}
-        <p class="module-hint">
-          <a href="/kata">Add commitments</a> to track habits within this journey.
-        </p>
-      {:else}
-        <div class="settings-fields">
-          <div class="field">
-            <span class="field-label">Commitments</span>
-            <div class="checkbox-list">
-              {#each allCommitments as commitment}
-                <label class="checkbox-item">
-                  <input
-                    type="checkbox"
-                    checked={selectedCommitmentIds.includes(commitment.id)}
-                    onchange={() => (selectedCommitmentIds = toggleArrayItem(selectedCommitmentIds, commitment.id))}
-                  />
-                  <div class="commitment-info">
-                    <span>{commitment.name}</span>
-                    <span class="commitment-meta">{commitment.period} &middot; target: {commitment.targetValue}{commitment.unit ? ` ${commitment.unit}` : ""}</span>
-                  </div>
-                </label>
-              {/each}
-            </div>
-          </div>
-        </div>
-      {/if}
-    </Card>
-
-    <div class="settings-actions">
-      <Button variant="primary" onclick={saveSettings} disabled={saving}>
-        {saving ? "Saving..." : "Save settings"}
-      </Button>
-      <button class="btn-text" onclick={() => (showSettings = false)}>Close settings</button>
-      {#if saveError}
-        <p class="form-error">{saveError}</p>
-      {/if}
-      {#if saveSuccess}
-        <p class="form-success">Settings saved.</p>
-      {/if}
-    </div>
-
-    <!-- Archive / Unarchive journey -->
-    <div class="danger-zone">
-      {#if isArchived}
-        <button class="btn-text" onclick={unarchiveJourney}>Unarchive this journey</button>
-      {:else if confirmingArchive}
-        <Card>
-          <div class="delete-confirm">
-            <p class="delete-message">Archive this journey? It will be hidden from your journey list but can be restored later.</p>
-            <div class="delete-actions">
-              <button class="btn-danger" onclick={archiveJourney}>Yes, archive</button>
-              <button class="btn-text" onclick={() => (confirmingArchive = false)}>Cancel</button>
-            </div>
-          </div>
-        </Card>
-      {:else}
-        <button class="btn-text btn-danger-text" onclick={() => (confirmingArchive = true)}>Archive this journey</button>
-      {/if}
-    </div>
-
-    <!-- Delete journey -->
-    <div class="danger-zone">
-      {#if confirmingDelete}
-        <Card>
-          <div class="delete-confirm">
-            <p class="delete-message">Are you sure? This will not delete any logged data — only the journey and its targets will be removed.</p>
-            <div class="delete-actions">
-              <button class="btn-danger" onclick={deleteJourney}>Yes, delete</button>
-              <button class="btn-text" onclick={() => (confirmingDelete = false)}>Cancel</button>
-            </div>
-          </div>
-        </Card>
-      {:else}
-        <button class="btn-text btn-danger-text" onclick={() => (confirmingDelete = true)}>Delete this journey</button>
-      {/if}
-    </div>
-  </div>
+  <SettingsTabs
+    journeyId={journey.id}
+    name={settingsName}
+    description={settingsDesc}
+    statement={settingsStatement}
+    startDate={settingsStartDate}
+    startTime={settingsStartTime}
+    endDate={settingsEndDate}
+    endTime={settingsEndTime}
+    {tdee}
+    {weightGoalLbsPerWeek}
+    {dailyCalorieOverride}
+    {dailyCalorieTarget}
+    {macroMode}
+    {proteinValue}
+    {carbsValue}
+    {fatValue}
+    {dailyWaterTargetOz}
+    {mealPlanItems}
+    {mealBuilds}
+    {mealPlanFoods}
+    {categories}
+    {weeklyFastingHours}
+    {allPlans}
+    {selectedPlanIds}
+    dojoSessionsPerWeek={dojoSessionsPerWeek}
+    dojoWeeklyCalorieBurn={dojoWeeklyCalorieBurn}
+    {allCommitments}
+    {selectedCommitmentIds}
+    {saving}
+    {saveError}
+    {saveSuccess}
+    {isArchived}
+    onchange={handleSettingsChange}
+    onsave={saveSettings}
+    onclose={() => (showSettings = false)}
+    onarchive={archiveJourney}
+    onunarchive={unarchiveJourney}
+    ondelete={deleteJourney}
+  />
 {:else}
   <!-- ════════════ TAB NAVIGATION ════════════ -->
   <nav class="tab-nav">
@@ -2031,368 +1761,6 @@
     font-family: var(--font-body);
     font-size: var(--text-sm);
     color: var(--ink-faint);
-  }
-
-  /* ── Settings panel ── */
-  .settings-panel {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-5);
-    max-width: 640px;
-  }
-
-  .section-title {
-    font-family: var(--font-display);
-    font-size: var(--text-xl);
-    font-weight: 500;
-    color: var(--ink);
-    margin: 0;
-  }
-
-  .card-title {
-    font-family: var(--font-display);
-    font-size: var(--text-lg);
-    font-weight: 500;
-    color: var(--ink);
-    margin: 0 0 var(--space-4) 0;
-  }
-
-  .settings-fields {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-  }
-
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-  }
-
-  .field-row {
-    display: flex;
-    gap: var(--space-4);
-  }
-
-  .field-row .field {
-    flex: 1;
-  }
-
-  .field-label {
-    font-family: var(--font-body);
-    font-size: var(--text-xs);
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.2em;
-    color: var(--ink-faint);
-  }
-
-  .field input[type="text"],
-  .field input[type="number"],
-  .field input[type="date"],
-  .field input[type="time"],
-  .field select,
-  .settings-fields input[type="text"],
-  .settings-fields input[type="number"],
-  .settings-fields input[type="date"],
-  .settings-fields input[type="time"],
-  .field > input {
-    font-family: var(--font-body);
-    font-size: var(--text-base);
-    color: var(--ink);
-    background: transparent;
-    border: none;
-    border-bottom: 1px solid var(--border);
-    padding: var(--space-3) 0;
-    outline: none;
-    transition: border-color var(--transition-fast);
-    width: 100%;
-  }
-
-  .field select {
-    cursor: pointer;
-    -webkit-appearance: none;
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b6b6b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 0 center;
-    padding-right: var(--space-5);
-  }
-
-  .field input:focus,
-  .field select:focus,
-  .settings-fields input:focus {
-    border-bottom-color: var(--border-strong);
-  }
-
-  .field input::placeholder,
-  .settings-fields input::placeholder {
-    color: var(--ink-faint);
-  }
-
-  .field-hint {
-    font-family: var(--font-body);
-    font-size: var(--text-xs);
-    line-height: 1.6;
-    color: var(--ink-light);
-    margin: var(--space-1) 0 0 0;
-  }
-
-  .module-hint {
-    font-family: var(--font-body);
-    font-size: var(--text-sm);
-    color: var(--ink-light);
-    margin: 0;
-  }
-
-  .module-hint a {
-    color: var(--accent);
-    text-decoration: none;
-  }
-
-  .module-hint a:hover {
-    text-decoration: underline;
-  }
-
-  /* Override toggle */
-  .override-toggle {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    cursor: pointer;
-    font-family: var(--font-body);
-    font-size: var(--text-sm);
-    color: var(--ink-light);
-  }
-
-  .override-toggle input {
-    accent-color: var(--accent);
-  }
-
-  /* Macro section */
-  .macro-section {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-
-  .macro-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-  }
-
-  .macro-name {
-    font-family: var(--font-body);
-    font-size: var(--text-sm);
-    color: var(--ink-light);
-    min-width: 60px;
-  }
-
-  .macro-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .macro-mode-toggle {
-    display: flex;
-    border: 0.5px solid var(--border);
-    border-radius: var(--radius-sm);
-    overflow: hidden;
-  }
-
-  .macro-mode-btn {
-    background: transparent;
-    border: none;
-    padding: var(--space-1) var(--space-3);
-    font-family: var(--font-body);
-    font-size: var(--text-xs);
-    color: var(--ink-faint);
-    cursor: pointer;
-    transition: all var(--transition-fast);
-  }
-
-  .macro-mode-btn-active {
-    background: var(--accent);
-    color: #fff;
-  }
-
-  .macro-unit {
-    font-family: var(--font-body);
-    font-size: var(--text-xs);
-    color: var(--ink-faint);
-    min-width: 14px;
-  }
-
-  .macro-total {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-family: var(--font-body);
-    font-size: var(--text-sm);
-    color: var(--ink-faint);
-    padding-top: var(--space-2);
-    border-top: 0.5px solid var(--border);
-  }
-
-  .macro-total-ok {
-    color: var(--accent-green);
-  }
-
-  .macro-total-warn {
-    color: var(--accent);
-  }
-
-  .macro-total-hint {
-    font-size: var(--text-xs);
-  }
-
-  .macro-input {
-    font-family: var(--font-body);
-    font-size: var(--text-sm);
-    color: var(--ink);
-    background: transparent;
-    border: none;
-    border-bottom: 1px solid var(--border);
-    padding: var(--space-2) 0;
-    outline: none;
-    width: 60px;
-    transition: border-color var(--transition-fast);
-  }
-
-  .macro-input:focus {
-    border-bottom-color: var(--border-strong);
-  }
-
-  .macro-ref {
-    font-family: var(--font-body);
-    font-size: var(--text-xs);
-    color: var(--ink-faint);
-    white-space: nowrap;
-  }
-
-  /* Checkbox list */
-  .checkbox-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-
-  .checkbox-item {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-2);
-    cursor: pointer;
-    font-family: var(--font-body);
-    font-size: var(--text-sm);
-    color: var(--ink-light);
-  }
-
-  .checkbox-item input {
-    margin-top: 2px;
-    accent-color: var(--accent);
-  }
-
-  .commitment-info {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .commitment-meta {
-    font-size: var(--text-xs);
-    color: var(--ink-faint);
-  }
-
-  /* Settings actions */
-  .settings-actions {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    padding-top: var(--space-2);
-  }
-
-  /* Form feedback */
-  .form-error {
-    font-family: var(--font-body);
-    font-size: var(--text-sm);
-    color: var(--accent);
-    margin: 0;
-  }
-
-  .form-success {
-    font-family: var(--font-body);
-    font-size: var(--text-sm);
-    color: var(--accent-green);
-    margin: 0;
-  }
-
-  /* Shared buttons */
-  .btn-text {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-family: var(--font-body);
-    font-size: var(--text-sm);
-    color: var(--ink-light);
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-sm);
-    transition: color var(--transition-fast);
-  }
-
-  .btn-text:hover {
-    color: var(--ink);
-  }
-
-  /* Danger zone */
-  .danger-zone {
-    padding-top: var(--space-4);
-    border-top: 0.5px solid var(--border);
-  }
-
-  .btn-danger-text {
-    color: var(--accent);
-  }
-
-  .btn-danger-text:hover {
-    opacity: 0.8;
-  }
-
-  .delete-confirm {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-  }
-
-  .delete-message {
-    font-family: var(--font-body);
-    font-size: var(--text-sm);
-    line-height: 1.7;
-    color: var(--ink-light);
-    margin: 0;
-  }
-
-  .delete-actions {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-  }
-
-  .btn-danger {
-    background: var(--accent);
-    color: #ffffff;
-    border: none;
-    cursor: pointer;
-    font-family: var(--font-body);
-    font-size: var(--text-sm);
-    font-weight: 500;
-    padding: var(--space-2) var(--space-4);
-    border-radius: var(--radius-sm);
-    transition: opacity var(--transition-fast);
-  }
-
-  .btn-danger:hover {
-    opacity: 0.9;
   }
 
   /* ── Weight chart ── */

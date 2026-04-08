@@ -20,6 +20,16 @@ export async function getWaterLogCollection() {
   return db.collection("waterLog")
 }
 
+export async function getFoodItemCategoriesCollection() {
+  const db = await getDb()
+  return db.collection("foodItemCategories")
+}
+
+export async function getMealBuildLogCollection() {
+  const db = await getDb()
+  return db.collection("mealBuildLog")
+}
+
 // ========================================
 // Unit Conversion
 // ========================================
@@ -122,8 +132,20 @@ export function serializeFoodItem(doc: WithId<Document>) {
     folate: doc.folate ?? null,
     potassium: doc.potassium ?? null,
     zinc: doc.zinc ?? null,
+    categoryId: doc.categoryId?.toString() ?? null,
     source: doc.source ?? "manual",
     debug: doc.debug ?? null,
+    createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
+    updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
+  }
+}
+
+export function serializeFoodItemCategory(doc: WithId<Document>) {
+  return {
+    id: doc._id.toString(),
+    userId: doc.userId.toString(),
+    name: doc.name,
+    sortOrder: doc.sortOrder ?? 0,
     createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
     updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
   }

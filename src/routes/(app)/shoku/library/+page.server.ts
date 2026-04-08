@@ -1,15 +1,23 @@
-import { getFoodItemsCollection, serializeFoodItem } from "$lib/server/shoku"
+import { getFoodItemsCollection, getFoodItemCategoriesCollection, serializeFoodItem, serializeFoodItemCategory } from "$lib/server/shoku"
 import { ObjectId } from "mongodb"
 import type { PageServerLoad } from "./$types"
 
 export const load: PageServerLoad = async ({ locals }) => {
-  if (!locals.userId) return { foods: [] }
+  if (!locals.userId) return { foods: [], categories: [] }
 
-  const foodItems = await getFoodItemsCollection()
-  const list = await foodItems
-    .find({ userId: new ObjectId(locals.userId) })
-    .sort({ name: 1 })
-    .toArray()
+  const userId = new ObjectId(locals.userId)
+  const [foodItems, categoriesCol] = await Promise.all([
+    getFoodItemsCollection(),
+    getFoodItemCategoriesCollection(),
+  ])
 
-  return { foods: list.map(serializeFoodItem) }
+  const [foods, categories] = await Promise.all([
+    foodItems.find({ userId }).sort({ name: 1 }).toArray(),
+    categoriesCol.find({ userId }).sort({ sortOrder: 1, name: 1 }).toArray(),
+  ])
+
+  return {
+    foods: foods.map(serializeFoodItem),
+    categories: categories.map(serializeFoodItemCategory),
+  }
 }

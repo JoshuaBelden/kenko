@@ -55,6 +55,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     folate: body.folate ?? null,
     potassium: body.potassium ?? null,
     zinc: body.zinc ?? null,
+    categoryId: body.categoryId ? new ObjectId(body.categoryId) : null,
     source: body.source ?? "manual",
     debug: body.debug ?? null,
     createdAt: now,

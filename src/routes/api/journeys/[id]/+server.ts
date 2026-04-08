@@ -48,6 +48,50 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
         }
       : null
   }
+  if (body.shokuMealPlan !== undefined) {
+    updates.shokuMealPlan = body.shokuMealPlan
+      ? {
+          items: (body.shokuMealPlan.items ?? []).map((item: any) => ({
+            foodItemId: new ObjectId(item.foodItemId),
+            macroType: item.macroType,
+          })),
+        }
+      : null
+  }
+  if (body.shokuMealBuilds !== undefined) {
+    updates.shokuMealBuilds = (body.shokuMealBuilds ?? []).map((build: any) => ({
+      _id: build.id ? new ObjectId(build.id) : new ObjectId(),
+      name: build.name,
+      meals: {
+        breakfast: (build.meals?.breakfast ?? []).map((item: any) => ({
+          foodItemId: new ObjectId(item.foodItemId),
+          servingSize: item.servingSize,
+          servingUnit: item.servingUnit,
+          macroType: item.macroType,
+        })),
+        lunch: (build.meals?.lunch ?? []).map((item: any) => ({
+          foodItemId: new ObjectId(item.foodItemId),
+          servingSize: item.servingSize,
+          servingUnit: item.servingUnit,
+          macroType: item.macroType,
+        })),
+        dinner: (build.meals?.dinner ?? []).map((item: any) => ({
+          foodItemId: new ObjectId(item.foodItemId),
+          servingSize: item.servingSize,
+          servingUnit: item.servingUnit,
+          macroType: item.macroType,
+        })),
+        snack: (build.meals?.snack ?? []).map((item: any) => ({
+          foodItemId: new ObjectId(item.foodItemId),
+          servingSize: item.servingSize,
+          servingUnit: item.servingUnit,
+          macroType: item.macroType,
+        })),
+      },
+      createdAt: build.createdAt ? new Date(build.createdAt) : new Date(),
+      updatedAt: new Date(),
+    }))
+  }
 
   const journeys = await getJourneysCollection()
   const result = await journeys.findOneAndUpdate(
