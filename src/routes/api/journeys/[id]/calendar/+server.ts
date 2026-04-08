@@ -1,9 +1,10 @@
-import { getJourneysCollection, getWeightLogCollection, getJournalEntriesCollection } from "$lib/server/collections"
+import { getJourneysCollection, getWeightLogCollection, getJournalEntriesCollection, getUsersCollection } from "$lib/server/collections"
 import { getFastsCollection } from "$lib/server/danjiki"
 import { startOfDayTz, endOfDayTz } from "$lib/server/dates"
 import { getWorkoutLogsCollection } from "$lib/server/dojo"
 import { getCommitmentsCollection, getCommitmentLogsCollection } from "$lib/server/kata"
 import { getFoodItemLogsCollection } from "$lib/server/shoku"
+import { calculateTdee } from "$lib/server/tdee"
 import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
 import type { RequestHandler } from "./$types"
@@ -64,6 +65,7 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
     weightEntries,
     foodItemLogs,
     commitmentDocs,
+    userDoc,
   ] = await Promise.all([
     getWorkoutLogsCollection().then((col) =>
       col
@@ -125,6 +127,7 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
           col.find({ _id: { $in: commitmentIds }, userId }).toArray(),
         )
       : Promise.resolve([]),
+    getUsersCollection().then((col) => col.findOne({ _id: userId })),
   ])
 
   const totalCommitments = commitmentDocs.length
@@ -159,6 +162,10 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
     const d = dateStrFromDate(log.completedAt, userTz)
     const day = ensureDay(d)
     const sessionType = log.planSnapshot?.sessionType ?? "strength"
+    const durationMin =
+      log.startedAt && log.completedAt
+        ? Math.round((new Date(log.completedAt).getTime() - new Date(log.startedAt).getTime()) / 60000)
+        : null
     day.workouts.push({
       logId: log._id.toString(),
       sessionName: log.planSnapshot?.sessionName ?? "Workout",
@@ -167,6 +174,7 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
       totalReps: log.performance?.totalReps ?? 0,
       cardioDistance: log.cardioDistance ?? null,
       caloriesBurned: log.caloriesBurned ?? 0,
+      durationMin,
       hasPRs: (log.performance?.exercisePerformance ?? []).some(
         (ep: any) => (ep.personalBests ?? []).length > 0,
       ),
@@ -218,15 +226,30 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
     day.caloriesConsumed += entry.calculatedCalories ?? 0
   }
 
-  // Calculate net calories for each day
+  // Compute effective TDEE
+  let effectiveTdee: number | null = null
+  const p = userDoc?.profile
+  if (p?.tdeeOverride) {
+    effectiveTdee = p.tdeeOverride
+  } else if (p?.weight && p?.height && p?.sex && p?.birthDate && p?.activityLevel) {
+    effectiveTdee = calculateTdee({
+      weightLbs: p.weight,
+      heightIn: p.height,
+      sex: p.sex,
+      birthDate: p.birthDate,
+      activityLevel: p.activityLevel,
+    }).tdee
+  }
+
+  // Calculate net calories for each day (consumed - TDEE - workout burn)
   for (const d of Object.keys(days)) {
     const day = days[d]
-    if (day.caloriesConsumed > 0 || day.caloriesBurned > 0) {
-      day.netCalories = day.caloriesConsumed - day.caloriesBurned
+    if (effectiveTdee != null && day.caloriesConsumed > 0) {
+      day.netCalories = Math.round(day.caloriesConsumed - effectiveTdee - day.caloriesBurned)
     } else {
       day.netCalories = null
     }
   }
 
-  return json({ year, month, days })
+  return json({ year, month, days, tdee: effectiveTdee })
 }

@@ -26,6 +26,7 @@
   let calendarMonth = $state(new Date())
   const calendarToday = $derived(localToday(tz))
   let calendarData = $state<Record<string, any>>({})
+  let calendarTdee = $state<number | null>(null)
   let calendarLoading = $state(false)
   let selectedDay = $state<string | null>(null)
   let progressSidebarOpen = $state(false)
@@ -54,6 +55,7 @@
       if (res.ok) {
         const data = await res.json()
         calendarData = data.days ?? {}
+        calendarTdee = data.tdee ?? null
       }
     } catch (err) {
       console.error("Failed to load calendar data:", err)
@@ -1411,20 +1413,24 @@
                                 <span class="cal-micro">{dd.fastHours ? `${Math.round(dd.fastHours * 10) / 10}h` : ""}</span>
                               </div>
                             {/if}
+                            {#if dd.caloriesBurned > 0}
+                              <div class="cal-stat-row">
+                                <svg class="cal-icon" style="color: var(--accent-red, #e74c3c)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 12c0-3 2.5-6 2.5-6s2.5 3 2.5 6a2.5 2.5 0 1 1-5 0Z"/><path d="M12 21a8 8 0 0 1-8-8c0-5 4-9 8-13 4 4 8 8 8 13a8 8 0 0 1-8 8Z"/></svg>
+                                <span class="cal-micro">{dd.caloriesBurned} cal</span>
+                              </div>
+                            {/if}
+                            {#if dd.netCalories != null && cell.dateStr !== calendarToday}
+                              <div class="cal-stat-row">
+                                <svg class="cal-icon" style="color: var(--accent-green, #2ecc71)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 12c0-3 2.5-6 2.5-6s2.5 3 2.5 6a2.5 2.5 0 1 1-5 0Z"/><path d="M12 21a8 8 0 0 1-8-8c0-5 4-9 8-13 4 4 8 8 8 13a8 8 0 0 1-8 8Z"/></svg>
+                                <span class="cal-micro" class:cal-deficit={dd.netCalories < 0} class:cal-surplus={dd.netCalories > 0}>{dd.netCalories > 0 ? "+" : ""}{dd.netCalories} cal</span>
+                              </div>
+                            {/if}
                             {#if dd.weight}
                               <div class="cal-stat-row">
                                 <svg class="cal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v17"/><path d="M5 8h14"/><path d="M3 21h18"/><circle cx="12" cy="3" r="1"/><path d="M5 8l-2 6a5 5 0 0 0 4 0l-2-6"/><path d="M19 8l-2 6a5 5 0 0 0 4 0l-2-6"/></svg>
                                 <span class="cal-micro">{dd.weight} lbs</span>
                               </div>
                             {/if}
-                          {/if}
-                        </div>
-                        <!-- Bottom-right: net calories -->
-                        <div class="cal-net">
-                          {#if dd?.netCalories != null && cell.dateStr !== calendarToday}
-                            <span class="cal-net-calories" class:cal-deficit={dd.netCalories < 0} class:cal-surplus={dd.netCalories > 0}>
-                              {dd.netCalories > 0 ? "+" : ""}{dd.netCalories} cal
-                            </span>
                           {/if}
                         </div>
                       </div>
@@ -1435,15 +1441,39 @@
                   <div class="calendar-cell calendar-cell-summary">
                     {#if row.days.filter(Boolean).some((c) => calendarData[c!.dateStr])}
                       {@const weekDays = row.days.filter(Boolean).map((c) => calendarData[c!.dateStr]).filter(Boolean)}
-                      {@const weekWorkouts = weekDays.reduce((s: number, d: any) => s + (d.workouts?.length ?? 0), 0)}
-                      {@const weekVolume = weekDays.reduce((s: number, d: any) => s + (d.workouts ?? []).reduce((v: number, w: any) => v + (w.totalVolume ?? 0), 0), 0)}
+                      {@const allWorkouts = weekDays.flatMap((d: any) => d.workouts ?? [])}
+                      {@const weekVolume = allWorkouts.filter((w: any) => w.type === "strength").reduce((s: number, w: any) => s + (w.totalVolume ?? 0), 0)}
+                      {@const weekStrengthDur = allWorkouts.filter((w: any) => w.type === "strength").reduce((s: number, w: any) => s + (w.durationMin ?? 0), 0)}
+                      {@const weekCardioDist = allWorkouts.filter((w: any) => w.type === "cardio").reduce((s: number, w: any) => s + (w.cardioDistance ?? 0), 0)}
+                      {@const weekCardioDur = allWorkouts.filter((w: any) => w.type === "cardio").reduce((s: number, w: any) => s + (w.durationMin ?? 0), 0)}
                       {@const ratedDays = weekDays.filter((d: any) => d.dayRating != null)}
                       {@const avgRating = ratedDays.length > 0 ? Math.round(ratedDays.reduce((s: number, d: any) => s + d.dayRating, 0) / ratedDays.length * 10) / 10 : null}
-                      {#if weekWorkouts > 0}
-                        <span class="cal-micro">{weekWorkouts} wkt{weekWorkouts !== 1 ? "s" : ""}</span>
-                      {/if}
                       {#if weekVolume > 0}
-                        <span class="cal-micro">{(weekVolume / 1000).toFixed(1)}k lbs</span>
+                        <div class="cal-stat-row">
+                          <svg class="cal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6.5 6.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 1 0 0-7"/><path d="M17.5 6.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 1 0 0-7"/><rect x="9" y="9" width="6" height="2" rx="1"/><line x1="3" y1="10" x2="6.5" y2="10"/><line x1="17.5" y1="10" x2="21" y2="10"/></svg>
+                          <span class="cal-micro">{(weekVolume / 1000).toFixed(1)}k lbs{weekStrengthDur > 0 ? ` · ${weekStrengthDur}m` : ""}</span>
+                        </div>
+                      {/if}
+                      {#if weekCardioDist > 0 || weekCardioDur > 0}
+                        <div class="cal-stat-row">
+                          <svg class="cal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="4" r="2"/><path d="M7 22l3-7 2.5 1V22"/><path d="M17 22l-3-7-2.5 1"/><path d="M10 11l-1 5 5.5 2"/><path d="M14 11l1 2-4 3"/></svg>
+                          <span class="cal-micro">{weekCardioDist > 0 ? `${weekCardioDist.toFixed(1)} mi` : ""}{weekCardioDist > 0 && weekCardioDur > 0 ? " · " : ""}{weekCardioDur > 0 ? `${weekCardioDur}m` : ""}</span>
+                        </div>
+                      {/if}
+                      {@const weekCalsBurned = allWorkouts.reduce((s: number, w: any) => s + (w.caloriesBurned ?? 0), 0)}
+                      {#if weekCalsBurned > 0}
+                        <div class="cal-stat-row">
+                          <svg class="cal-icon" style="color: var(--accent-red, #e74c3c)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 12c0-3 2.5-6 2.5-6s2.5 3 2.5 6a2.5 2.5 0 1 1-5 0Z"/><path d="M12 21a8 8 0 0 1-8-8c0-5 4-9 8-13 4 4 8 8 8 13a8 8 0 0 1-8 8Z"/></svg>
+                          <span class="cal-micro">{weekCalsBurned} cal</span>
+                        </div>
+                      {/if}
+                      {@const weekNetCals = weekDays.reduce((s: number, d: any) => s + (d.netCalories ?? 0), 0)}
+                      {@const daysWithNet = weekDays.filter((d: any) => d.netCalories != null).length}
+                      {#if daysWithNet > 0}
+                        <div class="cal-stat-row">
+                          <svg class="cal-icon" style="color: var(--accent-green, #2ecc71)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 12c0-3 2.5-6 2.5-6s2.5 3 2.5 6a2.5 2.5 0 1 1-5 0Z"/><path d="M12 21a8 8 0 0 1-8-8c0-5 4-9 8-13 4 4 8 8 8 13a8 8 0 0 1-8 8Z"/></svg>
+                          <span class="cal-micro">{weekNetCals > 0 ? "+" : ""}{weekNetCals} cal</span>
+                        </div>
                       {/if}
                       {#if avgRating != null}
                         <span class="cal-micro">Avg {avgRating}</span>
@@ -1572,14 +1602,17 @@
               <span class="day-section-title">Nutrition</span>
               <div class="day-section-content">
                 {#if sd.caloriesConsumed > 0}
-                  <span>{sd.caloriesConsumed} cal consumed</span>
+                  <span>+ {sd.caloriesConsumed} cal consumed</span>
+                {/if}
+                {#if calendarTdee != null}
+                  <span>− {calendarTdee} cal TDEE</span>
                 {/if}
                 {#if sd.caloriesBurned > 0}
-                  <span>{sd.caloriesBurned} cal burned</span>
+                  <span>− {sd.caloriesBurned} cal burned</span>
                 {/if}
                 {#if sd.netCalories != null}
                   <span class:cal-deficit={sd.netCalories < 0} class:cal-surplus={sd.netCalories > 0}>
-                    Net: {sd.netCalories > 0 ? "+" : ""}{sd.netCalories} cal
+                    = {sd.netCalories > 0 ? "+" : ""}{sd.netCalories} cal net
                   </span>
                 {/if}
               </div>
@@ -2515,7 +2548,8 @@
     display: flex;
     flex-direction: column;
     gap: 1px;
-    justify-content: center;
+    justify-content: flex-end;
+    align-items: flex-start;
     padding: var(--space-1);
   }
 
@@ -2544,12 +2578,6 @@
     flex-direction: column;
     gap: 1px;
     align-self: end;
-  }
-
-  .cal-net {
-    grid-column: 3;
-    align-self: end;
-    justify-self: end;
   }
 
   .cal-stat-row {
@@ -2591,13 +2619,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 100%;
-  }
-
-  .cal-net-calories {
-    font-family: var(--font-body);
-    font-size: 11px;
-    line-height: 1.2;
-    white-space: nowrap;
   }
 
   .cal-deficit {
