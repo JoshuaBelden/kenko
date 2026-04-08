@@ -487,6 +487,7 @@
   let journalLoading = $state(false)
   let journalTab = $state<"morning" | "evening">("morning")
   let yesterdayIntention = $state<string | null>(null)
+  let weatherRefreshing = $state(false)
 
   // Journal field states
   let jBodyWeight = $state("")
@@ -572,6 +573,24 @@
     const next = d.toISOString().split("T")[0]
     if (next <= todayStr) {
       journalDate = next
+    }
+  }
+
+  async function refreshWeather() {
+    if (!journalEntry) return
+    weatherRefreshing = true
+    try {
+      const res = await fetch("/api/journal", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entryId: journalEntry.id, date: journalEntry.date }),
+      })
+      if (res.ok) {
+        const weather = await res.json()
+        journalEntry = { ...journalEntry, weather }
+      }
+    } finally {
+      weatherRefreshing = false
     }
   }
 
@@ -1207,6 +1226,12 @@
             {#if journalEntry.weather.precipitation > 0}
               <span class="weather-precip">{journalEntry.weather.precipitation}mm</span>
             {/if}
+          </div>
+        {:else}
+          <div class="journal-weather">
+            <button class="weather-fetch-btn" onclick={refreshWeather} disabled={weatherRefreshing}>
+              {weatherRefreshing ? "Fetching…" : "Get weather"}
+            </button>
           </div>
         {/if}
 
@@ -2845,6 +2870,23 @@
 
   .weather-precip {
     color: var(--ink-faint);
+  }
+
+  .weather-fetch-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-faint);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .weather-fetch-btn:disabled {
+    cursor: default;
+    text-decoration: none;
   }
 
   .journal-tabs {

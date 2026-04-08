@@ -23,6 +23,37 @@ export const GET: RequestHandler = async ({ locals, url }) => {
   return json(entry ? serializeJournalEntry(entry) : null)
 }
 
+export const PATCH: RequestHandler = async ({ locals, request }) => {
+  if (!locals.userId) return json({ error: "Unauthorized" }, { status: 401 })
+
+  const body = await request.json()
+  const { entryId, date } = body
+
+  if (!entryId) return json({ error: "entryId is required" }, { status: 400 })
+  if (!date) return json({ error: "date is required" }, { status: 400 })
+
+  const userId = new ObjectId(locals.userId)
+
+  try {
+    const users = await getUsersCollection()
+    const user = await users.findOne(
+      { _id: userId },
+      { projection: { "profile.latitude": 1, "profile.longitude": 1 } },
+    )
+    const lat = user?.profile?.latitude
+    const lon = user?.profile?.longitude
+    if (lat == null || lon == null) {
+      return json({ error: "No location set on profile" }, { status: 422 })
+    }
+    const weather = await fetchWeatherForDate(lat, lon, date, locals.userTimezone ?? "America/Los_Angeles")
+    if (!weather) return json({ error: "Weather unavailable" }, { status: 502 })
+    await updateWeather(new ObjectId(entryId), userId, weather)
+    return json(weather)
+  } catch {
+    return json({ error: "Failed to fetch weather" }, { status: 502 })
+  }
+}
+
 export const POST: RequestHandler = async ({ locals, request }) => {
   if (!locals.userId) return json({ error: "Unauthorized" }, { status: 401 })
 
