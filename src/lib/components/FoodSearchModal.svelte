@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Button, BarcodeScanner } from "$lib/components"
+  import { getCompatibleUnits, unitLabel, type DiaryUnit } from "$lib/units"
 
   interface Props {
     open: boolean
@@ -18,6 +19,7 @@
   let searching = $state(false)
   let selectedFood = $state<any | null>(null)
   let servings = $state(1)
+  let selectedUnit = $state<DiaryUnit>("serving")
   let selectedCategory = $state("")
   let scannerSupported = $state(false)
   let barcodeError = $state("")
@@ -124,6 +126,7 @@
     } else {
       selectedFood = food
       servings = 1
+      selectedUnit = "serving"
       selectedCategory = category
       mode = "confirm"
     }
@@ -131,7 +134,7 @@
 
   function confirmSelection() {
     if (!selectedFood) return
-    onselect(selectedFood.id, servings, "serving", selectedCategory)
+    onselect(selectedFood.id, servings, selectedUnit, selectedCategory)
     reset()
   }
 
@@ -521,8 +524,16 @@
           </div>
           <div class="form-row">
             <div class="form-field">
-              <label class="field-label" for="log-servings">Servings</label>
+              <label class="field-label" for="log-servings">Quantity</label>
               <input id="log-servings" type="number" min="0.1" step="any" bind:value={servings} />
+            </div>
+            <div class="form-field">
+              <label class="field-label" for="log-unit">Unit</label>
+              <select id="log-unit" bind:value={selectedUnit}>
+                {#each getCompatibleUnits(selectedFood.baseUnit ?? "g") as u}
+                  <option value={u}>{unitLabel(u)}</option>
+                {/each}
+              </select>
             </div>
             {#if context !== "meal-plan"}
               <div class="form-field">

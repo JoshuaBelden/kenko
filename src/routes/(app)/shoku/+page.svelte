@@ -4,6 +4,7 @@
   import { Button, Card, PageHeader, StatNumber } from "$lib/components"
   import { icons } from "$lib/icons"
   import FoodSearchModal from "$lib/components/FoodSearchModal.svelte"
+  import { getCompatibleUnits, unitLabel, type DiaryUnit } from "$lib/units"
 
   let grouped = $state(page.data.grouped ?? {})
   let totals = $state(page.data.totals ?? { calories: 0, protein: 0, netCarbs: 0, fat: 0 })
@@ -39,6 +40,8 @@
   // Edit entry state
   let editingId = $state<string | null>(null)
   let editQuantity = $state(0)
+  let editUnit = $state<DiaryUnit>("serving")
+  let editBaseUnit = $state<"g" | "ml">("g")
   let editCategory = $state("")
   let editNote = $state("")
   let deletingId = $state<string | null>(null)
@@ -168,6 +171,8 @@
   function startEdit(entry: any) {
     editingId = entry.id
     editQuantity = entry.quantity
+    editUnit = entry.unit ?? "serving"
+    editBaseUnit = entry.foodBaseUnit ?? "g"
     editCategory = entry.category
     editNote = entry.note ?? ""
   }
@@ -179,7 +184,7 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         quantity: editQuantity,
-        unit: "serving",
+        unit: editUnit,
         category: editCategory,
         note: editNote || null,
       }),
@@ -299,8 +304,16 @@
               <div class="edit-form">
                 <div class="form-row">
                   <div class="form-field">
-                    <label class="field-label" for="edit-qty">Servings</label>
+                    <label class="field-label" for="edit-qty">Quantity</label>
                     <input id="edit-qty" type="number" min="0.1" step="any" bind:value={editQuantity} />
+                  </div>
+                  <div class="form-field">
+                    <label class="field-label" for="edit-unit">Unit</label>
+                    <select id="edit-unit" bind:value={editUnit}>
+                      {#each getCompatibleUnits(editBaseUnit) as u}
+                        <option value={u}>{unitLabel(u)}</option>
+                      {/each}
+                    </select>
                   </div>
                   <div class="form-field">
                     <label class="field-label" for="edit-cat">Category</label>
@@ -334,7 +347,7 @@
             {:else}
               <button class="entry-row" onclick={() => startEdit(entry)}>
                 <span class="entry-name">{entry.foodName}</span>
-                <span class="entry-servings">{entry.quantity} {entry.quantity === 1 ? 'serving' : 'servings'}</span>
+                <span class="entry-servings">{entry.quantity} {entry.unit === "serving" ? (entry.quantity === 1 ? "serving" : "servings") : unitLabel(entry.unit)}</span>
                 <span class="entry-cals">{entry.calculatedCalories} cal</span>
               </button>
             {/if}
