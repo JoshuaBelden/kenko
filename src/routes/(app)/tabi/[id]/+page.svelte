@@ -513,6 +513,10 @@
     jIntention = e.intention ?? ""
     jDayRating = e.dayRating ?? null
     jEveningNotes = e.notes ?? null
+
+    // Auto-switch to evening tab if morning has been filled in
+    const hasMorning = m.bodyWeight != null || m.sleepDuration != null || m.sleepQuality != null || m.notes
+    if (hasMorning) journalTab = "evening"
   }
 
   async function loadJournalEntry() {
