@@ -267,6 +267,17 @@
     return Math.min((actual / target) * 100, 100)
   }
 
+  function mealCalories(category: MealCategory): number {
+    if (!selectedBuild) return 0
+    let cal = 0
+    for (const item of selectedBuild.meals[category]) {
+      const food = getFoodById(item.foodItemId)
+      if (!food) continue
+      cal += food.calories * item.servingSize
+    }
+    return Math.round(cal)
+  }
+
   function mealMacroRows(category: MealCategory) {
     if (!selectedBuild) return []
     const mealItems = selectedBuild.meals[category]
@@ -352,39 +363,38 @@
 
       {#each MEAL_CATEGORIES as category}
         {@const rows = mealMacroRows(category)}
+        {@const mealCal = mealCalories(category)}
         <div class="meal-section">
           <div class="meal-section-header">
-            <h5 class="meal-section-title">{MEAL_LABELS[category]}</h5>
+            <h5 class="meal-section-title">
+              {MEAL_LABELS[category]}
+              {#if mealCal > 0}<span class="meal-cal">{mealCal} cal</span>{/if}
+            </h5>
           </div>
 
           {#if rows.length === 0}
             <p class="meal-empty">No items yet</p>
           {:else}
             {#each rows as row}
-              <div class="macro-row">
-                <span class="macro-row-label">{row.type.toUpperCase()}</span>
-                <span class="macro-row-foods">
-                  {row.items.map((i) => {
-                    const qty = i.item.servingSize !== 1 ? `${i.item.servingSize} ` : ""
-                    return `${qty}${i.food.name}`
-                  }).join(", ")}
-                </span>
-                <span class="macro-row-values">
-                  {row.totalCal} cal, {row.totalP}g P, {row.totalC}g C, {row.totalF}g F
-                </span>
-              </div>
-              <div class="macro-row-actions">
+              <div class="macro-group">
+                <div class="macro-group-header">
+                  <span class="macro-row-label">{row.type.toUpperCase()}</span>
+                  <span class="macro-row-values">
+                    {row.totalCal} cal, {row.totalP}g P, {row.totalC}g C, {row.totalF}g F
+                  </span>
+                </div>
                 {#each row.items as entry}
-                  <div class="item-controls">
+                  <div class="item-row">
                     <input
                       type="number"
                       class="serving-input"
                       value={entry.item.servingSize}
-                      step="0.5"
+                      step="any"
                       min="0.1"
                       onchange={(e) => updateItemServing(category, entry.index, parseFloat(e.currentTarget.value) || 1)}
                     />
-                    <span class="serving-label">{entry.food.name}</span>
+                    <span class="item-name">{entry.food.name}</span>
+                    <span class="item-cals">{Math.round(entry.food.calories * entry.item.servingSize)} cal</span>
                     <button class="remove-btn" onclick={() => removeItemFromMeal(category, entry.index)} title="Remove {entry.food.name}">
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                     </button>
@@ -594,6 +604,17 @@
     letter-spacing: 0.15em;
     color: var(--ink-faint);
     margin: 0;
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+  }
+
+  .meal-cal {
+    font-weight: 400;
+    font-size: var(--text-xs);
+    color: var(--ink-light);
+    text-transform: none;
+    letter-spacing: normal;
   }
 
   .meal-empty {
@@ -604,11 +625,17 @@
     font-style: italic;
   }
 
-  .macro-row {
+  .macro-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .macro-group-header {
     display: flex;
     align-items: baseline;
+    justify-content: space-between;
     gap: var(--space-3);
-    padding: var(--space-1) 0;
   }
 
   .macro-row-label {
@@ -618,14 +645,6 @@
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--ink-faint);
-    min-width: 60px;
-  }
-
-  .macro-row-foods {
-    font-family: var(--font-body);
-    font-size: var(--text-sm);
-    color: var(--ink);
-    flex: 1;
   }
 
   .macro-row-values {
@@ -636,18 +655,27 @@
     font-variant-numeric: tabular-nums;
   }
 
-  .macro-row-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-1);
-    padding-left: calc(60px + var(--space-3));
-    margin-bottom: var(--space-1);
-  }
-
-  .item-controls {
+  .item-row {
     display: flex;
     align-items: center;
     gap: var(--space-2);
+    padding: var(--space-1) 0;
+    padding-left: var(--space-3);
+  }
+
+  .item-name {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink);
+    flex: 1;
+  }
+
+  .item-cals {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink-light);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
 
   .serving-input {
@@ -666,12 +694,6 @@
 
   .serving-input:focus {
     border-bottom-color: var(--accent);
-  }
-
-  .serving-label {
-    font-family: var(--font-body);
-    font-size: var(--text-xs);
-    color: var(--ink-light);
   }
 
   .remove-btn {

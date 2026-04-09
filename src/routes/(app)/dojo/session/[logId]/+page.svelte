@@ -442,7 +442,7 @@
             {#if isCardio}
               <div class="form-field">
                 <label class="field-label" for="edit-cardio-distance">Distance (miles)</label>
-                <input id="edit-cardio-distance" type="number" class="field-input" bind:value={cardioDistance} placeholder="Optional" min="0" step="0.01" />
+                <input id="edit-cardio-distance" type="number" class="field-input" bind:value={cardioDistance} placeholder="Optional" min="0" step="any" />
               </div>
             {/if}
             <div class="form-field">
@@ -650,7 +650,7 @@
         </div>
         <div class="form-field">
           <label class="field-label" for="cardio-distance">Distance (miles)</label>
-          <input id="cardio-distance" type="number" class="field-input" bind:value={cardioDistance} placeholder="Optional" min="0" step="0.01" />
+          <input id="cardio-distance" type="number" class="field-input" bind:value={cardioDistance} placeholder="Optional" min="0" step="any" />
         </div>
       </Card>
     {:else if log.cardioDistance}

@@ -1004,7 +1004,7 @@
               <input
                 id="j-weight"
                 type="number"
-                step="0.1"
+                step="any"
                 bind:value={jBodyWeight}
                 placeholder="Optional"
                 onblur={() => saveMorningField("bodyWeight", jBodyWeight ? Number(jBodyWeight) : null)}
@@ -1016,7 +1016,7 @@
               <input
                 id="j-sleep"
                 type="number"
-                step="0.5"
+                step="any"
                 bind:value={jSleepDuration}
                 placeholder="e.g. 7.5"
                 onblur={() => saveMorningField("sleepDuration", jSleepDuration ? Number(jSleepDuration) : null)}
