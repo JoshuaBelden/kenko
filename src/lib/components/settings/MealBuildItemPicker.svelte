@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { Button } from "$lib/components"
-
   interface Props {
     open: boolean
     mealPlanItems: any[]
@@ -11,6 +9,17 @@
 
   let { open, mealPlanItems, foods, onselect, onclose }: Props = $props()
 
+  let searchQuery = $state("")
+  let searchInput = $state<HTMLInputElement | null>(null)
+
+  $effect(() => {
+    if (open) {
+      searchQuery = ""
+      // Focus after DOM updates
+      requestAnimationFrame(() => searchInput?.focus())
+    }
+  })
+
   function getFoodById(id: string) {
     return foods.find((f: any) => f.id === id)
   }
@@ -20,7 +29,21 @@
   const LABELS: Record<MacroSection, string> = { protein: "Protein", carbs: "Carbs", fat: "Fat" }
 
   function itemsBySection(section: MacroSection) {
-    return mealPlanItems.filter((i: any) => i.macroType === section)
+    const query = searchQuery.trim().toLowerCase()
+    return mealPlanItems.filter((i: any) => {
+      if (i.macroType !== section) return false
+      if (!query) return true
+      const food = getFoodById(i.foodItemId)
+      return food?.name?.toLowerCase().includes(query) ?? false
+    })
+  }
+
+  const allFilteredItems = $derived(SECTIONS.flatMap((s) => itemsBySection(s)))
+
+  function handleSearchKeydown(e: KeyboardEvent) {
+    if (e.key === "Enter" && allFilteredItems.length === 1) {
+      onselect(allFilteredItems[0])
+    }
   }
 </script>
 
@@ -37,6 +60,19 @@
           </svg>
         </button>
       </div>
+
+      {#if mealPlanItems.length > 0}
+        <div class="picker-search">
+          <input
+            class="search-input"
+            type="text"
+            placeholder="Search foods..."
+            bind:value={searchQuery}
+            bind:this={searchInput}
+            onkeydown={handleSearchKeydown}
+          />
+        </div>
+      {/if}
 
       {#if mealPlanItems.length === 0}
         <div class="picker-empty">
@@ -55,9 +91,10 @@
                     <button class="picker-item" onclick={() => onselect(item)}>
                       <span class="picker-item-name">{food.name}</span>
                       <span class="picker-item-macros">
-                        {Math.round(food.protein * item.servingSize)}P
-                        {Math.round(food.netCarbs * item.servingSize)}C
-                        {Math.round(food.fat * item.servingSize)}F
+                        {Math.round(food.calories)} cal,
+                        {Math.round(food.protein)}P
+                        {Math.round(food.netCarbs)}C
+                        {Math.round(food.fat)}F
                       </span>
                     </button>
                   {/if}
@@ -127,6 +164,27 @@
     color: var(--ink);
   }
 
+  .picker-search {
+    padding: var(--space-3) var(--space-4) 0;
+  }
+
+  .search-input {
+    width: 100%;
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    padding: var(--space-2) 0;
+    outline: none;
+    transition: border-color var(--transition-fast);
+  }
+
+  .search-input:focus {
+    border-bottom-color: var(--accent);
+  }
+
   .picker-empty {
     padding: var(--space-6);
     text-align: center;
@@ -155,7 +213,7 @@
   .picker-item {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
     width: 100%;
     background: none;
     border: 0.5px solid var(--border);
@@ -175,11 +233,17 @@
   .picker-item-name {
     font-size: var(--text-sm);
     color: var(--ink);
+    text-align: left;
+    flex: 1;
+    min-width: 0;
   }
 
   .picker-item-macros {
     font-size: var(--text-xs);
     color: var(--ink-faint);
     font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+    white-space: nowrap;
+    margin-left: var(--space-2);
   }
 </style>

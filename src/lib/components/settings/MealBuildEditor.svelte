@@ -270,10 +270,10 @@
   function mealMacroRows(category: MealCategory) {
     if (!selectedBuild) return []
     const mealItems = selectedBuild.meals[category]
-    const groups: Record<string, { items: { food: any; item: MealBuildItem; index: number }[]; totalP: number; totalC: number; totalF: number }> = {
-      protein: { items: [], totalP: 0, totalC: 0, totalF: 0 },
-      carbs: { items: [], totalP: 0, totalC: 0, totalF: 0 },
-      fat: { items: [], totalP: 0, totalC: 0, totalF: 0 },
+    const groups: Record<string, { items: { food: any; item: MealBuildItem; index: number }[]; totalP: number; totalC: number; totalF: number; totalCal: number }> = {
+      protein: { items: [], totalP: 0, totalC: 0, totalF: 0, totalCal: 0 },
+      carbs: { items: [], totalP: 0, totalC: 0, totalF: 0, totalCal: 0 },
+      fat: { items: [], totalP: 0, totalC: 0, totalF: 0, totalCal: 0 },
     }
 
     mealItems.forEach((item, index) => {
@@ -284,6 +284,7 @@
       group.totalP += Math.round(food.protein * item.servingSize)
       group.totalC += Math.round(food.netCarbs * item.servingSize)
       group.totalF += Math.round(food.fat * item.servingSize)
+      group.totalCal += Math.round(food.calories * item.servingSize)
     })
 
     return (["protein", "carbs", "fat"] as const)
@@ -369,7 +370,7 @@
                   }).join(", ")}
                 </span>
                 <span class="macro-row-values">
-                  {row.totalP}g P, {row.totalC}g C, {row.totalF}g F
+                  {row.totalCal} cal, {row.totalP}g P, {row.totalC}g C, {row.totalF}g F
                 </span>
               </div>
               <div class="macro-row-actions">
