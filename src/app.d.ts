@@ -3,12 +3,14 @@ declare global {
     interface Locals {
       userId?: string
       userTimezone?: string
+      isAdmin?: boolean
     }
     interface PageData {
       user: {
         id: string
         email: string
         profileComplete: boolean
+        isAdmin: boolean
         profile: {
           firstName: string
           lastName: string

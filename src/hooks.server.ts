@@ -18,10 +18,11 @@ export const handle: Handle = async ({ event, resolve }) => {
       const users = await getUsersCollection()
       const user = await users.findOne(
         { _id: new ObjectId(userId) },
-        { projection: { profileComplete: 1, "profile.timezone": 1, "profile.latitude": 1, "profile.longitude": 1 } },
+        { projection: { profileComplete: 1, isAdmin: 1, "profile.timezone": 1, "profile.latitude": 1, "profile.longitude": 1 } },
       )
 
       event.locals.userTimezone = user?.profile?.timezone ?? "America/Los_Angeles"
+      event.locals.isAdmin = user?.isAdmin ?? false
 
       // Check if profile is complete — redirect incomplete profiles to /profile
       if (!event.url.pathname.startsWith("/profile") && event.url.pathname !== "/logout") {

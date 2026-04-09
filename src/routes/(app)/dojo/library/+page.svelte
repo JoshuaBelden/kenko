@@ -9,10 +9,12 @@
     exercises = page.data.exercises ?? []
   })
 
+  const isAdmin = $derived(page.data.isAdmin ?? false)
   let searchQuery = $state("")
   let regionFilter = $state("")
   let muscleFilter = $state("")
   let equipmentFilter = $state("")
+  let showGlobal = $state(true)
   let creating = $state(false)
   let editingId = $state<string | null>(null)
   let deletingId = $state<string | null>(null)
@@ -26,6 +28,7 @@
   let fRegion = $state<string>("torso")
   let fMuscle = $state<string>("chest")
   let fEquipment = $state<string>("barbell")
+  let fIsGlobal = $state(false)
 
   const REGIONS: { value: string; label: string }[] = [
     { value: "torso", label: "Torso" },
@@ -84,7 +87,8 @@
       const matchesRegion = !regionFilter || e.muscleGroup.region === regionFilter
       const matchesMuscle = !muscleFilter || e.muscleGroup.muscle === muscleFilter
       const matchesEquipment = !equipmentFilter || e.equipment === equipmentFilter
-      return matchesSearch && matchesRegion && matchesMuscle && matchesEquipment
+      const matchesGlobal = !isAdmin || showGlobal || !e.isGlobal
+      return matchesSearch && matchesRegion && matchesMuscle && matchesEquipment && matchesGlobal
     }),
   )
 
@@ -103,6 +107,7 @@
     fRegion = "torso"
     fMuscle = "chest"
     fEquipment = "barbell"
+    fIsGlobal = false
     formError = ""
   }
 
@@ -112,6 +117,7 @@
     fRegion = exercise.muscleGroup.region
     fMuscle = exercise.muscleGroup.muscle
     fEquipment = exercise.equipment
+    fIsGlobal = exercise.isGlobal ?? false
     formError = ""
     creating = false
   }
@@ -141,6 +147,7 @@
         name: fName.trim(),
         muscleGroup: { region: fRegion, muscle: fMuscle },
         equipment: fEquipment,
+        ...(isAdmin && { isGlobal: fIsGlobal }),
       }),
     })
 
@@ -168,6 +175,7 @@
         name: fName.trim(),
         muscleGroup: { region: fRegion, muscle: fMuscle },
         equipment: fEquipment,
+        ...(isAdmin && { isGlobal: fIsGlobal }),
       }),
     })
 
@@ -248,64 +256,83 @@
         <option value={e.value}>{e.label}</option>
       {/each}
     </select>
-  </div>
 
-  {#if !creating && !editingId}
-    <Button variant="primary" onclick={() => { creating = true; resetForm() }}>+ New Exercise</Button>
-  {/if}
+    {#if isAdmin}
+      <label class="global-filter">
+        <input type="checkbox" bind:checked={showGlobal} />
+        Show Global
+      </label>
+    {/if}
+
+    <span class="new-btn"><Button variant="primary" onclick={() => { creating = true; resetForm() }}>+ New</Button></span>
+  </div>
 </div>
 
 {#if creating || editingId}
-  <Card>
-    <div class="form">
-      <h3 class="form-title">{creating ? "New Exercise" : "Edit Exercise"}</h3>
-
-      <div class="form-field">
-        <label class="field-label">Name</label>
-        <input type="text" class="field-input" bind:value={fName} placeholder="e.g. Bench Press" />
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div class="modal-backdrop" role="presentation" onclick={() => { creating = false; editingId = null; resetForm() }}>
+    <!-- svelte-ignore a11y_interactive_supports_focus a11y_click_events_have_key_events -->
+    <div class="modal" role="dialog" aria-label={creating ? "New exercise" : "Edit exercise"} onclick={(e) => e.stopPropagation()}>
+      <div class="modal-header">
+        <h4>{creating ? "New Exercise" : "Edit Exercise"}</h4>
+        <button class="btn-close" onclick={() => { creating = false; editingId = null; resetForm() }}>Close</button>
       </div>
 
-      <div class="form-row">
+      <div class="modal-body">
         <div class="form-field">
-          <label class="field-label">Region</label>
-          <select class="field-input" bind:value={fRegion}>
-            {#each REGIONS as r}
-              <option value={r.value}>{r.label}</option>
-            {/each}
-          </select>
+          <label class="field-label">Name</label>
+          <input type="text" class="field-input" bind:value={fName} placeholder="e.g. Bench Press" />
         </div>
 
-        <div class="form-field">
-          <label class="field-label">Muscle</label>
-          <select class="field-input" bind:value={fMuscle}>
-            {#each availableMuscles as m}
-              <option value={m.value}>{m.label}</option>
-            {/each}
-          </select>
+        <div class="form-row">
+          <div class="form-field">
+            <label class="field-label">Region</label>
+            <select class="field-input" bind:value={fRegion}>
+              {#each REGIONS as r}
+                <option value={r.value}>{r.label}</option>
+              {/each}
+            </select>
+          </div>
+
+          <div class="form-field">
+            <label class="field-label">Muscle</label>
+            <select class="field-input" bind:value={fMuscle}>
+              {#each availableMuscles as m}
+                <option value={m.value}>{m.label}</option>
+              {/each}
+            </select>
+          </div>
+
+          <div class="form-field">
+            <label class="field-label">Equipment</label>
+            <select class="field-input" bind:value={fEquipment}>
+              {#each EQUIPMENT as e}
+                <option value={e.value}>{e.label}</option>
+              {/each}
+            </select>
+          </div>
         </div>
 
-        <div class="form-field">
-          <label class="field-label">Equipment</label>
-          <select class="field-input" bind:value={fEquipment}>
-            {#each EQUIPMENT as e}
-              <option value={e.value}>{e.label}</option>
-            {/each}
-          </select>
+        {#if isAdmin}
+          <label class="global-toggle">
+            <input type="checkbox" bind:checked={fIsGlobal} />
+            Global exercise (visible to all users)
+          </label>
+        {/if}
+
+        {#if formError}
+          <p class="form-error">{formError}</p>
+        {/if}
+
+        <div class="form-actions">
+          <Button variant="secondary" onclick={() => { creating = false; editingId = null; resetForm() }}>Cancel</Button>
+          <Button variant="primary" onclick={creating ? handleCreate : handleUpdate}>
+            {creating ? "Create" : "Save"}
+          </Button>
         </div>
-      </div>
-
-      {#if formError}
-        <p class="form-error">{formError}</p>
-      {/if}
-
-      <div class="form-actions">
-        <Button variant="secondary" onclick={() => { creating = false; editingId = null; resetForm() }}>Cancel</Button>
-        <Button variant="primary" onclick={creating ? handleCreate : handleUpdate}>
-          {creating ? "Create" : "Save"}
-        </Button>
       </div>
     </div>
-  </Card>
+  </div>
 {/if}
 
 {#each Object.entries(grouped()) as [region, items]}
@@ -323,21 +350,26 @@
               <div class="exercise-meta">
                 <span class="badge muscle">{muscleLabel(exercise.muscleGroup.muscle)}</span>
                 <span class="badge equipment">{equipmentLabel(exercise.equipment)}</span>
+                {#if exercise.isGlobal}
+                  <span class="badge global">Global</span>
+                {/if}
               </div>
             </div>
 
-            <div class="exercise-actions">
-              <button class="action-btn" onclick={() => startEdit(exercise)}>Edit</button>
-              {#if deletingId === exercise.id}
-                <div class="confirm-delete-inline">
-                  <span class="confirm-text">Delete?</span>
-                  <button class="confirm-btn yes" onclick={() => handleDelete(exercise.id)}>Yes</button>
-                  <button class="confirm-btn no" onclick={() => (deletingId = null)}>No</button>
-                </div>
-              {:else}
-                <button class="delete-btn-sm" onclick={() => (deletingId = exercise.id)}>Delete</button>
-              {/if}
-            </div>
+            {#if !exercise.isGlobal || isAdmin}
+              <div class="exercise-actions">
+                <button class="action-btn" onclick={() => startEdit(exercise)}>Edit</button>
+                {#if deletingId === exercise.id}
+                  <div class="confirm-delete-inline">
+                    <span class="confirm-text">Delete?</span>
+                    <button class="confirm-btn yes" onclick={() => handleDelete(exercise.id)}>Yes</button>
+                    <button class="confirm-btn no" onclick={() => (deletingId = null)}>No</button>
+                  </div>
+                {:else}
+                  <button class="delete-btn-sm" onclick={() => (deletingId = exercise.id)}>Delete</button>
+                {/if}
+              </div>
+            {/if}
           </div>
 
           {#if expandedId === exercise.id}
@@ -448,8 +480,13 @@
 
   .filter-row {
     display: flex;
+    align-items: center;
     gap: var(--space-2);
     flex-wrap: wrap;
+  }
+
+  .new-btn {
+    margin-left: auto;
   }
 
   .filter-select {
@@ -465,6 +502,9 @@
 
   .region-group {
     margin-bottom: var(--space-6);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
   }
 
   .region-title {
@@ -514,6 +554,11 @@
   .badge.equipment {
     background: var(--paper);
     border: 0.5px solid var(--border);
+  }
+
+  .badge.global {
+    background: var(--accent-green);
+    color: white;
   }
 
   .exercise-actions {
@@ -595,17 +640,64 @@
     border-color: var(--ink-light);
   }
 
-  .form {
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
     display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: var(--space-4);
   }
 
-  .form-title {
+  .modal {
+    background: var(--paper-card);
+    border-radius: var(--radius-md);
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-4) var(--space-5);
+    border-bottom: 0.5px solid var(--border);
+  }
+
+  .modal-header h4 {
     font-family: var(--font-display);
     font-size: var(--text-lg);
     font-weight: 500;
+    margin: 0;
     color: var(--ink);
+  }
+
+  .btn-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-light);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    transition: color var(--transition-fast);
+  }
+
+  .btn-close:hover {
+    color: var(--ink);
+  }
+
+  .modal-body {
+    padding: var(--space-4) var(--space-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
   }
 
   .form-field {
@@ -647,6 +739,26 @@
     display: flex;
     gap: var(--space-4);
     flex-wrap: wrap;
+  }
+
+  .global-filter {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink-light);
+    cursor: pointer;
+  }
+
+  .global-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-light);
+    cursor: pointer;
   }
 
   .form-error {

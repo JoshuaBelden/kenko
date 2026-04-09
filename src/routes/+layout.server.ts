@@ -31,6 +31,7 @@ export const load: LayoutServerLoad = async ({ locals }) => {
       id: user._id.toString(),
       email: user.email,
       profileComplete: user.profileComplete ?? false,
+      isAdmin: user.isAdmin ?? false,
       profile: user.profile ?? null,
     },
     activeJourneys: activeJourneys.map((j) => ({

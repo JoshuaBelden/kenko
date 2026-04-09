@@ -59,10 +59,11 @@ export const POST: RequestHandler = async ({ locals, request }) => {
   }
 
   const now = new Date()
+  const makeGlobal = locals.isAdmin && body.isGlobal === true
   const exercises = await getExercisesCollection()
   const result = await exercises.insertOne({
-    userId: new ObjectId(locals.userId),
-    isGlobal: false,
+    userId: makeGlobal ? null : new ObjectId(locals.userId),
+    isGlobal: makeGlobal,
     name: body.name.trim(),
     muscleGroup: {
       region: body.muscleGroup.region,
