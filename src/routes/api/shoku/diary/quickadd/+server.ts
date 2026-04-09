@@ -1,4 +1,5 @@
 import { createFoodItemLog, getFoodItemsCollection, serializeFoodItemLog } from "$lib/server/shoku"
+import { startOfDayTz, todayStr } from "$lib/server/dates"
 import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
 import type { RequestHandler } from "./$types"
@@ -48,9 +49,9 @@ export const POST: RequestHandler = async ({ locals, request }) => {
   })
 
   const foodItem = await foodItems.findOne({ _id: foodResult.insertedId })
-  const date = body.date
-    ? new Date(body.date + "T00:00:00.000Z")
-    : new Date(now.toISOString().split("T")[0] + "T00:00:00.000Z")
+  const userTz = locals.userTimezone ?? "America/Los_Angeles"
+  const dateStr = body.date ?? todayStr(userTz)
+  const date = startOfDayTz(dateStr, userTz)
 
   const created = await createFoodItemLog(
     userId,
