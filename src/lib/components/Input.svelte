@@ -7,16 +7,17 @@
     value?: string
     required?: boolean
     error?: string
+    step?: string
   }
 
-  let { label, type = "text", name, placeholder = "", value = "", required = false, error }: Props = $props()
+  let { label, type = "text", name, placeholder = "", value = "", required = false, error, step }: Props = $props()
 </script>
 
 <div class="input-group">
   {#if label}
     <label class="input-label" for={name}>{label}</label>
   {/if}
-  <input {type} {name} id={name} {placeholder} bind:value {required} class:has-error={error} />
+  <input {type} {name} id={name} {placeholder} bind:value {required} {step} class:has-error={error} />
   {#if error}
     <span class="input-error">{error}</span>
   {/if}

@@ -188,17 +188,13 @@
       {#if form?.profileError}
         <p class="form-error">{form.profileError}</p>
       {/if}
-      {#if form?.profileSuccess}
-        <p class="form-success">Profile updated.</p>
-      {/if}
-
       <div class="form-row">
         <Input name="firstName" label="First name" value={firstNameValue} required />
         <Input name="lastName" label="Last name" value={lastNameValue} required />
       </div>
 
       <div class="form-row">
-        <Input name="weight" label="Weight (lbs)" type="number" value={weightValue} />
+        <Input name="weight" label="Weight (lbs)" type="number" step="any" value={weightValue} />
         <Input name="height" label="Height (in)" type="number" value={heightValue} />
       </div>
 
@@ -369,6 +365,9 @@
 
       <div class="form-actions">
         <Button variant="primary" type="submit">Save profile</Button>
+        {#if form?.profileSuccess}
+          <span class="form-success">Profile updated.</span>
+        {/if}
       </div>
     </form>
   </Card>
@@ -417,6 +416,9 @@
   }
 
   .form-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
     padding-top: var(--space-2);
   }
 
