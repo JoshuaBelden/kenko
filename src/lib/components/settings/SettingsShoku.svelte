@@ -245,6 +245,13 @@
     builds={mealBuilds}
     {mealPlanItems}
     foods={mealPlanFoods}
+    {categories}
+    targets={{
+      calories: effectiveCalorieTarget(),
+      protein: proteinValue ? (macroMode === "percentage" ? macroGramsFromPct(Number(proteinValue), 4) : Number(proteinValue)) : null,
+      carbs: carbsValue ? (macroMode === "percentage" ? macroGramsFromPct(Number(carbsValue), 4) : Number(carbsValue)) : null,
+      fat: fatValue ? (macroMode === "percentage" ? macroGramsFromPct(Number(fatValue), 9) : Number(fatValue)) : null,
+    }}
     onchange={(builds) => onchange("mealBuilds", builds)}
   />
 </Card>

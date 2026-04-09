@@ -32,6 +32,7 @@
     "@tiptap/starter-kit": "^3.22.1",
     "barcode-detector": "^3.1.2",
     "bcryptjs": "^3.0.3",
+    "jspdf": "^4.2.1",
     "mongodb": "^7.1.1"
   }
 }

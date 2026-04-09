@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Button } from "$lib/components"
   import MealBuildItemPicker from "./MealBuildItemPicker.svelte"
+  import { jsPDF } from "jspdf"
 
   interface MealBuildItem {
     foodItemId: string
@@ -20,14 +21,23 @@
     }
   }
 
+  interface MacroTarget {
+    calories: number | null
+    protein: number | null
+    carbs: number | null
+    fat: number | null
+  }
+
   interface Props {
     builds: MealBuild[]
     mealPlanItems: any[]
     foods: any[]
+    categories: any[]
+    targets: MacroTarget
     onchange: (builds: MealBuild[]) => void
   }
 
-  let { builds, mealPlanItems, foods, onchange }: Props = $props()
+  let { builds, mealPlanItems, foods, categories, targets, onchange }: Props = $props()
 
   type MealCategory = "breakfast" | "lunch" | "dinner" | "snack"
   const MEAL_CATEGORIES: MealCategory[] = ["breakfast", "lunch", "dinner", "snack"]
@@ -141,6 +151,122 @@
     onchange(updated)
   }
 
+  const buildTotals = $derived.by(() => {
+    if (!selectedBuild) return { calories: 0, protein: 0, carbs: 0, fat: 0 }
+    let calories = 0, protein = 0, carbs = 0, fat = 0
+    for (const category of MEAL_CATEGORIES) {
+      for (const item of selectedBuild.meals[category]) {
+        const food = getFoodById(item.foodItemId)
+        if (!food) continue
+        calories += food.calories * item.servingSize
+        protein += food.protein * item.servingSize
+        carbs += food.netCarbs * item.servingSize
+        fat += food.fat * item.servingSize
+      }
+    }
+    return { calories: Math.round(calories), protein: Math.round(protein), carbs: Math.round(carbs), fat: Math.round(fat) }
+  })
+
+  function exportGroceryList() {
+    const itemMap = new Map<string, { food: any; totalServings: number }>()
+
+    for (const build of builds) {
+      for (const category of MEAL_CATEGORIES) {
+        for (const item of build.meals[category]) {
+          const food = getFoodById(item.foodItemId)
+          if (!food) continue
+          const existing = itemMap.get(item.foodItemId)
+          if (existing) {
+            existing.totalServings += item.servingSize
+          } else {
+            itemMap.set(item.foodItemId, { food, totalServings: item.servingSize })
+          }
+        }
+      }
+    }
+
+    // Group by category
+    const grouped = new Map<string, { categoryName: string; sortOrder: number; items: { name: string; amount: string }[] }>()
+    const uncategorized: { name: string; amount: string }[] = []
+
+    for (const { food, totalServings } of itemMap.values()) {
+      const servingSize = food.servingSize ?? 100
+      const totalAmount = Math.round(servingSize * totalServings)
+      const entry = { name: food.name, amount: `${totalAmount}${food.baseUnit}` }
+
+      if (food.categoryId) {
+        const cat = categories.find((c: any) => c.id === food.categoryId)
+        const catId = food.categoryId
+        if (!grouped.has(catId)) {
+          grouped.set(catId, { categoryName: cat?.name ?? "Unknown", sortOrder: cat?.sortOrder ?? 999, items: [] })
+        }
+        grouped.get(catId)!.items.push(entry)
+      } else {
+        uncategorized.push(entry)
+      }
+    }
+
+    const sortedGroups = [...grouped.values()].sort((a, b) => a.sortOrder - b.sortOrder)
+    if (uncategorized.length > 0) {
+      sortedGroups.push({ categoryName: "Uncategorized", sortOrder: 999, items: uncategorized })
+    }
+
+    // Generate PDF
+    const doc = new jsPDF({ unit: "pt", format: "letter" })
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const margin = 40
+    let y = 50
+
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(18)
+    doc.text("Grocery List", margin, y)
+    y += 30
+
+    for (const group of sortedGroups) {
+      if (y > 700) { doc.addPage(); y = 50 }
+
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(12)
+      doc.setTextColor(100, 100, 100)
+      doc.text(group.categoryName.toUpperCase(), margin, y)
+      y += 4
+      doc.setDrawColor(200, 200, 200)
+      doc.line(margin, y, pageWidth - margin, y)
+      y += 16
+
+      doc.setFont("helvetica", "normal")
+      doc.setFontSize(11)
+      doc.setTextColor(40, 40, 40)
+
+      for (const item of group.items.sort((a, b) => a.name.localeCompare(b.name))) {
+        if (y > 720) { doc.addPage(); y = 50 }
+        doc.text(item.name, margin + 10, y)
+        doc.setTextColor(120, 120, 120)
+        doc.text(item.amount, pageWidth - margin, y, { align: "right" })
+        doc.setTextColor(40, 40, 40)
+        y += 18
+      }
+
+      y += 10
+    }
+
+    doc.save("grocery-list.pdf")
+  }
+
+  function progressColor(actual: number, target: number | null): string {
+    if (!target) return "var(--ink-faint)"
+    const ratio = actual / target
+    const off = Math.abs(1 - ratio)
+    if (off <= 0.10) return "var(--accent-green, #22c55e)"
+    if (off <= 0.25) return "var(--accent-amber, #f59e0b)"
+    return "var(--accent-red, #ef4444)"
+  }
+
+  function progressPct(actual: number, target: number | null): number {
+    if (!target) return 0
+    return Math.min((actual / target) * 100, 100)
+  }
+
   function mealMacroRows(category: MealCategory) {
     if (!selectedBuild) return []
     const mealItems = selectedBuild.meals[category]
@@ -185,6 +311,14 @@
           </button>
         {/each}
         <button class="build-tab build-tab-add" onclick={addBuild} title="Add meal plan">+</button>
+        <button class="export-btn" onclick={exportGroceryList} title="Export grocery list">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          Export grocery list
+        </button>
       </div>
     </div>
 
@@ -265,6 +399,31 @@
         </div>
       {/each}
     {/if}
+
+    {#if selectedBuild}
+      <div class="totals-summary">
+        {#each [
+          { label: "Calories", value: buildTotals.calories, target: targets.calories, unit: "" },
+          { label: "Protein", value: buildTotals.protein, target: targets.protein, unit: "g" },
+          { label: "Carbs", value: buildTotals.carbs, target: targets.carbs, unit: "g" },
+          { label: "Fat", value: buildTotals.fat, target: targets.fat, unit: "g" },
+        ] as row}
+          <div class="totals-item">
+            <span class="totals-label">{row.label}</span>
+            <span class="totals-value">{row.value}{row.unit}</span>
+            {#if row.target}
+              <div class="progress-track">
+                <div
+                  class="progress-fill"
+                  style="width: {progressPct(row.value, row.target)}%; background: {progressColor(row.value, row.target)}"
+                ></div>
+              </div>
+              <span class="totals-target">target {row.target}{row.unit}</span>
+            {/if}
+          </div>
+        {/each}
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -331,6 +490,27 @@
   .build-tab-add {
     font-size: var(--text-base);
     padding: var(--space-1) var(--space-3);
+  }
+
+  .export-btn {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    background: none;
+    border: none;
+    padding: var(--space-2) var(--space-3);
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    color: var(--ink-faint);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color var(--transition-fast);
+  }
+
+  .export-btn:hover {
+    color: var(--accent);
   }
 
   .build-header {
@@ -526,5 +706,59 @@
   .add-item-btn:hover {
     border-color: var(--accent);
     color: var(--accent);
+  }
+
+  .totals-summary {
+    display: flex;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    background: var(--paper-warm);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+  }
+
+  .totals-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .totals-label {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    color: var(--ink-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .totals-value {
+    font-family: var(--font-body);
+    font-size: var(--text-lg);
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .totals-target {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+  }
+
+  .progress-track {
+    width: 100%;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 2px;
+  }
+
+  .progress-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s ease, background 0.3s ease;
   }
 </style>

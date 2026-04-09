@@ -108,6 +108,21 @@
     await saveToJourney(newItems)
   }
 
+  async function updateFoodCategory(foodId: string, categoryId: string | null) {
+    const res = await fetch(`/api/shoku/foods/${foodId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ categoryId }),
+    })
+    if (res.ok) {
+      const idx = localFoods.findIndex((f) => f.id === foodId)
+      if (idx !== -1) {
+        localFoods[idx] = { ...localFoods[idx], categoryId }
+        localFoods = [...localFoods]
+      }
+    }
+  }
+
   async function saveToJourney(updatedItems: MealPlanItem[]) {
     await fetch(`/api/journeys/${journeyId}`, {
       method: "PUT",
@@ -179,6 +194,16 @@
                 <span class="serving-text">{item.food.servingSize ?? 100}{item.food.baseUnit} / serving</span>
               </div>
               <div class="food-card-macros">
+                <select
+                  class="category-select"
+                  value={item.food.categoryId ?? ""}
+                  onchange={(e) => updateFoodCategory(item.food.id, e.currentTarget.value || null)}
+                >
+                  <option value="">Uncategorized</option>
+                  {#each categories as cat}
+                    <option value={cat.id}>{cat.name}</option>
+                  {/each}
+                </select>
                 <span class="macro-tag tag-p">{Math.round(item.food.protein)}g P</span>
                 <span class="macro-tag tag-c">{Math.round(item.food.netCarbs)}g C</span>
                 <span class="macro-tag tag-f">{Math.round(item.food.fat)}g F</span>
@@ -194,6 +219,7 @@
   <div class="add-area">
     <Button variant="secondary" onclick={() => (showFoodSearch = true)}>Add food</Button>
   </div>
+
 </div>
 
 <FoodSearchModal
@@ -347,6 +373,23 @@
     font-family: var(--font-body);
     font-size: var(--text-xs);
     color: var(--ink-faint);
+  }
+
+  .category-select {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink-light);
+    background: var(--paper-warm);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 1px var(--space-2);
+    cursor: pointer;
+    outline: none;
+    max-width: 100%;
+  }
+
+  .category-select:focus {
+    border-color: var(--accent);
   }
 
   .food-card-macros {

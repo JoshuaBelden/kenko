@@ -30,3 +30,10 @@ All dates are stored as native MongoDB Date objects (BSON UTC). The user's IANA 
 - `src/lib/server/dates.ts` — Server-side helpers: `todayStr()`, `startOfDayTz()`, `endOfDayTz()`, `startOfWeekTz()`, `endOfWeekTz()`
 - `src/lib/format.ts` — Display helpers: `formatDate()`, `formatDateShort()`, `formatDateRange()`
 - `src/hooks.server.ts` — Sets `locals.userTimezone` from user profile on every request
+
+## Editor Strategy and Layou
+
+- Add record buttons are always at the top in Uppercase aligned right.
+- Save buttons are always located below the editor aligned left.
+- Close and cancel buttons are always a neutral color and positioned right of save buttons.
+- Delete buttons always have a confirm yes/no before deleting.
