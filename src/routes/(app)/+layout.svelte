@@ -3,6 +3,7 @@
   import { NavItem, ThemeToggle } from "$lib/components"
   import { icons } from "$lib/icons"
   import type { Snippet } from "svelte"
+  import { onMount } from "svelte"
 
   interface Props {
     children: Snippet
@@ -11,6 +12,19 @@
   let { children }: Props = $props()
   let settingsOpen = $state(false)
   let mobileNavOpen = $state(false)
+  let sidebarCollapsed = $state(false)
+
+  onMount(() => {
+    sidebarCollapsed = localStorage.getItem("sidebarCollapsed") === "true"
+  })
+
+  function toggleSidebar() {
+    sidebarCollapsed = !sidebarCollapsed
+    localStorage.setItem("sidebarCollapsed", String(sidebarCollapsed))
+    if (sidebarCollapsed) {
+      closeMobileNav()
+    }
+  }
 
   function closeMobileNav() {
     mobileNavOpen = false
@@ -42,23 +56,32 @@
 </script>
 
 <div class="app-layout">
-  <!-- Mobile: floating logo button -->
-  <button class="mobile-menu-btn" onclick={() => (mobileNavOpen = true)} aria-label="Open navigation">
+  <!-- Floating logo button (mobile, or desktop when collapsed) -->
+  <button class="mobile-menu-btn" class:show-on-desktop={sidebarCollapsed} onclick={() => (mobileNavOpen = true)} aria-label="Open navigation">
     <span class="logo-kanji">健</span>
   </button>
 
-  <!-- Mobile: backdrop -->
+  <!-- Backdrop (mobile, or desktop when collapsed) -->
   {#if mobileNavOpen}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="sidebar-backdrop" onclick={closeMobileNav} onkeydown={closeMobileNav}></div>
+    <div class="sidebar-backdrop" class:show-on-desktop={sidebarCollapsed} onclick={closeMobileNav} onkeydown={closeMobileNav}></div>
   {/if}
 
-  <aside class="sidebar" class:open={mobileNavOpen}>
+  <aside class="sidebar" class:open={mobileNavOpen} class:collapsed={sidebarCollapsed}>
     <div class="sidebar-header">
       <a href={tabiHref} class="logo" onclick={closeMobileNav}>
         <span class="logo-kanji">健</span>
         <span class="logo-text">Kenkō</span>
       </a>
+      <button class="collapse-toggle" onclick={toggleSidebar} aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          {#if sidebarCollapsed}
+            <polyline points="9 18 15 12 9 6" />
+          {:else}
+            <polyline points="15 18 9 12 15 6" />
+          {/if}
+        </svg>
+      </button>
     </div>
 
 
@@ -207,7 +230,7 @@
     </div>
   </aside>
 
-  <main class="main-content">
+  <main class="main-content" class:sidebar-collapsed={sidebarCollapsed}>
     {@render children()}
   </main>
 </div>
@@ -279,9 +302,29 @@
     margin-bottom: var(--space-6);
     display: flex;
     align-items: center;
-    justify-content: flex-start;
+    justify-content: space-between;
     min-height: 32px;
     width: 100%;
+  }
+
+  .collapse-toggle {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-sm);
+    border: 0.5px solid var(--border);
+    background: var(--paper);
+    cursor: pointer;
+    color: var(--ink-light);
+    flex-shrink: 0;
+    transition: all var(--transition-fast);
+  }
+
+  .collapse-toggle:hover {
+    color: var(--ink);
+    background: var(--paper-warm);
   }
 
   .sidebar-nav {
@@ -456,11 +499,38 @@
       transform: translateX(0);
     }
 
+    .collapse-toggle {
+      display: flex;
+    }
+
     .main-content {
       margin-left: 240px;
       padding: var(--space-8);
       padding-top: var(--space-8);
       max-width: calc(100% - 240px);
+    }
+
+    /* ---- Collapsed: behave like mobile ---- */
+    .sidebar.collapsed {
+      transform: translateX(-100%);
+    }
+
+    .sidebar.collapsed.open {
+      transform: translateX(0);
+    }
+
+    .mobile-menu-btn.show-on-desktop {
+      display: flex;
+    }
+
+    .sidebar-backdrop.show-on-desktop {
+      display: block;
+    }
+
+    .main-content.sidebar-collapsed {
+      margin-left: 0;
+      padding-top: calc(var(--space-8) + 48px);
+      max-width: 100%;
     }
   }
 </style>
