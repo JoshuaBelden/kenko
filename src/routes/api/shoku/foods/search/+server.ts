@@ -10,6 +10,9 @@ export const GET: RequestHandler = async ({ locals, url }) => {
   const q = url.searchParams.get("q")?.trim()
   if (!q) return json([])
 
+  const source = url.searchParams.get("source")
+  const libraryOnly = source === "library"
+
   const foodItems = await getFoodItemsCollection()
   const filter: Record<string, unknown> = {
     userId: new ObjectId(locals.userId),
@@ -20,7 +23,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
   }
 
   const libraryPromise = foodItems.find(filter).sort({ name: 1 }).limit(20).toArray()
-  const offPromise = q.length >= 3 ? searchByName(q) : Promise.resolve([])
+  const offPromise = !libraryOnly && q.length >= 3 ? searchByName(q) : Promise.resolve([])
 
   const [libraryResult, offResult] = await Promise.allSettled([libraryPromise, offPromise])
 

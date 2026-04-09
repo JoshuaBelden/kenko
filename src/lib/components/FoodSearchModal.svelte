@@ -65,15 +65,41 @@
     scannerSupported = typeof window !== "undefined" && !!navigator.mediaDevices?.getUserMedia
   })
 
+  let libraryOnly = $state(false)
+  let suggestions = $state<{ recent: any[]; frequent: any[] } | null>(null)
+  let suggestionsLoaded = $state(false)
+  let hasSearched = $state(false)
+
   let searchTimeout: ReturnType<typeof setTimeout> | undefined
+
+  async function fetchSuggestions() {
+    if (suggestionsLoaded) return
+    try {
+      const res = await fetch("/api/shoku/diary/suggestions")
+      if (res.ok) suggestions = await res.json()
+    } catch {}
+    suggestionsLoaded = true
+  }
+
+  $effect(() => {
+    if (open && !suggestionsLoaded) fetchSuggestions()
+  })
+
+  function looksLikeBarcode(val: string): boolean {
+    return /^\d{8,13}$/.test(val)
+  }
 
   async function search(q: string) {
     if (!q.trim()) {
       results = []
+      hasSearched = false
       return
     }
+    hasSearched = true
     searching = true
-    const res = await fetch(`/api/shoku/foods/search?q=${encodeURIComponent(q)}`)
+    const params = new URLSearchParams({ q })
+    if (libraryOnly) params.set("source", "library")
+    const res = await fetch(`/api/shoku/foods/search?${params}`)
     if (res.ok) results = await res.json()
     searching = false
   }
@@ -83,6 +109,11 @@
     query = val
     clearTimeout(searchTimeout)
     searchTimeout = setTimeout(() => search(val), 400)
+  }
+
+  function handleBarcodeLookupFromSearch() {
+    manualBarcode = query.trim()
+    handleManualBarcodeLookup()
   }
 
   function selectFood(food: any) {
@@ -280,6 +311,8 @@
     scanRawJson = null
     manualBarcode = ""
     manualLookingUp = false
+    hasSearched = false
+    libraryOnly = false
   }
 
   function handleClose() {
@@ -510,6 +543,9 @@
         </div>
 
       {:else}
+        {@const libraryResults = results.filter(f => f.source === "library")}
+        {@const apiResults = results.filter(f => f.source !== "library")}
+        {@const showSuggestions = !hasSearched && !searching && suggestions}
         <div class="modal-header">
           <h4>Add Food</h4>
           <button class="btn-text" onclick={handleClose}>Close</button>
@@ -519,10 +555,24 @@
             <input
               class="search-input"
               type="text"
-              placeholder="Search food items..."
+              placeholder="Search foods or enter barcode..."
               value={query}
               oninput={handleInput}
+              onkeydown={(e) => { if (e.key === "Enter" && looksLikeBarcode(query.trim())) handleBarcodeLookupFromSearch() }}
             />
+            {#if looksLikeBarcode(query.trim())}
+              <button class="scan-btn" onclick={handleBarcodeLookupFromSearch} disabled={manualLookingUp} title="Lookup barcode">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2" y="4" width="1.5" height="16" fill="currentColor" stroke="none" />
+                  <rect x="5" y="4" width="1" height="16" fill="currentColor" stroke="none" />
+                  <rect x="8" y="4" width="2" height="16" fill="currentColor" stroke="none" />
+                  <rect x="12" y="4" width="1" height="16" fill="currentColor" stroke="none" />
+                  <rect x="14.5" y="4" width="1.5" height="16" fill="currentColor" stroke="none" />
+                  <rect x="18" y="4" width="1" height="16" fill="currentColor" stroke="none" />
+                  <rect x="20.5" y="4" width="1.5" height="16" fill="currentColor" stroke="none" />
+                </svg>
+              </button>
+            {/if}
             {#if scannerSupported}
               <button class="scan-btn" onclick={() => { barcodeError = ""; mode = "scanner" }} title="Scan barcode">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -532,18 +582,12 @@
               </button>
             {/if}
           </div>
-        </div>
-        <div class="barcode-lookup-row">
-          <input
-            class="barcode-input"
-            type="text"
-            placeholder="Enter barcode..."
-            bind:value={manualBarcode}
-            onkeydown={(e) => { if (e.key === "Enter") handleManualBarcodeLookup() }}
-          />
-          <button class="barcode-lookup-btn" onclick={handleManualBarcodeLookup} disabled={manualLookingUp || !manualBarcode.trim()}>
-            {manualLookingUp ? "Looking up..." : "Lookup"}
-          </button>
+          <div class="search-options">
+            <label class="library-toggle">
+              <input type="checkbox" bind:checked={libraryOnly} onchange={() => { if (query.trim()) search(query) }} />
+              <span>Library only</span>
+            </label>
+          </div>
         </div>
         {#if barcodeError}
           <p class="barcode-error">{barcodeError}</p>
@@ -551,21 +595,65 @@
         <div class="results">
           {#if searching}
             <p class="results-hint">Searching...</p>
-          {:else if query && results.length === 0}
+          {:else if hasSearched && results.length === 0}
             <p class="results-hint">No foods found</p>
+          {:else if showSuggestions && suggestions}
+            {#if suggestions.recent.length > 0}
+              <p class="section-divider">Recent</p>
+              {#each suggestions.recent as food (food.id)}
+                <button class="result-item" onclick={() => selectFood(food)}>
+                  <div class="result-info">
+                    <span class="result-name">{food.name}</span>
+                    {#if food.brand}
+                      <span class="result-brand">{food.brand}</span>
+                    {/if}
+                  </div>
+                  <span class="result-cals">{food.calories} cal/srv</span>
+                </button>
+              {/each}
+            {/if}
+            {#if suggestions.frequent.length > 0}
+              <p class="section-divider">Most Logged</p>
+              {#each suggestions.frequent as food (food.id)}
+                <button class="result-item" onclick={() => selectFood(food)}>
+                  <div class="result-info">
+                    <span class="result-name">{food.name}</span>
+                    {#if food.brand}
+                      <span class="result-brand">{food.brand}</span>
+                    {/if}
+                  </div>
+                  <span class="result-cals">{food.calories} cal/srv</span>
+                </button>
+              {/each}
+            {/if}
           {/if}
-          {#each results as food (food.id)}
-            <button class="result-item" onclick={() => selectFood(food)}>
-              <div class="result-info">
-                <span class="result-name">{food.name}</span>
-                {#if food.brand}
-                  <span class="result-brand">{food.brand}</span>
-                {/if}
-                <span class="result-source">{food.source === "openfoodfacts" ? "OpenFoodFacts" : "My Library"}</span>
-              </div>
-              <span class="result-cals">{food.calories} cal/srv</span>
-            </button>
-          {/each}
+          {#if hasSearched}
+            {#each libraryResults as food (food.id)}
+              <button class="result-item" onclick={() => selectFood(food)}>
+                <div class="result-info">
+                  <span class="result-name">{food.name}</span>
+                  {#if food.brand}
+                    <span class="result-brand">{food.brand}</span>
+                  {/if}
+                </div>
+                <span class="result-cals">{food.calories} cal/srv</span>
+              </button>
+            {/each}
+            {#if apiResults.length > 0}
+              <p class="section-divider">OpenFoodFacts</p>
+              {#each apiResults as food (food.id)}
+                <button class="result-item" onclick={() => selectFood(food)}>
+                  <div class="result-info">
+                    <span class="result-name">{food.name}</span>
+                    {#if food.brand}
+                      <span class="result-brand">{food.brand}</span>
+                    {/if}
+                  </div>
+                  <span class="result-cals">{food.calories} cal/srv</span>
+                </button>
+              {/each}
+            {/if}
+          {/if}
           <button
             class="result-item create-new"
             onclick={() => {
@@ -625,7 +713,7 @@
     border-radius: var(--radius-md);
     width: 100%;
     max-width: 440px;
-    max-height: 80vh;
+    height: 80vh;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -692,54 +780,39 @@
     border-color: var(--border-strong);
   }
 
-  .barcode-lookup-row {
+  .search-options {
     display: flex;
-    gap: var(--space-2);
     align-items: center;
-    padding: 0 var(--space-5) var(--space-2);
+    padding-top: var(--space-1);
   }
 
-  .barcode-input {
-    flex: 1;
+  .library-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
     font-family: var(--font-body);
-    font-size: var(--text-sm);
-    color: var(--ink);
-    background: transparent;
-    border: none;
-    border-bottom: 1px solid var(--border);
-    padding: var(--space-2) 0;
-    outline: none;
-  }
-
-  .barcode-input:focus {
-    border-bottom-color: var(--border-strong);
-  }
-
-  .barcode-input::placeholder {
+    font-size: var(--text-xs);
     color: var(--ink-faint);
-  }
-
-  .barcode-lookup-btn {
-    font-family: var(--font-body);
-    font-size: var(--text-sm);
-    color: var(--ink-light);
-    background: none;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    padding: var(--space-2) var(--space-3);
     cursor: pointer;
-    white-space: nowrap;
-    transition: color var(--transition-fast), border-color var(--transition-fast);
   }
 
-  .barcode-lookup-btn:hover:not(:disabled) {
-    color: var(--ink);
-    border-color: var(--border-strong);
+  .library-toggle input[type="checkbox"] {
+    margin: 0;
   }
 
-  .barcode-lookup-btn:disabled {
-    opacity: 0.5;
-    cursor: default;
+  .section-divider {
+    font-size: var(--text-xs);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--ink-faint);
+    padding: var(--space-3) var(--space-5) var(--space-1);
+    margin: 0;
+    border-top: 0.5px solid var(--border);
+  }
+
+  .section-divider:first-child {
+    border-top: none;
   }
 
   .barcode-error {
@@ -799,12 +872,6 @@
   .result-brand {
     font-size: var(--text-xs);
     color: var(--ink-faint);
-  }
-
-  .result-source {
-    font-size: var(--text-xs);
-    color: var(--ink-faint);
-    font-style: italic;
   }
 
   .result-cals {
