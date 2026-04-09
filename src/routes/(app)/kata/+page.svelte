@@ -106,6 +106,17 @@
     loggingValue = ""
   }
 
+  async function adjustQuantity(c: any, delta: number) {
+    const current = c.todayLog?.value ?? 0
+    const next = Math.max(0, current + delta)
+    await fetch(`/api/kata/commitments/${c.id}/logs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value: next, date: currentDate }),
+    })
+    await invalidateAll()
+  }
+
   function formatProgress(c: any): string {
     if (c.loggingStyle === "checkbox") return ""
     const current = c.progress.current
@@ -259,13 +270,17 @@
               </button>
             </div>
           {:else}
-            <button class="log-btn" onclick={() => startQuantityLog(c)}>
-              {#if c.todayLog}
-                <span class="logged-value">{c.todayLog.value}</span>
-              {:else}
-                Log
-              {/if}
-            </button>
+            <div class="quantity-adjust-row">
+              <button class="adjust-btn" onclick={() => adjustQuantity(c, -1)} aria-label="Decrement">&minus;</button>
+              <button class="log-btn" onclick={() => startQuantityLog(c)}>
+                {#if c.todayLog}
+                  <span class="logged-value">{c.todayLog.value}</span>
+                {:else}
+                  Log
+                {/if}
+              </button>
+              <button class="adjust-btn" onclick={() => adjustQuantity(c, 1)} aria-label="Increment">+</button>
+            </div>
           {/if}
         </div>
       </div>
@@ -331,13 +346,17 @@
             </button>
           </div>
         {:else}
-          <button class="log-btn" onclick={() => startQuantityLog(c)}>
-            {#if c.todayLog}
-              <span class="logged-value">{c.todayLog.value}</span>
-            {:else}
-              Log
-            {/if}
-          </button>
+          <div class="quantity-adjust-row">
+            <button class="adjust-btn" onclick={() => adjustQuantity(c, -1)} aria-label="Decrement">&minus;</button>
+            <button class="log-btn" onclick={() => startQuantityLog(c)}>
+              {#if c.todayLog}
+                <span class="logged-value">{c.todayLog.value}</span>
+              {:else}
+                Log
+              {/if}
+            </button>
+            <button class="adjust-btn" onclick={() => adjustQuantity(c, 1)} aria-label="Increment">+</button>
+          </div>
         {/if}
       {/if}
     </div>
@@ -531,6 +550,34 @@
   .logged-value {
     color: var(--accent-green);
     font-weight: 500;
+  }
+
+  .quantity-adjust-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+
+  .adjust-btn {
+    width: 28px;
+    height: 28px;
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: none;
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    color: var(--ink-light);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: all var(--transition-fast);
+  }
+
+  .adjust-btn:hover {
+    border-color: var(--ink-light);
+    color: var(--ink);
   }
 
   .quantity-input-row {
