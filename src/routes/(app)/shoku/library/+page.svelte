@@ -46,8 +46,15 @@
   let scanRawJson = $state<Record<string, unknown> | null>(null)
   let scanError = $state("")
   let fBarcode = $state<string | null>(null)
-  let manualBarcode = $state("")
   let manualLookingUp = $state(false)
+
+  // Add Food Item search state
+  let addFoodOpen = $state(false)
+  let addFoodQuery = $state("")
+  let addFoodResults = $state<any[]>([])
+  let addFoodSearching = $state(false)
+  let addFoodHasSearched = $state(false)
+  let addFoodTimeout: ReturnType<typeof setTimeout> | undefined
 
   $effect(() => {
     scannerSupported = typeof window !== "undefined" && !!navigator.mediaDevices?.getUserMedia
@@ -88,9 +95,14 @@
     usda: "USDA",
   }
 
+  function looksLikeBarcode(val: string): boolean {
+    return /^\d{8,13}$/.test(val)
+  }
+
   const filteredFoods = $derived(
     foods.filter((f: any) => {
-      const matchesSearch = !searchQuery || f.name.toLowerCase().includes(searchQuery.toLowerCase())
+      const q = searchQuery.toLowerCase()
+      const matchesSearch = !searchQuery || f.name.toLowerCase().includes(q) || (f.barcode && f.barcode.includes(searchQuery))
       const matchesSource = !sourceFilter || f.source === sourceFilter
       const matchesCategory = !categoryFilter || f.categoryId === categoryFilter
       return matchesSearch && matchesSource && matchesCategory
@@ -152,14 +164,13 @@
     }
   }
 
-  async function handleManualBarcodeLookup() {
-    const barcode = manualBarcode.trim()
+  async function handleBarcodeLookupFromSearch() {
+    const barcode = searchQuery.trim()
     if (!barcode) return
     manualLookingUp = true
     scanError = ""
     await handleBarcodeScan(barcode)
     manualLookingUp = false
-    if (!creating) manualBarcode = ""
   }
 
   function resetForm() {
@@ -343,13 +354,108 @@
       }
     }
   }
+
+  // Add Food Item search
+  async function addFoodSearch(q: string) {
+    if (!q.trim() || q.trim().length < 3) {
+      addFoodResults = []
+      addFoodHasSearched = false
+      return
+    }
+    addFoodHasSearched = true
+    addFoodSearching = true
+    const params = new URLSearchParams({ q })
+    const res = await fetch(`/api/shoku/foods/search?${params}`)
+    if (res.ok) addFoodResults = await res.json()
+    addFoodSearching = false
+  }
+
+  function handleAddFoodInput(e: Event) {
+    const val = (e.target as HTMLInputElement).value
+    addFoodQuery = val
+    clearTimeout(addFoodTimeout)
+    addFoodTimeout = setTimeout(() => addFoodSearch(val), 400)
+  }
+
+  async function addFoodFromResult(food: any) {
+    if (food.source === "library") {
+      // Already in library
+      return
+    }
+    // It's an OFF result — populate the create form with its data
+    const d = food._offData ?? food
+    fBarcode = d.barcode ?? null
+    fName = d.name ?? food.name ?? ""
+    fBrand = d.brand ?? food.brand ?? ""
+    fBaseUnit = d.baseUnit ?? "g"
+    fServingSize = d.servingSize?.toString() ?? ""
+    fCalories = (d.calories ?? food.calories ?? 0).toString()
+    fProtein = (d.protein ?? food.protein ?? 0).toString()
+    fNetCarbs = (d.netCarbs ?? food.netCarbs ?? 0).toString()
+    fFat = (d.fat ?? food.fat ?? 0).toString()
+    fSaturatedFat = d.saturatedFat?.toString() ?? ""
+    fTransFat = d.transFat?.toString() ?? ""
+    fFiber = d.fiber?.toString() ?? ""
+    fAddedSugars = d.addedSugars?.toString() ?? ""
+    fCholesterol = d.cholesterol?.toString() ?? ""
+    fSodium = d.sodium?.toString() ?? ""
+    fIron = d.iron?.toString() ?? ""
+    fCalcium = d.calcium?.toString() ?? ""
+    fMagnesium = d.magnesium?.toString() ?? ""
+    fVitaminA = d.vitaminA?.toString() ?? ""
+    fVitaminC = d.vitaminC?.toString() ?? ""
+    fVitaminB12 = d.vitaminB12?.toString() ?? ""
+    fVitaminE = d.vitaminE?.toString() ?? ""
+    fVitaminK = d.vitaminK?.toString() ?? ""
+    fFolate = d.folate?.toString() ?? ""
+    fPotassium = d.potassium?.toString() ?? ""
+    fZinc = d.zinc?.toString() ?? ""
+    scanRawJson = null
+    closeAddFood()
+    creating = true
+  }
+
+  function closeAddFood() {
+    addFoodOpen = false
+    addFoodQuery = ""
+    addFoodResults = []
+    addFoodHasSearched = false
+    addFoodSearching = false
+  }
 </script>
 
 <PageHeader icon={icons.shoku} title="Food Library" subtitle="Your saved food items" />
 
 <section class="controls">
   <div class="search-row">
-    <input class="search-input" type="text" placeholder="Search foods..." bind:value={searchQuery} />
+    <input
+      class="search-input"
+      type="text"
+      placeholder="Search foods or enter barcode..."
+      bind:value={searchQuery}
+      onkeydown={(e) => { if (e.key === "Enter" && looksLikeBarcode(searchQuery.trim())) handleBarcodeLookupFromSearch() }}
+    />
+    {#if looksLikeBarcode(searchQuery.trim())}
+      <button class="icon-btn" onclick={handleBarcodeLookupFromSearch} disabled={manualLookingUp} title="Lookup barcode">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="4" width="1.5" height="16" fill="currentColor" stroke="none" />
+          <rect x="5" y="4" width="1" height="16" fill="currentColor" stroke="none" />
+          <rect x="8" y="4" width="2" height="16" fill="currentColor" stroke="none" />
+          <rect x="12" y="4" width="1" height="16" fill="currentColor" stroke="none" />
+          <rect x="14.5" y="4" width="1.5" height="16" fill="currentColor" stroke="none" />
+          <rect x="18" y="4" width="1" height="16" fill="currentColor" stroke="none" />
+          <rect x="20.5" y="4" width="1.5" height="16" fill="currentColor" stroke="none" />
+        </svg>
+      </button>
+    {/if}
+    {#if scannerSupported}
+      <button class="icon-btn" onclick={() => { scanning = true; scanError = ""; scanRawJson = null }} title="Scan barcode">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 7V5a2 2 0 0 1 2-2h2" /><path d="M17 3h2a2 2 0 0 1 2 2v2" /><path d="M21 17v2a2 2 0 0 1-2 2h-2" /><path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+          <line x1="7" y1="12" x2="17" y2="12" /><line x1="7" y1="8" x2="17" y2="8" /><line x1="7" y1="16" x2="17" y2="16" />
+        </svg>
+      </button>
+    {/if}
     <select class="source-select" bind:value={sourceFilter}>
       <option value="">All sources</option>
       <option value="manual">Manual</option>
@@ -374,21 +480,7 @@
           resetForm()
         }}>New food item</Button
       >
-      {#if scannerSupported}
-        <Button variant="secondary" onclick={() => { scanning = true; scanError = ""; scanRawJson = null }}>Scan barcode</Button>
-      {/if}
-    </div>
-    <div class="barcode-lookup-row">
-      <input
-        class="barcode-input"
-        type="text"
-        placeholder="Enter barcode..."
-        bind:value={manualBarcode}
-        onkeydown={(e) => { if (e.key === "Enter") handleManualBarcodeLookup() }}
-      />
-      <Button variant="secondary" onclick={handleManualBarcodeLookup} disabled={manualLookingUp || !manualBarcode.trim()}>
-        {manualLookingUp ? "Looking up..." : "Lookup"}
-      </Button>
+      <Button variant="secondary" onclick={() => { addFoodOpen = true }}>Add Food Item</Button>
     </div>
   {/if}
 </section>
@@ -450,16 +542,82 @@
   </section>
 {/if}
 
-<!-- Edit form -->
+<!-- Edit modal -->
 {#if editingId}
-  <section class="section">
-    <Card>
-      {@render foodForm("Edit Food Item", handleUpdate, () => {
-        editingId = null
-        resetForm()
-      })}
-    </Card>
-  </section>
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div class="modal-backdrop" role="presentation" onclick={() => { editingId = null; resetForm() }}>
+    <!-- svelte-ignore a11y_interactive_supports_focus a11y_click_events_have_key_events -->
+    <div class="modal" role="dialog" aria-label="Edit food item" onclick={e => e.stopPropagation()}>
+      <div class="modal-body">
+        {@render foodForm("Edit Food Item", handleUpdate, () => {
+          editingId = null
+          resetForm()
+        })}
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Add Food Item modal -->
+{#if addFoodOpen}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div class="modal-backdrop" role="presentation" onclick={closeAddFood}>
+    <!-- svelte-ignore a11y_interactive_supports_focus a11y_click_events_have_key_events -->
+    <div class="modal" role="dialog" aria-label="Add food item from Open Food Facts" onclick={e => e.stopPropagation()}>
+      <div class="modal-header">
+        <h4>Add Food Item</h4>
+        <button class="btn-text" onclick={closeAddFood}>Close</button>
+      </div>
+      <div class="add-food-search-wrap">
+        <input
+          class="add-food-search-input"
+          type="text"
+          placeholder="Search Open Food Facts..."
+          value={addFoodQuery}
+          oninput={handleAddFoodInput}
+        />
+      </div>
+      <div class="add-food-results">
+        {#if addFoodSearching}
+          <p class="results-hint">Searching...</p>
+        {:else if addFoodHasSearched && addFoodResults.length === 0}
+          <p class="results-hint">No foods found</p>
+        {:else if addFoodHasSearched}
+          {@const libraryResults = addFoodResults.filter(f => f.source === "library")}
+          {@const apiResults = addFoodResults.filter(f => f.source !== "library")}
+          {#each libraryResults as food (food.id)}
+            <div class="add-food-item in-library">
+              <div class="add-food-info">
+                <span class="add-food-name">{food.name}</span>
+                {#if food.brand}
+                  <span class="add-food-brand">{food.brand}</span>
+                {/if}
+              </div>
+              <span class="in-library-badge">In library</span>
+            </div>
+          {/each}
+          {#if apiResults.length > 0}
+            {#if libraryResults.length > 0}
+              <p class="section-divider">Open Food Facts</p>
+            {/if}
+            {#each apiResults as food (food.id)}
+              <button class="add-food-item" onclick={() => addFoodFromResult(food)}>
+                <div class="add-food-info">
+                  <span class="add-food-name">{food.name}</span>
+                  {#if food.brand}
+                    <span class="add-food-brand">{food.brand}</span>
+                  {/if}
+                </div>
+                <span class="add-food-cals">{food.calories} cal/srv</span>
+              </button>
+            {/each}
+          {/if}
+        {:else}
+          <p class="results-hint">Search for foods to add to your library</p>
+        {/if}
+      </div>
+    </div>
+  </div>
 {/if}
 
 <!-- Food list -->
@@ -750,9 +908,10 @@
 
   .search-row {
     display: flex;
-    gap: var(--space-3);
+    gap: var(--space-2);
     flex: 1;
     min-width: 200px;
+    align-items: center;
   }
 
   .search-input {
@@ -775,6 +934,30 @@
     color: var(--ink-faint);
   }
 
+  .icon-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2);
+    cursor: pointer;
+    color: var(--ink-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color var(--transition-fast), border-color var(--transition-fast);
+    flex-shrink: 0;
+  }
+
+  .icon-btn:hover {
+    color: var(--ink);
+    border-color: var(--border-strong);
+  }
+
+  .icon-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
   .source-select {
     font-family: var(--font-body);
     font-size: var(--text-sm);
@@ -784,6 +967,149 @@
     border-radius: var(--radius-sm);
     padding: var(--space-2) var(--space-3);
     outline: none;
+  }
+
+  /* Modal */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: var(--space-4);
+  }
+
+  .modal {
+    background: var(--paper-card);
+    border-radius: var(--radius-md);
+    width: 100%;
+    max-width: 480px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-4) var(--space-5);
+    border-bottom: 0.5px solid var(--border);
+  }
+
+  .modal-header h4 {
+    font-size: var(--text-lg);
+    margin: 0;
+  }
+
+  .modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-4) var(--space-5);
+  }
+
+  /* Add Food Item modal */
+  .add-food-search-wrap {
+    padding: var(--space-3) var(--space-5);
+  }
+
+  .add-food-search-input {
+    width: 100%;
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    color: var(--ink);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    padding: var(--space-3) 0;
+    outline: none;
+  }
+
+  .add-food-search-input:focus {
+    border-bottom-color: var(--border-strong);
+  }
+
+  .add-food-search-input::placeholder {
+    color: var(--ink-faint);
+  }
+
+  .add-food-results {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-2) 0;
+    min-height: 200px;
+  }
+
+  .results-hint {
+    padding: var(--space-3) var(--space-5);
+    font-size: var(--text-sm);
+    color: var(--ink-faint);
+  }
+
+  .section-divider {
+    font-size: var(--text-xs);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--ink-faint);
+    padding: var(--space-3) var(--space-5) var(--space-1);
+    margin: 0;
+    border-top: 0.5px solid var(--border);
+  }
+
+  .add-food-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: var(--space-3) var(--space-5);
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: var(--font-body);
+    text-align: left;
+    color: var(--ink);
+    transition: background var(--transition-fast);
+  }
+
+  .add-food-item:hover {
+    background: var(--paper-warm);
+  }
+
+  .add-food-item.in-library {
+    cursor: default;
+    opacity: 0.6;
+  }
+
+  .add-food-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .add-food-name {
+    font-size: var(--text-sm);
+    font-weight: 500;
+  }
+
+  .add-food-brand {
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+  }
+
+  .add-food-cals {
+    font-size: var(--text-sm);
+    color: var(--ink-light);
+    white-space: nowrap;
+  }
+
+  .in-library-badge {
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+    font-style: italic;
   }
 
   /* Food list */
@@ -1083,33 +1409,6 @@
   .action-buttons {
     display: flex;
     gap: var(--space-3);
-  }
-
-  .barcode-lookup-row {
-    display: flex;
-    gap: var(--space-3);
-    align-items: center;
-    width: 100%;
-  }
-
-  .barcode-input {
-    flex: 1;
-    font-family: var(--font-body);
-    font-size: var(--text-sm);
-    color: var(--ink);
-    background: transparent;
-    border: 0.5px solid var(--border);
-    border-radius: var(--radius-sm);
-    padding: var(--space-2) var(--space-3);
-    outline: none;
-  }
-
-  .barcode-input:focus {
-    border-color: var(--border-strong);
-  }
-
-  .barcode-input::placeholder {
-    color: var(--ink-faint);
   }
 
   .debug-details {
