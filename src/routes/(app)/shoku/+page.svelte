@@ -14,6 +14,7 @@
   let selectedMealBuild = $state<any>(null)
   let selectedMealId = $state("")
   let activeJourneyId = $state<string | null>(null)
+  let macroTargets = $state<{ calories: number | null; protein: number | null; netCarbs: number | null; fat: number | null; waterOz: number | null } | null>(null)
 
   $effect(() => {
     const d = page.data as any
@@ -25,6 +26,7 @@
     selectedMealBuild = d.selectedMealBuild ?? null
     selectedMealId = d.selectedMealBuild?.id ?? ""
     activeJourneyId = d.activeJourneyId ?? null
+    macroTargets = d.macroTargets ?? null
   })
 
   // Food search modal state
@@ -208,7 +210,7 @@
 
 <PageHeader icon={icons.shoku} title="Shoku" subtitle="Nourish with intention" />
 
-<!-- Date picker -->
+<!-- Date picker, meal plan selector, quick add -->
 <section class="date-nav">
   <button class="date-btn" onclick={prevDay}>&larr;</button>
   <input
@@ -218,40 +220,70 @@
     onchange={e => navigateDate((e.target as HTMLInputElement).value)}
   />
   <button class="date-btn" onclick={nextDay}>&rarr;</button>
-  <button class="btn-quick" onclick={() => (quickAddOpen = !quickAddOpen)}>Quick add</button>
-</section>
-
-<!-- Meal build selector -->
-{#if mealBuilds.length > 0}
-  <section class="meal-selector">
-    <select class="meal-select" bind:value={selectedMealId}>
+  {#if mealBuilds.length > 0}
+    <select class="meal-select" bind:value={selectedMealId} onchange={useMealBuild}>
       <option value="">No meal plan</option>
       {#each mealBuilds as build}
         <option value={build.id}>{build.name}</option>
       {/each}
     </select>
-    <Button variant="secondary" onclick={useMealBuild}>Use</Button>
-  </section>
-{/if}
+  {/if}
+  <button class="btn-quick" onclick={() => (quickAddOpen = !quickAddOpen)}>Quick add</button>
+</section>
 
 <!-- Macro summary -->
 <section class="macro-bar">
   <Card>
     <div class="macro-grid">
-      <StatNumber value={totals.calories.toString()} label="Calories" size="sm" />
-      <StatNumber value={`${totals.protein}g`} label="Protein" size="sm" />
-      <StatNumber value={`${totals.netCarbs}g`} label="Net Carbs" size="sm" />
-      <StatNumber value={`${totals.fat}g`} label="Fat" size="sm" />
+      {#if macroTargets}
+        <div class="macro-target" class:over={macroTargets.calories != null && totals.calories > macroTargets.calories * 1.05}>
+          <StatNumber value={totals.calories.toString()} label="Calories" size="sm" />
+          {#if macroTargets.calories}
+            <div class="progress-track"><div class="progress-fill" style="width: {Math.min(100, (totals.calories / macroTargets.calories) * 100)}%"></div></div>
+            <span class="target-label">{macroTargets.calories} goal</span>
+          {/if}
+        </div>
+        <div class="macro-target" class:over={macroTargets.protein != null && totals.protein > macroTargets.protein * 1.05}>
+          <StatNumber value={`${totals.protein}g`} label="Protein" size="sm" />
+          {#if macroTargets.protein}
+            <div class="progress-track"><div class="progress-fill" style="width: {Math.min(100, (totals.protein / macroTargets.protein) * 100)}%"></div></div>
+            <span class="target-label">{macroTargets.protein}g goal</span>
+          {/if}
+        </div>
+        <div class="macro-target" class:over={macroTargets.netCarbs != null && totals.netCarbs > macroTargets.netCarbs * 1.05}>
+          <StatNumber value={`${totals.netCarbs}g`} label="Net Carbs" size="sm" />
+          {#if macroTargets.netCarbs}
+            <div class="progress-track"><div class="progress-fill" style="width: {Math.min(100, (totals.netCarbs / macroTargets.netCarbs) * 100)}%"></div></div>
+            <span class="target-label">{macroTargets.netCarbs}g goal</span>
+          {/if}
+        </div>
+        <div class="macro-target" class:over={macroTargets.fat != null && totals.fat > macroTargets.fat * 1.05}>
+          <StatNumber value={`${totals.fat}g`} label="Fat" size="sm" />
+          {#if macroTargets.fat}
+            <div class="progress-track"><div class="progress-fill" style="width: {Math.min(100, (totals.fat / macroTargets.fat) * 100)}%"></div></div>
+            <span class="target-label">{macroTargets.fat}g goal</span>
+          {/if}
+        </div>
+      {:else}
+        <StatNumber value={totals.calories.toString()} label="Calories" size="sm" />
+        <StatNumber value={`${totals.protein}g`} label="Protein" size="sm" />
+        <StatNumber value={`${totals.netCarbs}g`} label="Net Carbs" size="sm" />
+        <StatNumber value={`${totals.fat}g`} label="Fat" size="sm" />
+      {/if}
     </div>
   </Card>
 </section>
 
-<!-- Quick add form -->
+<!-- Quick add modal -->
 {#if quickAddOpen}
-  <section class="section">
-    <Card>
-      <div class="quick-form">
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div class="modal-backdrop" role="presentation" onclick={() => { quickAddOpen = false; quickError = "" }}>
+    <!-- svelte-ignore a11y_interactive_supports_focus a11y_click_events_have_key_events -->
+    <div class="modal" role="dialog" aria-label="Quick add food" onclick={e => e.stopPropagation()}>
+      <div class="modal-header">
         <h4>Quick Add</h4>
+      </div>
+      <div class="modal-body">
         <div class="form-fields">
           <div class="form-field">
             <label class="field-label" for="quick-name">Food</label>
@@ -276,8 +308,8 @@
           >
         </div>
       </div>
-    </Card>
-  </section>
+    </div>
+  </div>
 {/if}
 
 <!-- Category sections -->
@@ -367,7 +399,13 @@
   </div>
   <Card>
     <div class="water-section">
-      <span class="water-total">{waterOunces} oz</span>
+      <div class="water-total-col">
+        <span class="water-total">{waterOunces} oz</span>
+        {#if macroTargets?.waterOz}
+          <div class="progress-track"><div class="progress-fill" style="width: {Math.min(100, (waterOunces / macroTargets.waterOz) * 100)}%"></div></div>
+          <span class="target-label">{macroTargets.waterOz} oz goal</span>
+        {/if}
+      </div>
       <div class="water-add">
         <input
           type="number"
@@ -396,14 +434,6 @@
 
 <style>
   .section {
-    margin-bottom: var(--space-6);
-  }
-
-  /* Meal selector */
-  .meal-selector {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
     margin-bottom: var(--space-6);
   }
 
@@ -550,6 +580,54 @@
     text-align: center;
   }
 
+  .macro-target {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-1);
+  }
+
+  .progress-track {
+    width: 100%;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width var(--transition-fast);
+  }
+
+  .macro-target.over .progress-fill {
+    background: var(--accent-red);
+  }
+
+  .macro-target.over :global(.stat-value) {
+    color: var(--accent-red);
+  }
+
+  .macro-target.over .target-label {
+    color: var(--accent-red);
+  }
+
+  .target-label {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .water-total-col {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 5rem;
+  }
+
   /* Category header */
   .category-header {
     display: flex;
@@ -632,16 +710,54 @@
   }
 
   /* Edit / delete */
-  .edit-form,
-  .quick-form {
+  .edit-form {
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
   }
 
-  .quick-form h4 {
+  /* Quick add modal */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: var(--space-4);
+  }
+
+  .modal {
+    background: var(--paper-card);
+    border-radius: var(--radius-md);
+    width: 100%;
+    max-width: 440px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-4) var(--space-5);
+    border-bottom: 0.5px solid var(--border);
+  }
+
+  .modal-header h4 {
+    font-size: var(--text-lg);
     margin: 0;
   }
+
+  .modal-body {
+    padding: var(--space-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
 
   .form-fields {
     display: flex;

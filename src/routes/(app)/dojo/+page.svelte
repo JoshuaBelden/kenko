@@ -275,10 +275,10 @@
 
   .delete-btn-sm {
     padding: var(--space-2) var(--space-4);
-    border: 0.5px solid var(--accent);
+    border: 0.5px solid var(--accent-red);
     border-radius: var(--radius-sm);
     background: none;
-    color: var(--accent);
+    color: var(--accent-red);
     font-family: var(--font-body);
     font-size: var(--text-sm);
     font-weight: 500;
@@ -287,7 +287,7 @@
   }
 
   .delete-btn-sm:hover {
-    background: var(--accent);
+    background: var(--accent-red);
     color: white;
   }
 

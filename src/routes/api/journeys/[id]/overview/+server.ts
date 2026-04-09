@@ -198,8 +198,8 @@ export const GET: RequestHandler = async ({ locals, params }) => {
       }
     })
 
-    const dailyCommitments = kataData.filter((c) => c.period === "daily" && c.type !== "taper")
-    const otherCommitments = kataData.filter((c) => c.period !== "daily" || c.type === "taper")
+    const dailyCommitments = kataData.filter((c) => c.period === "daily" || c.type === "taper")
+    const otherCommitments = kataData.filter((c) => c.period !== "daily" && c.type !== "taper")
 
     result.kata = { dailyCommitments, otherCommitments }
   }

@@ -81,6 +81,7 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
+    max-width: 480px;
   }
 
   .field {
@@ -163,5 +164,6 @@
   .checkbox-item input {
     margin-top: 2px;
     accent-color: var(--accent);
+    width: auto;
   }
 </style>

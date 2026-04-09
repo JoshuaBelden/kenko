@@ -131,5 +131,30 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     }
   }
 
-  return { grouped, totals, date: dateStr, waterOunces, mealBuilds, selectedMealBuild, activeJourneyId }
+  // Extract macro targets from active journey
+  let macroTargets: { calories: number | null; protein: number | null; netCarbs: number | null; fat: number | null; waterOz: number | null } | null = null
+  if (activeJourney?.shokuTargets) {
+    const st = activeJourney.shokuTargets
+    const calTarget = st.dailyCalorieTarget ?? null
+
+    // Resolve macro grams: use grams directly, or calculate from percentage of calorie target
+    const resolveMacroGrams = (macro: any, calPerGram: number): number | null => {
+      if (!macro) return null
+      if (macro.grams != null) return macro.grams
+      if (macro.percentage != null && calTarget != null) {
+        return Math.round((calTarget * macro.percentage / 100) / calPerGram)
+      }
+      return null
+    }
+
+    macroTargets = {
+      calories: calTarget,
+      protein: resolveMacroGrams(st.macros?.protein, 4),
+      netCarbs: resolveMacroGrams(st.macros?.carbs, 4),
+      fat: resolveMacroGrams(st.macros?.fat, 9),
+      waterOz: st.dailyWaterTargetOz ?? null,
+    }
+  }
+
+  return { grouped, totals, date: dateStr, waterOunces, mealBuilds, selectedMealBuild, activeJourneyId, macroTargets }
 }

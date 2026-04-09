@@ -50,6 +50,7 @@
 
 <style>
   .tiptap-wrapper {
+    background: var(--paper-card);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     transition: border-color var(--transition-fast);

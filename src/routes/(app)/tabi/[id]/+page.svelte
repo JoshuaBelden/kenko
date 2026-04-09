@@ -4,7 +4,7 @@
   import { Button, Card, ProgressBar, StarRating, DotRating, TipTapEditor } from "$lib/components"
   import SettingsTabs from "$lib/components/settings/SettingsTabs.svelte"
   import { localToday, localDateStr, localTimeStr, toDatetime } from "$lib/dates"
-  import { formatDate } from "$lib/format"
+  import { formatDate, formatDateShort } from "$lib/format"
   import { icons } from "$lib/icons"
 
   const data = $derived(page.data as any)
@@ -623,32 +623,23 @@
 </script>
 
 <!-- Page header -->
+<a href="/tabi" class="back-link">&larr; Tabi</a>
 <div class="journey-header">
   <div class="header-left">
-    <a href="/tabi" class="back-link">&larr; Tabi</a>
     <h1 class="journey-title">{journey?.name ?? "Journey"}</h1>
     {#if journey?.description}
       <p class="journey-desc">{journey.description}</p>
     {/if}
-    {#if journey}
+  </div>
+  {#if journey}
+    <div class="journey-meta-right">
       <p class="journey-dates">
-        {formatDate(journey.startDate, tz)} &mdash; {formatDate(journey.endDate, tz)}
+        {formatDateShort(journey.startDate, tz)} &mdash; {formatDateShort(journey.endDate, tz)}
       </p>
       <p class="journey-progress">
         Day {daysIn} of {totalDays} &middot; {daysLeft} days left &middot; {pctComplete}%
       </p>
-    {/if}
-  </div>
-  {#if !showSettings}
-    <button class="settings-link" onclick={() => (showSettings = true)}>
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <circle cx="12" cy="12" r="3" />
-        <path
-          d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
-        />
-      </svg>
-      Settings
-    </button>
+    </div>
   {/if}
 </div>
 
@@ -718,6 +709,15 @@
     </button>
     <button class="tab" class:tab-active={activeTab === "progress"} onclick={() => (activeTab = "progress")}>
       Progress
+    </button>
+    <button class="settings-link" onclick={() => (showSettings = true)}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="3" />
+        <path
+          d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+        />
+      </svg>
+      Settings
     </button>
   </nav>
 
@@ -795,38 +795,47 @@
           </Card>
         {/if}
 
-        <!-- Danjiki Widget -->
-        {#if journey.danjikiTargets && overviewData.danjiki}
-          {@const danjiki = overviewData.danjiki}
-          {@const target = journey.danjikiTargets.weeklyFastingHours}
+        <!-- Kata Widget -->
+        {#if journey.kataTargets && overviewData.kata}
+          {@const kata = overviewData.kata}
           <Card>
             <div class="widget">
               <div class="widget-header">
                 <h3 class="widget-title">
-                  <svg class="widget-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">{@html icons.danjiki}</svg>
-                  Danjiki
+                  <svg class="widget-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">{@html icons.kata}</svg>
+                  Kata
                 </h3>
-                <a href="/danjiki" class="widget-link">View &rarr;</a>
+                <a href="/kata" class="widget-link">View &rarr;</a>
               </div>
 
-              {#if target}
-                <div class="widget-stat">
-                  <div class="stat-header">
-                    <span class="stat-label">Weekly fasting</span>
-                    <span class="stat-values">{danjiki.weeklyHoursFasted}h / {target}h</span>
+              {#if kata.dailyCommitments?.length > 0}
+                <div class="widget-subsection-label">Today</div>
+                {#each kata.dailyCommitments as commitment}
+                  <div class="widget-stat">
+                    <div class="stat-header">
+                      <span class="stat-label">{commitment.name}</span>
+                      <span class="stat-values">
+                        {commitment.progress.current}{commitment.unit ? ` ${commitment.unit}` : ""} / {commitment.progress.target}
+                      </span>
+                    </div>
+                    <ProgressBar value={commitment.progress.percentage} />
                   </div>
-                  <ProgressBar value={pct(danjiki.weeklyHoursFasted, target)} />
-                </div>
-              {:else}
-                <p class="widget-text">{danjiki.weeklyHoursFasted}h fasted this week</p>
+                {/each}
               {/if}
 
-              {#if danjiki.activeFast}
-                {@const elapsed = Math.round((Date.now() - new Date(danjiki.activeFast.startedAt).getTime()) / 3600000 * 10) / 10}
-                <div class="active-fast">
-                  <span class="active-fast-badge">Active fast</span>
-                  <span>{elapsed}h elapsed of {danjiki.activeFast.targetDuration}h target</span>
-                </div>
+              {#if kata.otherCommitments?.length > 0}
+                <div class="widget-subsection-label">Ongoing</div>
+                {#each kata.otherCommitments as commitment}
+                  <div class="widget-stat">
+                    <div class="stat-header">
+                      <span class="stat-label">{commitment.name}</span>
+                      <span class="stat-values">
+                        {commitment.progress.current}{commitment.unit ? ` ${commitment.unit}` : ""} / {commitment.progress.target}
+                      </span>
+                    </div>
+                    <ProgressBar value={commitment.progress.percentage} />
+                  </div>
+                {/each}
               {/if}
             </div>
           </Card>
@@ -883,47 +892,38 @@
           </Card>
         {/if}
 
-        <!-- Kata Widget -->
-        {#if journey.kataTargets && overviewData.kata}
-          {@const kata = overviewData.kata}
+        <!-- Danjiki Widget -->
+        {#if journey.danjikiTargets && overviewData.danjiki}
+          {@const danjiki = overviewData.danjiki}
+          {@const target = journey.danjikiTargets.weeklyFastingHours}
           <Card>
             <div class="widget">
               <div class="widget-header">
                 <h3 class="widget-title">
-                  <svg class="widget-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">{@html icons.kata}</svg>
-                  Kata
+                  <svg class="widget-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">{@html icons.danjiki}</svg>
+                  Danjiki
                 </h3>
-                <a href="/kata" class="widget-link">View &rarr;</a>
+                <a href="/danjiki" class="widget-link">View &rarr;</a>
               </div>
 
-              {#if kata.dailyCommitments?.length > 0}
-                <div class="widget-subsection-label">Today</div>
-                {#each kata.dailyCommitments as commitment}
-                  <div class="widget-stat">
-                    <div class="stat-header">
-                      <span class="stat-label">{commitment.name}</span>
-                      <span class="stat-values">
-                        {commitment.progress.current}{commitment.unit ? ` ${commitment.unit}` : ""} / {commitment.progress.target}
-                      </span>
-                    </div>
-                    <ProgressBar value={commitment.progress.percentage} />
+              {#if target}
+                <div class="widget-stat">
+                  <div class="stat-header">
+                    <span class="stat-label">Weekly fasting</span>
+                    <span class="stat-values">{danjiki.weeklyHoursFasted}h / {target}h</span>
                   </div>
-                {/each}
+                  <ProgressBar value={pct(danjiki.weeklyHoursFasted, target)} />
+                </div>
+              {:else}
+                <p class="widget-text">{danjiki.weeklyHoursFasted}h fasted this week</p>
               {/if}
 
-              {#if kata.otherCommitments?.length > 0}
-                <div class="widget-subsection-label">Ongoing</div>
-                {#each kata.otherCommitments as commitment}
-                  <div class="widget-stat">
-                    <div class="stat-header">
-                      <span class="stat-label">{commitment.name}</span>
-                      <span class="stat-values">
-                        {commitment.progress.current}{commitment.unit ? ` ${commitment.unit}` : ""} / {commitment.progress.target}
-                      </span>
-                    </div>
-                    <ProgressBar value={commitment.progress.percentage} />
-                  </div>
-                {/each}
+              {#if danjiki.activeFast}
+                {@const elapsed = Math.round((Date.now() - new Date(danjiki.activeFast.startedAt).getTime()) / 3600000 * 10) / 10}
+                <div class="active-fast">
+                  <span class="active-fast-badge">Active fast</span>
+                  <span>{elapsed}h elapsed of {danjiki.activeFast.targetDuration}h target</span>
+                </div>
               {/if}
             </div>
           </Card>
@@ -1500,10 +1500,12 @@
   }
 
   .back-link {
+    display: inline-block;
     font-family: var(--font-body);
     font-size: var(--text-sm);
     color: var(--ink-light);
     text-decoration: none;
+    margin-bottom: var(--space-2);
     transition: color var(--transition-fast);
   }
 
@@ -1526,6 +1528,12 @@
     margin: 0;
   }
 
+  .journey-meta-right {
+    text-align: right;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
   .journey-dates {
     font-family: var(--font-body);
     font-size: var(--text-sm);
@@ -1543,21 +1551,20 @@
   .settings-link {
     display: flex;
     align-items: center;
-    gap: var(--space-2);
+    gap: var(--space-1);
+    margin-left: auto;
     background: none;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    padding: var(--space-2) var(--space-3);
+    border: none;
+    padding: var(--space-2) 0;
     font-family: var(--font-body);
-    font-size: var(--text-sm);
-    color: var(--ink-light);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
     cursor: pointer;
     transition: all var(--transition-fast);
   }
 
   .settings-link:hover {
-    border-color: var(--border-strong);
-    color: var(--ink);
+    color: var(--ink-light);
   }
 
 

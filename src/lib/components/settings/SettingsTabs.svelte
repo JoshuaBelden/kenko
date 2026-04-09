@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Button, Card } from "$lib/components"
+  import { Button } from "$lib/components"
   import SettingsGeneral from "./SettingsGeneral.svelte"
   import SettingsShoku from "./SettingsShoku.svelte"
   import SettingsDanjiki from "./SettingsDanjiki.svelte"
@@ -102,40 +102,6 @@
       {onchange}
     />
 
-    <!-- Danger Zone -->
-    <div class="danger-zone">
-      {#if isArchived}
-        <button class="btn-text" onclick={onunarchive}>Unarchive this journey</button>
-      {:else if confirmingArchive}
-        <Card>
-          <div class="delete-confirm">
-            <p class="delete-message">Archive this journey? It will be hidden from your journey list but can be restored later.</p>
-            <div class="delete-actions">
-              <button class="btn-danger" onclick={onarchive}>Yes, archive</button>
-              <button class="btn-text" onclick={() => (confirmingArchive = false)}>Cancel</button>
-            </div>
-          </div>
-        </Card>
-      {:else}
-        <button class="btn-text btn-danger-text" onclick={() => (confirmingArchive = true)}>Archive this journey</button>
-      {/if}
-    </div>
-
-    <div class="danger-zone">
-      {#if confirmingDelete}
-        <Card>
-          <div class="delete-confirm">
-            <p class="delete-message">Are you sure? This will not delete any logged data — only the journey and its targets will be removed.</p>
-            <div class="delete-actions">
-              <button class="btn-danger" onclick={ondelete}>Yes, delete</button>
-              <button class="btn-text" onclick={() => (confirmingDelete = false)}>Cancel</button>
-            </div>
-          </div>
-        </Card>
-      {:else}
-        <button class="btn-text btn-danger-text" onclick={() => (confirmingDelete = true)}>Delete this journey</button>
-      {/if}
-    </div>
   {/if}
 
   {#if activeTab === "shoku"}
@@ -171,6 +137,22 @@
       {saving ? "Saving..." : "Save settings"}
     </Button>
     <button class="btn-text" onclick={onclose}>Close settings</button>
+    {#if activeTab === "general"}
+      {#if isArchived}
+        <button class="btn-text" onclick={onunarchive}>Unarchive</button>
+      {:else if confirmingArchive}
+        <button class="btn-danger-inline" onclick={onarchive}>Confirm archive</button>
+        <button class="btn-text" onclick={() => (confirmingArchive = false)}>Cancel</button>
+      {:else}
+        <button class="btn-text btn-danger-text" onclick={() => (confirmingArchive = true)}>Archive</button>
+      {/if}
+      {#if confirmingDelete}
+        <button class="btn-danger-inline" onclick={ondelete}>Confirm delete</button>
+        <button class="btn-text" onclick={() => (confirmingDelete = false)}>Cancel</button>
+      {:else}
+        <button class="btn-text btn-danger-text" onclick={() => (confirmingDelete = true)}>Delete</button>
+      {/if}
+    {/if}
     {#if saveError}
       <p class="form-error">{saveError}</p>
     {/if}
@@ -261,53 +243,28 @@
     color: var(--ink);
   }
 
-  .danger-zone {
-    padding-top: var(--space-4);
-    border-top: 0.5px solid var(--border);
-  }
-
   .btn-danger-text {
-    color: var(--accent);
+    color: var(--accent-red);
   }
 
   .btn-danger-text:hover {
     opacity: 0.8;
   }
 
-  .delete-confirm {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-  }
-
-  .delete-message {
-    font-family: var(--font-body);
-    font-size: var(--text-sm);
-    line-height: 1.7;
-    color: var(--ink-light);
-    margin: 0;
-  }
-
-  .delete-actions {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-  }
-
-  .btn-danger {
-    background: var(--accent);
-    color: #ffffff;
+  .btn-danger-inline {
+    background: none;
     border: none;
     cursor: pointer;
     font-family: var(--font-body);
     font-size: var(--text-sm);
     font-weight: 500;
-    padding: var(--space-2) var(--space-4);
+    color: var(--accent-red);
+    padding: var(--space-2) var(--space-3);
     border-radius: var(--radius-sm);
     transition: opacity var(--transition-fast);
   }
 
-  .btn-danger:hover {
+  .btn-danger-inline:hover {
     opacity: 0.9;
   }
 </style>

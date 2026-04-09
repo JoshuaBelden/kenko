@@ -299,6 +299,7 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
+    max-width: 480px;
   }
 
   .field {
@@ -385,12 +386,13 @@
 
   .override-toggle input {
     accent-color: var(--accent);
+    width: auto;
   }
 
   .macro-section {
     display: flex;
     flex-direction: column;
-    gap: var(--space-3);
+    gap: var(--space-2);
   }
 
   .macro-row {
