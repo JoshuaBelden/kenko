@@ -896,17 +896,35 @@
                 <a href="/kata" class="widget-link">View &rarr;</a>
               </div>
 
-              {#each kata.commitments as commitment}
-                <div class="widget-stat">
-                  <div class="stat-header">
-                    <span class="stat-label">{commitment.name}</span>
-                    <span class="stat-values">
-                      {commitment.progress.current}{commitment.unit ? ` ${commitment.unit}` : ""} / {commitment.progress.target}
-                    </span>
+              {#if kata.dailyCommitments?.length > 0}
+                <div class="widget-subsection-label">Today</div>
+                {#each kata.dailyCommitments as commitment}
+                  <div class="widget-stat">
+                    <div class="stat-header">
+                      <span class="stat-label">{commitment.name}</span>
+                      <span class="stat-values">
+                        {commitment.progress.current}{commitment.unit ? ` ${commitment.unit}` : ""} / {commitment.progress.target}
+                      </span>
+                    </div>
+                    <ProgressBar value={commitment.progress.percentage} />
                   </div>
-                  <ProgressBar value={commitment.progress.percentage} />
-                </div>
-              {/each}
+                {/each}
+              {/if}
+
+              {#if kata.otherCommitments?.length > 0}
+                <div class="widget-subsection-label">Ongoing</div>
+                {#each kata.otherCommitments as commitment}
+                  <div class="widget-stat">
+                    <div class="stat-header">
+                      <span class="stat-label">{commitment.name}</span>
+                      <span class="stat-values">
+                        {commitment.progress.current}{commitment.unit ? ` ${commitment.unit}` : ""} / {commitment.progress.target}
+                      </span>
+                    </div>
+                    <ProgressBar value={commitment.progress.percentage} />
+                  </div>
+                {/each}
+              {/if}
             </div>
           </Card>
         {/if}
@@ -1668,6 +1686,17 @@
     display: flex;
     justify-content: space-between;
     align-items: baseline;
+  }
+
+  .widget-subsection-label {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--ink-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-top: 0.75rem;
+    margin-bottom: 0.25rem;
   }
 
   .stat-label {

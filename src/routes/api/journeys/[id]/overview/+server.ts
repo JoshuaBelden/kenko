@@ -2,7 +2,7 @@ import { getJourneysCollection, getWeightLogCollection } from "$lib/server/colle
 import { getFastsCollection } from "$lib/server/danjiki"
 import { startOfDayTz, endOfDayTz, startOfWeekTz, endOfWeekTz, todayStr } from "$lib/server/dates"
 import { getWorkoutLogsCollection, getWorkoutPlansCollection, serializeWorkoutPlan } from "$lib/server/dojo"
-import { getCommitmentsCollection, getCommitmentLogsCollection, serializeCommitment } from "$lib/server/kata"
+import { getCommitmentsCollection, getCommitmentLogsCollection, serializeCommitment, calculateTaperPhaseInfo } from "$lib/server/kata"
 import { getFoodItemLogsCollection, getWaterLogCollection } from "$lib/server/shoku"
 import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
@@ -181,14 +181,27 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 
     const kataData = selected.map((c) => {
       const current = todayTotals.get(c._id.toString()) ?? 0
-      const percentage = c.targetValue > 0 ? Math.round((current / c.targetValue) * 100) : 0
+      let target = c.targetValue ?? 0
+
+      // For taper commitments, use the current phase's daily limit as the target
+      if (c.type === "taper" && c.taperPhases?.length > 0 && c.startDate) {
+        const sortedPhases = [...c.taperPhases].sort((a: any, b: any) => a.weekNumber - b.weekNumber)
+        const startDate = c.startDate instanceof Date ? c.startDate : new Date(c.startDate)
+        const { activePhase } = calculateTaperPhaseInfo(startDate, sortedPhases, c.status ?? "active", now)
+        target = activePhase?.dailyLimit ?? sortedPhases[sortedPhases.length - 1].dailyLimit
+      }
+
+      const percentage = target > 0 ? Math.round((current / target) * 100) : 0
       return {
         ...serializeCommitment(c),
-        progress: { current, target: c.targetValue, percentage },
+        progress: { current, target, percentage },
       }
     })
 
-    result.kata = { commitments: kataData }
+    const dailyCommitments = kataData.filter((c) => c.period === "daily" && c.type !== "taper")
+    const otherCommitments = kataData.filter((c) => c.period !== "daily" || c.type === "taper")
+
+    result.kata = { dailyCommitments, otherCommitments }
   }
 
   // Weight log data (scoped to journey date range)
