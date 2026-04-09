@@ -109,6 +109,14 @@
   const isCompleted = $derived(log?.status === "completed")
   const isCardio = $derived((log?.planSnapshot?.sessionType ?? "strength") === "cardio")
 
+  // Initialize date fields for active cardio sessions
+  $effect(() => {
+    if (isCardio && !isCompleted && log) {
+      editStartedAt = toLocalDatetime(log.startedAt)
+      editCompletedAt = log.completedAt ? toLocalDatetime(log.completedAt) : toLocalDatetime(new Date().toISOString())
+    }
+  })
+
 
   function setsForExercise(exerciseId: string) {
     return sets.filter(s => s.exerciseId === exerciseId)
@@ -294,6 +302,8 @@
     }
     if (isCardio) {
       completeBody.cardioDistance = cardioDistance ?? null
+      if (editStartedAt) completeBody.startedAt = new Date(editStartedAt).toISOString()
+      if (editCompletedAt) completeBody.completedAt = new Date(editCompletedAt).toISOString()
     }
     const res = await fetch(`/api/dojo/logs/${log.id}/complete`, {
       method: "PUT",
@@ -623,11 +633,21 @@
   {/if}
   {/if}
 
-  <!-- Cardio Distance -->
+  <!-- Cardio Distance & Dates -->
   {#if isCardio}
     <div class="cardio-distance-wrap">
     {#if !isCompleted}
       <Card>
+        <div class="form-row">
+          <div class="form-field">
+            <label class="field-label" for="cardio-started-at">Started At</label>
+            <input id="cardio-started-at" type="datetime-local" class="field-input" bind:value={editStartedAt} />
+          </div>
+          <div class="form-field">
+            <label class="field-label" for="cardio-completed-at">Completed At</label>
+            <input id="cardio-completed-at" type="datetime-local" class="field-input" bind:value={editCompletedAt} />
+          </div>
+        </div>
         <div class="form-field">
           <label class="field-label" for="cardio-distance">Distance (miles)</label>
           <input id="cardio-distance" type="number" class="field-input" bind:value={cardioDistance} placeholder="Optional" min="0" step="0.01" />

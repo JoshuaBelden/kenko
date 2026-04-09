@@ -15,6 +15,8 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
     updatedAt: now,
   }
 
+  if (body.startedAt) updates.startedAt = new Date(body.startedAt)
+  if (body.completedAt) updates.completedAt = new Date(body.completedAt)
   if (body.notes !== undefined) updates.notes = body.notes
   if (body.caloriesBurned !== undefined) updates.caloriesBurned = body.caloriesBurned
   if (body.cardioDistance !== undefined) updates.cardioDistance = body.cardioDistance
