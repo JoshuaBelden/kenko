@@ -1,4 +1,5 @@
 import {
+  aggregateRecovery,
   getExercisesCollection,
   getWorkoutLogsCollection,
   getWorkoutPlansCollection,
@@ -11,7 +12,7 @@ import { ObjectId } from "mongodb"
 import type { PageServerLoad } from "./$types"
 
 export const load: PageServerLoad = async ({ locals }) => {
-  if (!locals.userId) return { plans: [], logs: [], exercises: [] }
+  if (!locals.userId) return { plans: [], logs: [], exercises: [], recovery: [] }
 
   const userId = new ObjectId(locals.userId)
 
@@ -21,15 +22,17 @@ export const load: PageServerLoad = async ({ locals }) => {
     getExercisesCollection(),
   ])
 
-  const [plans, logs, exercises] = await Promise.all([
+  const [plans, logs, exercises, recovery] = await Promise.all([
     plansCol.find({ userId }).sort({ createdAt: -1 }).toArray(),
     logsCol.find({ userId }).sort({ startedAt: -1 }).limit(20).toArray(),
     exercisesCol.find(exerciseFilterForUser(userId)).sort({ name: 1 }).toArray(),
+    aggregateRecovery(userId),
   ])
 
   return {
     plans: plans.map(serializeWorkoutPlan),
     logs: logs.map(serializeWorkoutLog),
     exercises: exercises.map(serializeExercise),
+    recovery,
   }
 }

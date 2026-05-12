@@ -3,6 +3,15 @@
   import { page } from "$app/state"
   import { Button, Card, PageHeader } from "$lib/components"
   import { icons } from "$lib/icons"
+  import { cardioTypeLabel, formatDuration, formatPace } from "$lib/format"
+
+  const CARDIO_TYPE_OPTIONS = [
+    { value: "run", label: "Run" },
+    { value: "cycle", label: "Cycle" },
+    { value: "row", label: "Row" },
+    { value: "swim", label: "Swim" },
+    { value: "other", label: "Other" },
+  ]
 
   let log = $state(page.data.log)
   let exercises = $state(page.data.exercises ?? [])
@@ -28,10 +37,16 @@
   let completing = $state(false)
   let recalculating = $state(false)
 
-  // Editable dates for completed sessions
+  // Cardio RPE prompt (session-level) — shown before completing a cardio session
+  let showCardioRpePrompt = $state(false)
+  let cardioRpeValue = $state<number | null>(null)
+
+  // Editable fields for completed sessions
   let editingDates = $state(false)
   let editStartedAt = $state("")
   let editCompletedAt = $state("")
+  let editCardioType = $state<string | null>(null)
+  let editCardioRpe = $state<number | null>(null)
   let savingDates = $state(false)
 
   function toLocalDatetime(iso: string): string {
@@ -48,6 +63,8 @@
     caloriesBurned = log.caloriesBurned ?? null
     if (isCardio) {
       cardioDistance = log.cardioDistance ?? null
+      editCardioType = log.cardioType ?? null
+      editCardioRpe = log.rpe ?? null
     }
     editingDates = true
   }
@@ -62,6 +79,8 @@
       }
       if (isCardio) {
         body.cardioDistance = cardioDistance ?? null
+        body.cardioType = editCardioType
+        body.rpe = editCardioRpe
       }
       const res = await fetch(`/api/dojo/logs/${log.id}`, {
         method: "PUT",
@@ -292,7 +311,17 @@
     goto("/dojo")
   }
 
-  async function handleComplete() {
+  function handleComplete() {
+    if (isCardio) {
+      // Session-level RPE required for cardio
+      cardioRpeValue = null
+      showCardioRpePrompt = true
+      return
+    }
+    void finalizeComplete(null)
+  }
+
+  async function finalizeComplete(rpe: number | null) {
     completing = true
     if (saveTimeout) clearTimeout(saveTimeout)
     if (!isCardio) await saveSets()
@@ -304,6 +333,7 @@
       completeBody.cardioDistance = cardioDistance ?? null
       if (editStartedAt) completeBody.startedAt = new Date(editStartedAt).toISOString()
       if (editCompletedAt) completeBody.completedAt = new Date(editCompletedAt).toISOString()
+      completeBody.rpe = rpe
     }
     const res = await fetch(`/api/dojo/logs/${log.id}/complete`, {
       method: "PUT",
@@ -316,6 +346,18 @@
     }
     completing = false
   }
+
+  function submitCardioRpe() {
+    if (cardioRpeValue == null) return
+    showCardioRpePrompt = false
+    void finalizeComplete(cardioRpeValue)
+  }
+
+  function cancelCardioRpe() {
+    showCardioRpePrompt = false
+    cardioRpeValue = null
+  }
+
 
   function openAddExercise() {
     addExerciseOpen = true
@@ -376,7 +418,7 @@
   {#if isCompleted}
     <div class="completed-banner">Session completed</div>
 
-    {#if log.performance}
+    {#if log.performance && !isCardio}
       <div class="perf-card-wrap">
       <Card>
         <div class="perf-summary">
@@ -388,7 +430,7 @@
               </div>
             {/if}
             <div class="perf-stat">
-              <span class="perf-stat-value">{log.performance.totalReps.toLocaleString()}</span>
+              <span class="perf-stat-value">{(log.performance.totalReps ?? 0).toLocaleString()}</span>
               <span class="perf-stat-label">Total Reps</span>
             </div>
             {#if log.caloriesBurned}
@@ -425,6 +467,59 @@
       </div>
     {/if}
 
+    {#if isCardio}
+      <div class="perf-card-wrap">
+        <Card>
+          <div class="perf-summary">
+            <div class="perf-stats">
+              <div class="perf-stat">
+                <span class="perf-stat-value">{cardioTypeLabel(log.cardioType)}</span>
+                <span class="perf-stat-label">Cardio Type</span>
+              </div>
+              <div class="perf-stat">
+                <span class="perf-stat-value">{log.rpe ?? "—"}</span>
+                <span class="perf-stat-label">RPE</span>
+              </div>
+              <div class="perf-stat">
+                <span class="perf-stat-value">{formatDuration(log.startedAt, log.completedAt)}</span>
+                <span class="perf-stat-label">Duration</span>
+              </div>
+              {#if log.cardioDistance}
+                <div class="perf-stat">
+                  <span class="perf-stat-value">{log.cardioDistance} mi</span>
+                  <span class="perf-stat-label">Distance</span>
+                </div>
+              {/if}
+              {#if log.caloriesBurned}
+                <div class="perf-stat">
+                  <span class="perf-stat-value">{log.caloriesBurned}</span>
+                  <span class="perf-stat-label">Calories</span>
+                </div>
+              {/if}
+              {#if log.performance?.pace != null}
+                <div class="perf-stat">
+                  <span class="perf-stat-value">{formatPace(log.performance.pace)}</span>
+                  <span class="perf-stat-label">Pace</span>
+                </div>
+              {/if}
+              {#if log.performance?.caloriesPerMile != null}
+                <div class="perf-stat">
+                  <span class="perf-stat-value">{log.performance.caloriesPerMile.toFixed(0)}</span>
+                  <span class="perf-stat-label">Cal / Mile</span>
+                </div>
+              {/if}
+              {#if log.performance?.intensityFactor != null}
+                <div class="perf-stat">
+                  <span class="perf-stat-value">{log.performance.intensityFactor.toFixed(2)}</span>
+                  <span class="perf-stat-label">Intensity</span>
+                </div>
+              {/if}
+            </div>
+          </div>
+        </Card>
+      </div>
+    {/if}
+
     {#if editingDates}
       <div class="date-editor-wrapper">
         <Card>
@@ -440,9 +535,35 @@
               </div>
             </div>
             {#if isCardio}
+              <div class="form-row">
+                <div class="form-field">
+                  <label class="field-label" for="edit-cardio-type">Cardio Type</label>
+                  <select id="edit-cardio-type" class="field-input" bind:value={editCardioType}>
+                    <option value={null}>— Select —</option>
+                    {#each CARDIO_TYPE_OPTIONS as opt}
+                      <option value={opt.value}>{opt.label}</option>
+                    {/each}
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label class="field-label" for="edit-cardio-distance">Distance (miles)</label>
+                  <input id="edit-cardio-distance" type="number" class="field-input" bind:value={cardioDistance} placeholder="Optional" min="0" step="any" />
+                </div>
+              </div>
               <div class="form-field">
-                <label class="field-label" for="edit-cardio-distance">Distance (miles)</label>
-                <input id="edit-cardio-distance" type="number" class="field-input" bind:value={cardioDistance} placeholder="Optional" min="0" step="any" />
+                <span class="field-label">RPE</span>
+                <div class="rpe-scale inline">
+                  {#each Array.from({ length: 10 }, (_, i) => i + 1) as n}
+                    <button
+                      type="button"
+                      class="rpe-btn"
+                      class:selected={editCardioRpe === n}
+                      onclick={() => (editCardioRpe = n)}
+                    >
+                      {n}
+                    </button>
+                  {/each}
+                </div>
               </div>
             {/if}
             <div class="form-field">
@@ -450,10 +571,17 @@
               <input id="edit-calories" type="number" class="field-input" bind:value={caloriesBurned} placeholder="Optional" min="0" />
             </div>
             <div class="form-actions">
-              <Button variant="secondary" onclick={() => (editingDates = false)}>Cancel</Button>
               <Button variant="primary" onclick={saveDates} disabled={savingDates}>
                 {savingDates ? "Saving..." : "Save"}
               </Button>
+              <Button
+                variant="secondary"
+                onclick={handleRecalculate}
+                disabled={recalculating || (isCardio && log.rpe == null)}
+              >
+                {recalculating ? "Recalculating..." : "Recalculate"}
+              </Button>
+              <Button variant="secondary" onclick={() => (editingDates = false)}>Cancel</Button>
             </div>
           </div>
         </Card>
@@ -468,6 +596,33 @@
         <span class="rest-label">Rest</span>
         <span class="rest-time">{formatTime(restSecondsLeft)}</span>
         <Button variant="secondary" onclick={dismissRestTimer}>Skip</Button>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Cardio Session RPE Prompt -->
+  {#if showCardioRpePrompt}
+    <div class="rpe-overlay">
+      <div class="rpe-card">
+        <h3 class="rpe-title">Rate of Perceived Exertion</h3>
+        <p class="rpe-subtitle">How hard was this session?</p>
+        <div class="rpe-scale">
+          {#each Array.from({ length: 10 }, (_, i) => i + 1) as n}
+            <button
+              class="rpe-btn"
+              class:selected={cardioRpeValue === n}
+              onclick={() => (cardioRpeValue = n)}
+            >
+              {n}
+            </button>
+          {/each}
+        </div>
+        <div class="rpe-actions">
+          <Button variant="secondary" onclick={cancelCardioRpe}>Cancel</Button>
+          <Button variant="primary" onclick={submitCardioRpe} disabled={cardioRpeValue === null}>
+            Save & Complete
+          </Button>
+        </div>
       </div>
     </div>
   {/if}
@@ -638,6 +793,7 @@
     <div class="cardio-distance-wrap">
     {#if !isCompleted}
       <Card>
+        <div class="cardio-type-label">{cardioTypeLabel(log.cardioType)}</div>
         <div class="form-row">
           <div class="form-field">
             <label class="field-label" for="cardio-started-at">Started At</label>
@@ -733,6 +889,20 @@
   .perf-card-wrap,
   .cardio-distance-wrap {
     margin-bottom: var(--space-4);
+  }
+
+  .cardio-type-label {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: 500;
+    color: var(--ink);
+    margin-bottom: var(--space-3);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  :global(.rpe-scale.inline) {
+    justify-content: flex-start;
   }
 
   .perf-summary {

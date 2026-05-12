@@ -1,4 +1,10 @@
-import { getWorkoutLogsCollection, serializeWorkoutLog, calculateAndStorePerformance } from "$lib/server/dojo"
+import {
+  CARDIO_TYPES,
+  calculateAndStorePerformance,
+  calculateCardioPerformance,
+  getWorkoutLogsCollection,
+  serializeWorkoutLog,
+} from "$lib/server/dojo"
 import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
 import type { RequestHandler } from "./$types"
@@ -21,6 +27,21 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
   if (body.caloriesBurned !== undefined) updates.caloriesBurned = body.caloriesBurned
   if (body.cardioDistance !== undefined) updates.cardioDistance = body.cardioDistance
 
+  if (body.cardioType !== undefined) {
+    if (body.cardioType !== null && !CARDIO_TYPES.includes(body.cardioType)) {
+      return json({ error: "Invalid cardioType" }, { status: 400 })
+    }
+    updates.cardioType = body.cardioType
+  }
+
+  if (body.rpe !== undefined && body.rpe !== null) {
+    const rpeNum = Number(body.rpe)
+    if (!Number.isInteger(rpeNum) || rpeNum < 1 || rpeNum > 10) {
+      return json({ error: "rpe must be an integer 1-10" }, { status: 400 })
+    }
+    updates.rpe = rpeNum
+  }
+
   const logs = await getWorkoutLogsCollection()
 
   // Fetch the current log to filter incomplete sets
@@ -30,6 +51,11 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
     status: "in_progress",
   })
   if (!existing) return json({ error: "Log not found or already completed" }, { status: 404 })
+
+  const isCardio = existing.planSnapshot?.sessionType === "cardio"
+  if (isCardio && updates.rpe == null) {
+    return json({ error: "rpe is required to complete a cardio session" }, { status: 400 })
+  }
 
   // Remove sets that were not marked as completed
   const completedSets = (existing.sets ?? []).filter((s: any) => s.completed === true)
@@ -59,13 +85,13 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
 
   if (!result) return json({ error: "Log not found or already completed" }, { status: 404 })
 
-  // Calculate and store performance data (volume, e1RM, personal bests)
+  // Calculate and store performance data
   if (result.planSnapshot?.sessionType === "strength") {
     await calculateAndStorePerformance(result, new ObjectId(locals.userId))
-    // Re-fetch to get the performance field
-    const updated = await logs.findOne({ _id: result._id })
-    if (updated) return json(serializeWorkoutLog(updated))
+  } else if (result.planSnapshot?.sessionType === "cardio") {
+    await calculateCardioPerformance(result)
   }
 
-  return json(serializeWorkoutLog(result))
+  const updated = await logs.findOne({ _id: result._id })
+  return json(serializeWorkoutLog(updated ?? result))
 }

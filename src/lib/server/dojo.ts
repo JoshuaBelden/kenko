@@ -56,6 +56,12 @@ export type Equipment =
 
 export type SessionType = "strength" | "cardio"
 
+export type CardioType = "run" | "cycle" | "row" | "swim" | "other"
+
+export const CARDIO_TYPES: CardioType[] = ["run", "cycle", "row", "swim", "other"]
+
+export const RECOVERY_WINDOW_DAYS = 5
+
 export const VALID_REGIONS: MuscleRegion[] = ["torso", "arms", "lower_body"]
 
 export const MUSCLES_BY_REGION: Record<MuscleRegion, Muscle[]> = {
@@ -65,6 +71,31 @@ export const MUSCLES_BY_REGION: Record<MuscleRegion, Muscle[]> = {
 }
 
 export const ALL_MUSCLES: Muscle[] = Object.values(MUSCLES_BY_REGION).flat()
+
+export const REGION_BY_MUSCLE: Record<Muscle, MuscleRegion> = (() => {
+  const out: Partial<Record<Muscle, MuscleRegion>> = {}
+  for (const region of VALID_REGIONS) {
+    for (const muscle of MUSCLES_BY_REGION[region]) out[muscle] = region
+  }
+  return out as Record<Muscle, MuscleRegion>
+})()
+
+const RUN_MUSCLE_CONTRIBUTIONS: { muscle: Muscle; weight: number }[] = [
+  { muscle: "glutes", weight: 1.0 },
+  { muscle: "quads", weight: 0.9 },
+  { muscle: "hamstrings", weight: 0.85 },
+  { muscle: "calves", weight: 0.8 },
+  { muscle: "lower_back", weight: 0.4 },
+  { muscle: "abs", weight: 0.2 },
+]
+
+export function rpeToIntensityFactor(rpe: number | null | undefined): number {
+  if (rpe == null) return 0.75
+  if (rpe <= 3) return 0.5
+  if (rpe <= 6) return 0.75
+  if (rpe <= 8) return 1.0
+  return 1.25
+}
 
 export const VALID_EQUIPMENT: Equipment[] = [
   "barbell",
@@ -198,10 +229,12 @@ export function serializeWorkoutLog(doc: WithId<Document>) {
     notes: doc.notes ?? null,
     caloriesBurned: doc.caloriesBurned ?? null,
     cardioDistance: doc.cardioDistance ?? null,
+    cardioType: doc.cardioType ?? null,
+    rpe: doc.rpe ?? null,
     performance: doc.performance
       ? {
-          totalVolume: doc.performance.totalVolume,
-          totalReps: doc.performance.totalReps,
+          totalVolume: doc.performance.totalVolume ?? null,
+          totalReps: doc.performance.totalReps ?? null,
           exercisePerformance: (doc.performance.exercisePerformance ?? []).map((ep: any) => ({
             exerciseId: ep.exerciseId?.toString() ?? ep.exerciseId,
             exerciseName: ep.exerciseName,
@@ -211,6 +244,17 @@ export function serializeWorkoutLog(doc: WithId<Document>) {
             e1RM: ep.e1RM ?? null,
             personalBests: ep.personalBests ?? [],
           })),
+          pace: doc.performance.pace ?? null,
+          caloriesPerMile: doc.performance.caloriesPerMile ?? null,
+          intensityFactor: doc.performance.intensityFactor ?? null,
+          muscleFatigue: doc.performance.muscleFatigue
+            ? doc.performance.muscleFatigue.map((m: any) => ({
+                muscle: m.muscle,
+                region: m.region,
+                sessionFatigue: m.sessionFatigue,
+                contributionWeight: m.contributionWeight,
+              }))
+            : null,
           calculatedAt: doc.performance.calculatedAt instanceof Date
             ? doc.performance.calculatedAt.toISOString()
             : doc.performance.calculatedAt,
@@ -232,6 +276,7 @@ export async function startWorkoutLog(
   userId: ObjectId,
   planId: ObjectId,
   sessionId: string,
+  cardioType: CardioType | null = null,
 ) {
   const plans = await getWorkoutPlansCollection()
   const plan = await plans.findOne({ _id: planId, userId })
@@ -297,6 +342,8 @@ export async function startWorkoutLog(
     notes: null,
     caloriesBurned: null,
     cardioDistance: null,
+    cardioType: sessionType === "cardio" ? cardioType : null,
+    rpe: null,
     status: "in_progress",
     startedAt: now,
     completedAt: null,
@@ -457,6 +504,7 @@ export async function calculateAndStorePerformance(
   let sessionTotalVolume = 0
   let sessionTotalReps = 0
   const exercisePerformance: any[] = []
+  const muscleFatigueMap = new Map<Muscle, number>()
 
   for (const [eid, exSets] of setsByExercise) {
     const exInfo = exerciseMap.get(eid)
@@ -470,6 +518,24 @@ export async function calculateAndStorePerformance(
 
     sessionTotalVolume += perf.totalVolume
     sessionTotalReps += perf.totalReps
+
+    // Per-muscle fatigue for this exercise: sum(max(w,1) * reps * rpeMult) attributed 100% to primary muscle
+    const primaryMuscle = (exInfo.muscleGroup?.muscle ?? null) as Muscle | null
+    if (primaryMuscle && REGION_BY_MUSCLE[primaryMuscle]) {
+      let exerciseFatigue = 0
+      for (const set of exSets) {
+        const w = Math.max(set.weight ?? 0, 1)
+        const r = set.reps ?? 0
+        const mult = rpeToIntensityFactor(set.rpe)
+        exerciseFatigue += w * r * mult
+      }
+      if (exerciseFatigue > 0) {
+        muscleFatigueMap.set(
+          primaryMuscle,
+          (muscleFatigueMap.get(primaryMuscle) ?? 0) + exerciseFatigue,
+        )
+      }
+    }
 
     // Check and update personal bests
     const currentPBs = exercisePBMap.get(eid) ?? {}
@@ -518,10 +584,18 @@ export async function calculateAndStorePerformance(
     })
   }
 
+  const muscleFatigue = [...muscleFatigueMap.entries()].map(([muscle, sessionFatigue]) => ({
+    muscle,
+    region: REGION_BY_MUSCLE[muscle],
+    sessionFatigue,
+    contributionWeight: 1.0,
+  }))
+
   const performance = {
     totalVolume: sessionTotalVolume,
     totalReps: sessionTotalReps,
     exercisePerformance,
+    muscleFatigue: muscleFatigue.length > 0 ? muscleFatigue : null,
     calculatedAt: now,
   }
 
@@ -532,4 +606,119 @@ export async function calculateAndStorePerformance(
   )
 
   return performance
+}
+
+// ========================================
+// Cardio Performance
+// ========================================
+
+export async function calculateCardioPerformance(
+  logDoc: WithId<Document>,
+): Promise<any> {
+  const logs = await getWorkoutLogsCollection()
+  const now = new Date()
+
+  const cardioType: CardioType = (logDoc.cardioType ?? "other") as CardioType
+  const rpe: number | null = typeof logDoc.rpe === "number" ? logDoc.rpe : null
+  const miles: number | null =
+    typeof logDoc.cardioDistance === "number" && logDoc.cardioDistance > 0
+      ? logDoc.cardioDistance
+      : null
+  const calories: number | null =
+    typeof logDoc.caloriesBurned === "number" && logDoc.caloriesBurned > 0
+      ? logDoc.caloriesBurned
+      : null
+
+  const startedAt = logDoc.startedAt instanceof Date ? logDoc.startedAt : null
+  const completedAt = logDoc.completedAt instanceof Date ? logDoc.completedAt : null
+  const durationMinutes =
+    startedAt && completedAt
+      ? Math.max((completedAt.getTime() - startedAt.getTime()) / 60000, 0)
+      : null
+
+  const intensityFactor = rpeToIntensityFactor(rpe)
+
+  const pace =
+    cardioType === "run" && miles && durationMinutes != null && durationMinutes > 0
+      ? durationMinutes / miles
+      : null
+
+  const caloriesPerMile = miles && calories ? calories / miles : null
+
+  let muscleFatigue: {
+    muscle: Muscle
+    region: MuscleRegion
+    sessionFatigue: number
+    contributionWeight: number
+  }[] | null = null
+
+  if (cardioType === "run" && miles) {
+    const baseFatigue = miles * intensityFactor * 50
+    muscleFatigue = RUN_MUSCLE_CONTRIBUTIONS.map(({ muscle, weight }) => ({
+      muscle,
+      region: REGION_BY_MUSCLE[muscle],
+      sessionFatigue: baseFatigue * weight,
+      contributionWeight: weight,
+    }))
+  }
+
+  const performance = {
+    pace,
+    caloriesPerMile,
+    intensityFactor,
+    muscleFatigue,
+    calculatedAt: now,
+  }
+
+  await logs.updateOne(
+    { _id: logDoc._id },
+    { $set: { performance, updatedAt: now } },
+  )
+
+  return performance
+}
+
+// ========================================
+// Recovery Aggregation
+// ========================================
+
+export interface MuscleRecovery {
+  muscle: Muscle
+  region: MuscleRegion
+  totalFatigue: number
+}
+
+export async function aggregateRecovery(
+  userId: ObjectId,
+  now: Date = new Date(),
+): Promise<MuscleRecovery[]> {
+  const logs = await getWorkoutLogsCollection()
+  const cutoff = new Date(now.getTime() - RECOVERY_WINDOW_DAYS * 24 * 60 * 60 * 1000)
+
+  const recent = await logs
+    .find({
+      userId,
+      status: "completed",
+      completedAt: { $gte: cutoff },
+      "performance.muscleFatigue": { $ne: null },
+    })
+    .project({ "performance.muscleFatigue": 1 })
+    .toArray()
+
+  const totals = new Map<Muscle, number>()
+  for (const log of recent) {
+    const arr = (log as any).performance?.muscleFatigue ?? []
+    for (const entry of arr) {
+      if (!entry?.muscle) continue
+      const muscle = entry.muscle as Muscle
+      if (!REGION_BY_MUSCLE[muscle]) continue
+      totals.set(muscle, (totals.get(muscle) ?? 0) + (entry.sessionFatigue ?? 0))
+    }
+  }
+
+  return ALL_MUSCLES.map(muscle => ({
+    muscle,
+    region: REGION_BY_MUSCLE[muscle],
+    totalFatigue: totals.get(muscle) ?? 0,
+  }))
 }

@@ -1,7 +1,9 @@
 import {
+  CARDIO_TYPES,
   getWorkoutLogsCollection,
   serializeWorkoutLog,
   startWorkoutLog,
+  type CardioType,
 } from "$lib/server/dojo"
 import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
@@ -30,10 +32,18 @@ export const POST: RequestHandler = async ({ locals, request }) => {
   if (!body.planId) return json({ error: "planId is required" }, { status: 400 })
   if (!body.sessionId) return json({ error: "sessionId is required" }, { status: 400 })
 
+  let cardioType: CardioType | null = null
+  if (body.cardioType != null) {
+    if (!CARDIO_TYPES.includes(body.cardioType)) {
+      return json({ error: "Invalid cardioType" }, { status: 400 })
+    }
+    cardioType = body.cardioType
+  }
+
   const userId = new ObjectId(locals.userId)
   const planId = new ObjectId(body.planId)
 
-  const created = await startWorkoutLog(userId, planId, body.sessionId)
+  const created = await startWorkoutLog(userId, planId, body.sessionId, cardioType)
   if (!created) return json({ error: "Plan or session not found" }, { status: 404 })
 
   return json(serializeWorkoutLog(created), { status: 201 })
