@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto, invalidateAll } from "$app/navigation"
   import { page } from "$app/state"
-  import { Button, Card, ProgressBar, StarRating, DotRating, TipTapEditor } from "$lib/components"
+  import { Button, Card, ProgressBar, RadialProgress, StarRating, DotRating, TipTapEditor } from "$lib/components"
   import SettingsTabs from "$lib/components/settings/SettingsTabs.svelte"
   import { localToday, localDateStr, localTimeStr, toDatetime } from "$lib/dates"
   import { formatDate, formatDateShort } from "$lib/format"
@@ -753,6 +753,23 @@
               </div>
 
               {#if targets.dailyCalorieTarget}
+                {@const remaining = targets.dailyCalorieTarget - shoku.totals.calories + (shoku.caloriesBurnedToday ?? 0)}
+                {@const remainingPercent = targets.dailyCalorieTarget > 0
+                  ? Math.min(100, Math.max(0, ((shoku.totals.calories - (shoku.caloriesBurnedToday ?? 0)) / targets.dailyCalorieTarget) * 100))
+                  : 0}
+                {@const isOver = remaining < 0}
+                <div class="widget-remaining">
+                  <RadialProgress percent={remainingPercent} over={isOver} size={80} strokeWidth={7}>
+                    <span class="remaining-value">{Math.round(remaining)}</span>
+                    <span class="remaining-caption">left</span>
+                  </RadialProgress>
+                  <div class="remaining-rows">
+                    <div class="remaining-row"><span class="stat-label">Base Goal</span><span class="stat-values">{targets.dailyCalorieTarget} kcal</span></div>
+                    <div class="remaining-row"><span class="stat-label">Food</span><span class="stat-values">{Math.round(shoku.totals.calories)} kcal</span></div>
+                    <div class="remaining-row"><span class="stat-label">Exercise</span><span class="stat-values">{Math.round(shoku.caloriesBurnedToday ?? 0)} kcal</span></div>
+                  </div>
+                </div>
+
                 <div class="widget-stat">
                   <div class="stat-header">
                     <span class="stat-label">Calories</span>
@@ -1687,6 +1704,43 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
+  }
+
+  .widget-remaining {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .remaining-rows {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    flex: 1;
+  }
+
+  .remaining-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  .remaining-value {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: var(--text-lg);
+    color: var(--ink);
+    line-height: 1.1;
+  }
+
+  .remaining-caption {
+    font-family: var(--font-body);
+    font-size: 0.625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--ink-faint);
   }
 
   .stat-header {

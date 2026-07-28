@@ -679,6 +679,20 @@ export async function calculateCardioPerformance(
 }
 
 // ========================================
+// Calorie Aggregation
+// ========================================
+
+export async function getTodaysCaloriesBurned(userId: ObjectId, dayStart: Date, dayEnd: Date): Promise<number> {
+  const logs = await getWorkoutLogsCollection()
+  const todayLogs = await logs
+    .find({ userId, status: "completed", completedAt: { $gte: dayStart, $lte: dayEnd } })
+    .project({ caloriesBurned: 1 })
+    .toArray()
+
+  return todayLogs.reduce((sum, log) => sum + ((log as any).caloriesBurned ?? 0), 0)
+}
+
+// ========================================
 // Recovery Aggregation
 // ========================================
 

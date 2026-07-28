@@ -1,7 +1,7 @@
 import { getJourneysCollection, getWeightLogCollection } from "$lib/server/collections"
 import { getFastsCollection } from "$lib/server/danjiki"
 import { startOfDayTz, endOfDayTz, startOfWeekTz, endOfWeekTz, todayStr } from "$lib/server/dates"
-import { getWorkoutLogsCollection, getWorkoutPlansCollection, serializeWorkoutPlan } from "$lib/server/dojo"
+import { getWorkoutLogsCollection, getWorkoutPlansCollection, serializeWorkoutPlan, getTodaysCaloriesBurned } from "$lib/server/dojo"
 import { getCommitmentsCollection, getCommitmentLogsCollection, serializeCommitment, calculateTaperPhaseInfo } from "$lib/server/kata"
 import { getFoodItemLogsCollection, getWaterLogCollection } from "$lib/server/shoku"
 import { json } from "@sveltejs/kit"
@@ -50,10 +50,12 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 
     const waterLog = await getWaterLogCollection()
     const waterEntry = await waterLog.findOne({ userId, date: today })
+    const caloriesBurnedToday = await getTodaysCaloriesBurned(userId, todayStart, todayEnd)
 
     result.shoku = {
       totals,
       waterOz: waterEntry?.ounces ?? 0,
+      caloriesBurnedToday,
     }
   }
 

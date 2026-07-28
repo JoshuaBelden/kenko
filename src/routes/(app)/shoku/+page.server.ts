@@ -1,17 +1,19 @@
 import { getFoodItemLogsCollection, getFoodItemsCollection, getMealBuildLogCollection, getWaterLogCollection, serializeFoodItemLog } from "$lib/server/shoku"
 import { getJourneysCollection } from "$lib/server/collections"
 import { startOfDayTz, endOfDayTz, todayStr } from "$lib/server/dates"
+import { getTodaysCaloriesBurned } from "$lib/server/dojo"
 import { ObjectId } from "mongodb"
 import type { PageServerLoad } from "./$types"
 
 export const load: PageServerLoad = async ({ locals, url }) => {
-  if (!locals.userId) return { grouped: {}, totals: { calories: 0, protein: 0, netCarbs: 0, fat: 0 }, waterOunces: 0, mealBuilds: [], selectedMealBuild: null }
+  if (!locals.userId) return { grouped: {}, totals: { calories: 0, protein: 0, netCarbs: 0, fat: 0 }, waterOunces: 0, mealBuilds: [], selectedMealBuild: null, caloriesBurnedToday: 0 }
 
   const userId = new ObjectId(locals.userId)
   const userTz = locals.userTimezone ?? "America/Los_Angeles"
   const dateStr = url.searchParams.get("date") ?? todayStr(userTz)
   const dayStart = startOfDayTz(dateStr, userTz)
   const dayEnd = endOfDayTz(dateStr, userTz)
+  const caloriesBurnedToday = await getTodaysCaloriesBurned(userId, dayStart, dayEnd)
 
   const filter: Record<string, unknown> = {
     userId,
@@ -156,5 +158,5 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     }
   }
 
-  return { grouped, totals, date: dateStr, waterOunces, mealBuilds, selectedMealBuild, activeJourneyId, macroTargets }
+  return { grouped, totals, date: dateStr, waterOunces, mealBuilds, selectedMealBuild, activeJourneyId, macroTargets, caloriesBurnedToday }
 }

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto, invalidateAll } from "$app/navigation"
   import { page } from "$app/state"
-  import { Button, Card, PageHeader, StatNumber } from "$lib/components"
+  import { Button, Card, PageHeader, RadialProgress, StatNumber } from "$lib/components"
   import { icons } from "$lib/icons"
   import FoodSearchModal from "$lib/components/FoodSearchModal.svelte"
   import { getCompatibleUnits, unitLabel, type DiaryUnit } from "$lib/units"
@@ -15,6 +15,7 @@
   let selectedMealId = $state("")
   let activeJourneyId = $state<string | null>(null)
   let macroTargets = $state<{ calories: number | null; protein: number | null; netCarbs: number | null; fat: number | null; waterOz: number | null } | null>(null)
+  let caloriesBurnedToday = $state(page.data.caloriesBurnedToday ?? 0)
 
   $effect(() => {
     const d = page.data as any
@@ -27,7 +28,18 @@
     selectedMealId = d.selectedMealBuild?.id ?? ""
     activeJourneyId = d.activeJourneyId ?? null
     macroTargets = d.macroTargets ?? null
+    caloriesBurnedToday = d.caloriesBurnedToday ?? 0
   })
+
+  const remaining = $derived(
+    macroTargets?.calories != null ? macroTargets.calories - totals.calories + caloriesBurnedToday : null,
+  )
+  const remainingPercent = $derived(
+    macroTargets?.calories
+      ? Math.min(100, Math.max(0, ((totals.calories - caloriesBurnedToday) / macroTargets.calories) * 100))
+      : 0,
+  )
+  const isOverBudget = $derived(remaining != null && remaining < 0)
 
   // Food search modal state
   let searchOpen = $state(false)
@@ -236,6 +248,19 @@
   <Card>
     <div class="macro-grid">
       {#if macroTargets}
+        {#if macroTargets.calories != null}
+          <div class="macro-target macro-remaining" class:over={isOverBudget}>
+            <RadialProgress percent={remainingPercent} over={isOverBudget} size={84} strokeWidth={7}>
+              <span class="remaining-value">{Math.round(remaining ?? 0)}</span>
+              <span class="remaining-caption">remaining</span>
+            </RadialProgress>
+            <div class="remaining-breakdown">
+              <span>Goal {macroTargets.calories}</span>
+              <span>Food {Math.round(totals.calories)}</span>
+              <span>Exercise {Math.round(caloriesBurnedToday)}</span>
+            </div>
+          </div>
+        {/if}
         <div class="macro-target" class:over={macroTargets.calories != null && totals.calories > macroTargets.calories * 1.05}>
           <StatNumber value={totals.calories.toString()} label="Calories" size="sm" />
           {#if macroTargets.calories}
@@ -575,7 +600,7 @@
 
   .macro-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
     gap: var(--space-4);
     text-align: center;
   }
@@ -585,6 +610,39 @@
     flex-direction: column;
     align-items: center;
     gap: var(--space-1);
+  }
+
+  .macro-remaining {
+    gap: var(--space-2);
+  }
+
+  .remaining-value {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: var(--text-xl);
+    color: var(--ink);
+    line-height: 1.1;
+  }
+
+  .remaining-caption {
+    font-family: var(--font-body);
+    font-size: 0.625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--ink-faint);
+  }
+
+  .remaining-breakdown {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink-light);
+  }
+
+  .macro-remaining.over .remaining-value {
+    color: var(--accent-red);
   }
 
   .progress-track {
