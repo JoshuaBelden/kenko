@@ -2,10 +2,14 @@
   import { invalidateAll } from "$app/navigation"
   import { page } from "$app/state"
   import { Button, Card, PageHeader } from "$lib/components"
+  import { localDateStr, localTimeNow, localTimeStr, localToday, toDatetime } from "$lib/dates"
+  import { formatDate } from "$lib/format"
   import { icons } from "$lib/icons"
   import { onDestroy, onMount } from "svelte"
 
   const PRESETS = [12, 16, 18, 20, 24, 36, 48]
+
+  const tz = $derived(page.data.user?.profile?.timezone ?? "America/Los_Angeles")
 
   const activeFast = $derived(page.data.activeFast)
   const fasts = $derived(page.data.fasts ?? [])
@@ -15,6 +19,10 @@
   let customDuration = $state("")
   let isCustom = $state(false)
   let starting = $state(false)
+  let startDate = $state(localToday(tz))
+  let startTime = $state(localTimeNow(tz))
+  let endDate = $state(localToday(tz))
+  let endTime = $state(localTimeNow(tz))
 
   // Active fast timer
   let now = $state(Date.now())
@@ -52,7 +60,52 @@
   })
 
   const effectiveDuration = $derived(isCustom ? parseFloat(customDuration) : selectedDuration)
-  const canStart = $derived(effectiveDuration != null && effectiveDuration > 0 && !isNaN(effectiveDuration))
+
+  const startedAtIso = $derived.by(() => {
+    if (!startDate || !startTime) return null
+    try {
+      return toDatetime(startDate, startTime, tz)
+    } catch {
+      return null
+    }
+  })
+
+  const canStart = $derived(
+    effectiveDuration != null && effectiveDuration > 0 && !isNaN(effectiveDuration) && startedAtIso != null,
+  )
+
+  function computeTargetEnd(startedAt: string, targetHours: number): string {
+    return new Date(new Date(startedAt).getTime() + targetHours * 60 * 60 * 1000).toISOString()
+  }
+
+  // Keep the end date/time fields in sync whenever the start or duration changes.
+  function recomputeEndFromStart() {
+    const duration = effectiveDuration
+    if (!startDate || !startTime || duration == null || isNaN(duration) || duration <= 0) return
+    const startIso = toDatetime(startDate, startTime, tz)
+    const endIso = computeTargetEnd(startIso, duration)
+    endDate = localDateStr(endIso, tz)
+    endTime = localTimeStr(endIso, tz)
+  }
+
+  // Keep the start date/time fields in sync when the end time is edited directly,
+  // holding the chosen duration fixed.
+  function recomputeStartFromEnd() {
+    const duration = effectiveDuration
+    if (!endDate || !endTime || duration == null || isNaN(duration) || duration <= 0) return
+    const endIso = toDatetime(endDate, endTime, tz)
+    const startIso = new Date(new Date(endIso).getTime() - duration * 60 * 60 * 1000).toISOString()
+    startDate = localDateStr(startIso, tz)
+    startTime = localTimeStr(startIso, tz)
+  }
+
+  function isScheduledFast(startedAt: string): boolean {
+    return new Date(startedAt).getTime() > now
+  }
+
+  function startsInMs(startedAt: string): number {
+    return Math.max(0, new Date(startedAt).getTime() - now)
+  }
 
   function elapsedMs(startedAt: string): number {
     return Math.max(0, now - new Date(startedAt).getTime())
@@ -86,36 +139,35 @@
     return m > 0 ? `${h}h ${m}m` : `${h}h`
   }
 
-  function formatDateTime(iso: string): string {
-    const d = new Date(iso)
-    return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) +
-      " at " +
-      d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
-  }
-
   function selectPreset(hours: number) {
     isCustom = false
     selectedDuration = hours
+    recomputeEndFromStart()
   }
 
   function selectCustom() {
     isCustom = true
     selectedDuration = null
+    recomputeEndFromStart()
   }
 
   async function startFast() {
-    if (!canStart || starting) return
+    if (!canStart || starting || !startedAtIso) return
     starting = true
     try {
       const res = await fetch("/api/danjiki", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetDuration: effectiveDuration }),
+        body: JSON.stringify({ targetDuration: effectiveDuration, startedAt: startedAtIso }),
       })
       if (res.ok) {
         selectedDuration = null
         customDuration = ""
         isCustom = false
+        startDate = localToday(tz)
+        startTime = localTimeNow(tz)
+        endDate = localToday(tz)
+        endTime = localTimeNow(tz)
         await invalidateAll()
       }
     } finally {
@@ -126,6 +178,15 @@
   async function endFast() {
     if (!activeFast) return
     const res = await fetch(`/api/danjiki/${activeFast.id}/end`, { method: "PUT" })
+    if (res.ok) {
+      confirmEnd = false
+      await invalidateAll()
+    }
+  }
+
+  async function cancelScheduledFast() {
+    if (!activeFast) return
+    const res = await fetch(`/api/danjiki/${activeFast.id}`, { method: "DELETE" })
     if (res.ok) {
       confirmEnd = false
       await invalidateAll()
@@ -193,27 +254,43 @@
       <div class="active-fast">
         <div class="active-header">
           <strong class="active-title">{activeFast.targetDuration} hour fast</strong>
-          <span class="active-started">Started {formatDateTime(activeFast.startedAt)}</span>
+          {#if isScheduledFast(activeFast.startedAt)}
+            <span class="active-started">Starts {formatDate(activeFast.startedAt, tz)}</span>
+          {:else}
+            <span class="active-started">Started {formatDate(activeFast.startedAt, tz)}</span>
+          {/if}
+          <span class="active-ends">
+            Ends {formatDate(computeTargetEnd(activeFast.startedAt, activeFast.targetDuration), tz)}
+          </span>
         </div>
 
-        <div class="timer-row">
-          <div class="timer-item">
-            <span class="timer-label">Elapsed</span>
-            <span class="timer-value">{formatDuration(elapsedMs(activeFast.startedAt))}</span>
+        {#if isScheduledFast(activeFast.startedAt)}
+          <div class="timer-row">
+            <div class="timer-item">
+              <span class="timer-label">Starts in</span>
+              <span class="timer-value">{formatDuration(startsInMs(activeFast.startedAt))}</span>
+            </div>
           </div>
-          <div class="timer-item">
-            <span class="timer-label">Remaining</span>
-            <span class="timer-value">{formatDuration(remainingMs(activeFast.startedAt, activeFast.targetDuration))}</span>
+        {:else}
+          <div class="timer-row">
+            <div class="timer-item">
+              <span class="timer-label">Elapsed</span>
+              <span class="timer-value">{formatDuration(elapsedMs(activeFast.startedAt))}</span>
+            </div>
+            <div class="timer-item">
+              <span class="timer-label">Remaining</span>
+              <span class="timer-value">{formatDuration(remainingMs(activeFast.startedAt, activeFast.targetDuration))}</span>
+            </div>
           </div>
-        </div>
 
-        <div class="progress-track">
-          <div
-            class="progress-fill"
-            class:reached={targetReached(activeFast.startedAt, activeFast.targetDuration)}
-            style:width="{progressPercent(activeFast.startedAt, activeFast.targetDuration)}%"
-          ></div>
-        </div>
+          <div class="progress-track">
+            <div
+              class="progress-fill"
+              class:reached={targetReached(activeFast.startedAt, activeFast.targetDuration)}
+              style:width="{progressPercent(activeFast.startedAt, activeFast.targetDuration)}%"
+            ></div>
+          </div>
+        {/if}
 
         <div class="note-row">
           <input
@@ -227,11 +304,20 @@
 
         <div class="active-actions">
           {#if confirmEnd}
-            <span class="confirm-text">End this fast?</span>
-            <Button variant="primary" onclick={endFast}>Yes, end</Button>
+            <span class="confirm-text">
+              {isScheduledFast(activeFast.startedAt) ? "Cancel this fast?" : "End this fast?"}
+            </span>
+            <Button
+              variant="primary"
+              onclick={isScheduledFast(activeFast.startedAt) ? cancelScheduledFast : endFast}
+            >
+              {isScheduledFast(activeFast.startedAt) ? "Yes, cancel" : "Yes, end"}
+            </Button>
             <Button variant="ghost" onclick={() => (confirmEnd = false)}>Cancel</Button>
           {:else}
-            <Button variant="secondary" onclick={() => (confirmEnd = true)}>End Fast</Button>
+            <Button variant="secondary" onclick={() => (confirmEnd = true)}>
+              {isScheduledFast(activeFast.startedAt) ? "Cancel Fast" : "End Fast"}
+            </Button>
           {/if}
         </div>
       </div>
@@ -267,11 +353,68 @@
           placeholder="Hours"
           min="1"
           step="any"
-          bind:value={customDuration}
+          value={customDuration}
+          oninput={(e) => {
+            customDuration = e.currentTarget.value
+            recomputeEndFromStart()
+          }}
         />
         <span class="custom-unit">hours</span>
       </div>
     {/if}
+
+    <div class="datetime-row">
+      <div class="datetime-group">
+        <span class="datetime-group-label">Start</span>
+        <div class="datetime-inputs">
+          <input
+            type="date"
+            class="field-input"
+            aria-label="Start date"
+            value={startDate}
+            oninput={(e) => {
+              startDate = e.currentTarget.value
+              recomputeEndFromStart()
+            }}
+          />
+          <input
+            type="time"
+            class="field-input"
+            aria-label="Start time"
+            value={startTime}
+            oninput={(e) => {
+              startTime = e.currentTarget.value
+              recomputeEndFromStart()
+            }}
+          />
+        </div>
+      </div>
+      <div class="datetime-group">
+        <span class="datetime-group-label">End</span>
+        <div class="datetime-inputs">
+          <input
+            type="date"
+            class="field-input"
+            aria-label="End date"
+            value={endDate}
+            oninput={(e) => {
+              endDate = e.currentTarget.value
+              recomputeStartFromEnd()
+            }}
+          />
+          <input
+            type="time"
+            class="field-input"
+            aria-label="End time"
+            value={endTime}
+            oninput={(e) => {
+              endTime = e.currentTarget.value
+              recomputeStartFromEnd()
+            }}
+          />
+        </div>
+      </div>
+    </div>
 
     <div class="start-action">
       <Button variant="primary" disabled={!canStart || starting} onclick={startFast}>
@@ -321,7 +464,7 @@
           <div class="fast-card">
             <div class="fast-info">
               <div class="fast-header">
-                <strong class="fast-date">{formatDateTime(fast.startedAt)}</strong>
+                <strong class="fast-date">{formatDate(fast.startedAt, tz)}</strong>
               </div>
               <div class="fast-details">
                 <span class="fast-detail">Target: {fast.targetDuration}h</span>
@@ -401,7 +544,8 @@
     color: var(--ink);
   }
 
-  .active-started {
+  .active-started,
+  .active-ends {
     font-family: var(--font-body);
     font-size: var(--text-sm);
     color: var(--ink-light);
@@ -540,6 +684,56 @@
     font-family: var(--font-body);
     font-size: var(--text-sm);
     color: var(--ink-faint);
+  }
+
+  .datetime-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-6);
+    margin-top: var(--space-3);
+  }
+
+  .datetime-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .datetime-group-label {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--ink-faint);
+  }
+
+  .datetime-inputs {
+    display: flex;
+    gap: var(--space-2);
+  }
+
+  .field-input {
+    padding: var(--space-2) var(--space-3);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--paper-card);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink);
+    outline: none;
+  }
+
+  .field-input:focus {
+    border-color: var(--accent-green);
+  }
+
+  .datetime-inputs input[type="date"] {
+    width: 140px;
+  }
+
+  .datetime-inputs input[type="time"] {
+    width: 100px;
   }
 
   .start-action {

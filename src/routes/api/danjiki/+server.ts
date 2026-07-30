@@ -28,12 +28,24 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     return json({ error: "targetDuration must be a positive number (hours)" }, { status: 400 })
   }
 
+  let startedAt = new Date()
+  if (body.startedAt !== undefined) {
+    const parsed = new Date(body.startedAt)
+    if (isNaN(parsed.getTime())) {
+      return json({ error: "startedAt must be a valid date" }, { status: 400 })
+    }
+    startedAt = parsed
+  }
+
   const fasts = await getFastsCollection()
 
-  // Reject if a running fast already exists
+  // Reject if a running or scheduled fast already exists
   const running = await fasts.findOne({ userId, status: "running" })
   if (running) {
-    return json({ error: "A fast is already running. End it before starting a new one." }, { status: 409 })
+    return json(
+      { error: "A fast is already running or scheduled. End or cancel it before starting a new one." },
+      { status: 409 },
+    )
   }
 
   const now = new Date()
@@ -41,7 +53,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     userId,
     journeyIds: [],
     targetDuration: body.targetDuration,
-    startedAt: now,
+    startedAt,
     endedAt: null,
     actualDuration: null,
     note: body.note?.trim() || null,
