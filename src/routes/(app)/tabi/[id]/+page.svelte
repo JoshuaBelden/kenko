@@ -6,6 +6,12 @@
   import { localToday, localDateStr, localTimeStr, toDatetime } from "$lib/dates"
   import { formatDate, formatDateShort } from "$lib/format"
   import { icons } from "$lib/icons"
+  import { tooltip } from "$lib/tooltip.svelte"
+
+  function weightDotTooltip(date: string, weight: number): string {
+    const label = new Date(date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    return `${label}: ${weight} lbs`
+  }
 
   const data = $derived(page.data as any)
   const tz = $derived(page.data.user?.profile?.timezone ?? "America/Los_Angeles")
@@ -203,6 +209,7 @@
 
   // Shoku settings
   let weightGoalLbsPerWeek = $state("0")
+  let targetWeight = $state("")
   let dailyCalorieOverride = $state(false)
   let dailyCalorieTarget = $state("")
   let macroMode = $state<"percentage" | "grams">("percentage")
@@ -245,6 +252,7 @@
       case "endDate": settingsEndDate = value; break
       case "endTime": settingsEndTime = value; break
       case "weightGoalLbsPerWeek": weightGoalLbsPerWeek = value; break
+      case "targetWeight": targetWeight = value; break
       case "dailyCalorieOverride": dailyCalorieOverride = value; break
       case "dailyCalorieTarget": dailyCalorieTarget = value; break
       case "macroMode": macroMode = value; break
@@ -280,6 +288,7 @@
     const s = j.shokuTargets
     if (s) {
       weightGoalLbsPerWeek = s.weightGoalLbsPerWeek?.toString() ?? "0"
+      targetWeight = s.targetWeight?.toString() ?? ""
       dailyCalorieOverride = s.dailyCalorieOverride ?? false
       dailyCalorieTarget = s.dailyCalorieTarget?.toString() ?? ""
       // Determine macro mode from first macro that has a value
@@ -333,10 +342,11 @@
     const calTarget = effectiveCalorieTarget()
 
     const hasShoku =
-      Number(weightGoalLbsPerWeek) !== 0 || dailyCalorieTarget || proteinValue || carbsValue || fatValue || dailyWaterTargetOz
+      Number(weightGoalLbsPerWeek) !== 0 || targetWeight || dailyCalorieTarget || proteinValue || carbsValue || fatValue || dailyWaterTargetOz
     const shokuTargets = hasShoku
         ? {
             weightGoalLbsPerWeek: Number(weightGoalLbsPerWeek) || null,
+            targetWeight: targetWeight ? Number(targetWeight) : null,
             dailyCalorieTarget: dailyCalorieOverride && dailyCalorieTarget ? Number(dailyCalorieTarget) : (calTarget ?? null),
             dailyCalorieOverride,
             macros: {
@@ -502,6 +512,79 @@
       yMax: maxW + padding,
       startLabel: `${String(month + 1).padStart(2, "0")}-01`,
       endLabel: `${String(projectionEnd.getMonth() + 1).padStart(2, "0")}-${String(projectionEnd.getDate()).padStart(2, "0")}`,
+    }
+  })
+
+  // ── Weight progress card (Overview tab, current vs. target weight) ──
+  type WeightCardRange = "week" | "month" | "all"
+  let weightCardRange = $state<WeightCardRange>("week")
+
+  const weightProgressCard = $derived.by(() => {
+    const w = overviewData?.weight
+    const targetWeightGoal = w?.targetWeight as number | null | undefined
+    if (!w || targetWeightGoal == null) return null
+
+    const currentWeight = page.data.user?.profile?.weight ?? null
+    const allEntries = w.entries as Array<{ date: string; weight: number }>
+
+    if (!allEntries.length) {
+      return { hasEntries: false as const, targetWeight: targetWeightGoal, currentWeight }
+    }
+
+    const todayDate = new Date(calendarToday + "T00:00:00")
+    const cutoff =
+      weightCardRange === "week"
+        ? new Date(todayDate.getTime() - 6 * 86400000)
+        : weightCardRange === "month"
+          ? new Date(todayDate.getTime() - 29 * 86400000)
+          : null
+
+    const entries = cutoff
+      ? allEntries.filter((e) => new Date(e.date + "T00:00:00").getTime() >= cutoff.getTime())
+      : allEntries
+
+    if (!entries.length) {
+      return { hasEntries: false as const, targetWeight: targetWeightGoal, currentWeight }
+    }
+
+    const chartStart = cutoff ?? new Date(entries[0].date + "T00:00:00")
+    const chartEnd = todayDate
+    const totalMs = Math.max(chartEnd.getTime() - chartStart.getTime(), 1)
+
+    // Linear (least-squares) trend line over the plotted entries
+    const xs = entries.map((e) => (new Date(e.date + "T00:00:00").getTime() - chartStart.getTime()) / 86400000)
+    const ys = entries.map((e) => e.weight)
+    const n = xs.length
+    const sumX = xs.reduce((a, x) => a + x, 0)
+    const sumY = ys.reduce((a, y) => a + y, 0)
+    const sumXY = xs.reduce((a, x, i) => a + x * ys[i], 0)
+    const sumXX = xs.reduce((a, x) => a + x * x, 0)
+    const denom = n * sumXX - sumX * sumX
+    const slope = denom !== 0 ? (n * sumXY - sumX * sumY) / denom : 0
+    const intercept = sumY / n - (slope * sumX) / n
+
+    const trendStart = { date: entries[0].date, weight: intercept + slope * xs[0] }
+    const trendEnd = { date: entries[n - 1].date, weight: intercept + slope * xs[n - 1] }
+    const trendDirection = slope > 0.01 ? "up" : slope < -0.01 ? "down" : "flat"
+
+    const allWeights = [...ys, targetWeightGoal, trendStart.weight, trendEnd.weight]
+    const minW = Math.min(...allWeights)
+    const maxW = Math.max(...allWeights)
+    const padding = Math.max((maxW - minW) * 0.15, 1)
+
+    return {
+      hasEntries: true as const,
+      entries,
+      targetWeight: targetWeightGoal,
+      currentWeight,
+      chartStart,
+      chartEnd,
+      totalMs,
+      trendStart,
+      trendEnd,
+      trendDirection,
+      yMin: minW - padding,
+      yMax: maxW + padding,
     }
   })
 
@@ -726,6 +809,7 @@
     endTime={settingsEndTime}
     {tdee}
     {weightGoalLbsPerWeek}
+    {targetWeight}
     {dailyCalorieOverride}
     {dailyCalorieTarget}
     {macroMode}
@@ -864,6 +948,117 @@
                   </div>
                   <ProgressBar value={pct(shoku.waterOz, targets.dailyWaterTargetOz)} />
                 </div>
+              {/if}
+            </div>
+          </Card>
+        {/if}
+
+        <!-- Weight Widget -->
+        {#if weightProgressCard}
+          {@const wp = weightProgressCard}
+          <Card>
+            <div class="widget">
+              <div class="widget-header">
+                <h3 class="widget-title">
+                  <svg class="widget-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M3 3v18h18"/><polyline points="7 14 11 10 14 13 20 7"/>
+                  </svg>
+                  Weight
+                </h3>
+                <div class="weight-range-toggle">
+                  <button
+                    type="button"
+                    class="weight-range-btn"
+                    class:weight-range-btn-active={weightCardRange === "week"}
+                    onclick={() => (weightCardRange = "week")}
+                  >
+                    Week
+                  </button>
+                  <button
+                    type="button"
+                    class="weight-range-btn"
+                    class:weight-range-btn-active={weightCardRange === "month"}
+                    onclick={() => (weightCardRange = "month")}
+                  >
+                    Month
+                  </button>
+                  <button
+                    type="button"
+                    class="weight-range-btn"
+                    class:weight-range-btn-active={weightCardRange === "all"}
+                    onclick={() => (weightCardRange = "all")}
+                  >
+                    All
+                  </button>
+                </div>
+              </div>
+
+              <div class="remaining-rows">
+                <div class="remaining-row"><span class="stat-label">Current</span><span class="stat-values">{wp.currentWeight != null ? `${wp.currentWeight} lbs` : "—"}</span></div>
+                <div class="remaining-row"><span class="stat-label">Target</span><span class="stat-values">{wp.targetWeight} lbs</span></div>
+              </div>
+
+              {#if wp.hasEntries}
+                {@const cW = 600}
+                {@const cH = 200}
+                {@const cPad = { top: 20, right: 20, bottom: 34, left: 56 }}
+                {@const plotW = cW - cPad.left - cPad.right}
+                {@const plotH = cH - cPad.top - cPad.bottom}
+                {@const xForDate = (d: Date) => cPad.left + (plotW * (d.getTime() - wp.chartStart.getTime())) / wp.totalMs}
+                {@const yForWeight = (w: number) => cPad.top + plotH - (plotH * (w - wp.yMin)) / (wp.yMax - wp.yMin)}
+                {@const yTarget = yForWeight(wp.targetWeight)}
+                {@const tx1 = xForDate(new Date(wp.trendStart.date + "T00:00:00"))}
+                {@const ty1 = yForWeight(wp.trendStart.weight)}
+                {@const tx2 = xForDate(new Date(wp.trendEnd.date + "T00:00:00"))}
+                {@const ty2 = yForWeight(wp.trendEnd.weight)}
+
+                <svg class="weight-chart" viewBox="0 0 {cW} {cH}" preserveAspectRatio="xMidYMid meet">
+                  <!-- Y-axis gridlines and labels -->
+                  {#each Array(5) as _, i}
+                    {@const yVal = wp.yMin + ((wp.yMax - wp.yMin) * (4 - i)) / 4}
+                    {@const y = cPad.top + (plotH * i) / 4}
+                    <line x1={cPad.left} y1={y} x2={cW - cPad.right} y2={y} class="chart-grid" />
+                    <text x={cPad.left - 6} y={y + 4} class="chart-label" text-anchor="end">{Math.round(yVal * 10) / 10}</text>
+                  {/each}
+
+                  <!-- X-axis labels -->
+                  <text x={xForDate(wp.chartStart)} y={cH - 4} class="chart-label" text-anchor="start">
+                    {formatDateShort(wp.chartStart.toISOString(), tz)}
+                  </text>
+                  <text x={xForDate(wp.chartEnd)} y={cH - 4} class="chart-label" text-anchor="end">
+                    {formatDateShort(wp.chartEnd.toISOString(), tz)}
+                  </text>
+
+                  <!-- Target weight reference line -->
+                  <line x1={cPad.left} y1={yTarget} x2={cW - cPad.right} y2={yTarget} class="chart-line-target" />
+                  <text x={cW - cPad.right} y={yTarget - 6} class="chart-label-goal" text-anchor="end">Target</text>
+
+                  <!-- Actual weight line -->
+                  {#if wp.entries.length >= 2}
+                    <polyline
+                      fill="none"
+                      class="chart-line-actual"
+                      points={wp.entries.map((e: {date: string, weight: number}) => {
+                        const x = xForDate(new Date(e.date + "T00:00:00"))
+                        const y = yForWeight(e.weight)
+                        return `${x},${y}`
+                      }).join(" ")}
+                    />
+                  {/if}
+
+                  <!-- Actual weight dots -->
+                  {#each wp.entries as e}
+                    {@const x = xForDate(new Date(e.date + "T00:00:00"))}
+                    {@const y = yForWeight(e.weight)}
+                    <circle cx={x} cy={y} r="8" class="chart-dot-hit" use:tooltip={weightDotTooltip(e.date, e.weight)} />
+                    <circle cx={x} cy={y} r="3" class="chart-dot" />
+                  {/each}
+
+                  <!-- Linear trend line -->
+                  <line x1={tx1} y1={ty1} x2={tx2} y2={ty2} class="chart-line-trend" />
+                </svg>
+              {:else}
+                <p class="widget-text">Log your weight in today's journal check-in to start tracking progress.</p>
               {/if}
             </div>
           </Card>
@@ -1374,7 +1569,7 @@
           {@const wc = progressWeightChart}
           {@const cW = 600}
           {@const cH = 200}
-          {@const cPad = { top: 20, right: 20, bottom: 30, left: 45 }}
+          {@const cPad = { top: 20, right: 20, bottom: 34, left: 56 }}
           {@const plotW = cW - cPad.left - cPad.right}
           {@const plotH = cH - cPad.top - cPad.bottom}
           {@const xForDate = (d: Date) => cPad.left + (plotW * (d.getTime() - wc.chartStart.getTime())) / wc.totalMs}
@@ -1431,6 +1626,7 @@
                 {#each wc.entries as e}
                   {@const x = xForDate(new Date(e.date + "T00:00:00"))}
                   {@const y = yForWeight(e.weight)}
+                  <circle cx={x} cy={y} r="8" class="chart-dot-hit" use:tooltip={weightDotTooltip(e.date, e.weight)} />
                   <circle cx={x} cy={y} r="3" class="chart-dot" />
                 {/each}
 
@@ -1947,7 +2143,7 @@
 
   .chart-label {
     font-family: var(--font-body);
-    font-size: 7px;
+    font-size: 12px;
     fill: var(--ink-faint);
   }
 
@@ -1968,6 +2164,11 @@
     fill: var(--ink);
   }
 
+  .chart-dot-hit {
+    fill: transparent;
+    cursor: pointer;
+  }
+
   .chart-line-projected {
     stroke: var(--ink-faint);
     stroke-width: 1.5;
@@ -1982,9 +2183,56 @@
 
   .chart-label-goal {
     font-family: var(--font-body);
-    font-size: 7px;
+    font-size: 12px;
     fill: var(--ink-faint);
     font-weight: 500;
+  }
+
+  .chart-line-target {
+    stroke: var(--ink-faint);
+    stroke-width: 1;
+    stroke-dasharray: 3 3;
+  }
+
+  .chart-line-trend {
+    stroke: var(--accent, #2ecc71);
+    stroke-width: 1.5;
+    stroke-dasharray: 5 3;
+  }
+
+  .weight-range-toggle {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+
+  .weight-range-btn {
+    background: none;
+    border: none;
+    padding: var(--space-1) var(--space-2);
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-faint);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .weight-range-btn + .weight-range-btn {
+    border-left: 1px solid var(--border);
+  }
+
+  .weight-range-btn:hover {
+    color: var(--ink);
+  }
+
+  .weight-range-btn-active {
+    background: var(--accent-light, rgba(0, 0, 0, 0.05));
+    color: var(--ink);
+    font-weight: 600;
   }
 
   /* ── Progress tab layout ── */

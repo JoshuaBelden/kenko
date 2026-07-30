@@ -19,6 +19,7 @@
     journeyId: string
     tdee: number | null
     weightGoalLbsPerWeek: string
+    targetWeight: string
     dailyCalorieOverride: boolean
     dailyCalorieTarget: string
     macroMode: "percentage" | "grams"
@@ -55,7 +56,7 @@
 
   let {
     name, description, statement, startDate, startTime, endDate, endTime,
-    journeyId, tdee, weightGoalLbsPerWeek, dailyCalorieOverride, dailyCalorieTarget,
+    journeyId, tdee, weightGoalLbsPerWeek, targetWeight, dailyCalorieOverride, dailyCalorieTarget,
     macroMode, proteinValue, carbsValue, fatValue, dailyWaterTargetOz,
     mealPlanItems, mealBuilds, mealPlanFoods, categories,
     weeklyFastingHours,
@@ -107,7 +108,7 @@
   {#if activeTab === "shoku"}
     <SettingsShoku
       {journeyId} {tdee}
-      {weightGoalLbsPerWeek} {dailyCalorieOverride} {dailyCalorieTarget}
+      {weightGoalLbsPerWeek} {targetWeight} {dailyCalorieOverride} {dailyCalorieTarget}
       {macroMode} {proteinValue} {carbsValue} {fatValue}
       {dailyWaterTargetOz}
       {mealPlanItems} {mealBuilds} {mealPlanFoods} {categories}

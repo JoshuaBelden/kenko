@@ -6,6 +6,7 @@
   interface Props {
     tdee: number | null
     weightGoalLbsPerWeek: string
+    targetWeight: string
     dailyCalorieOverride: boolean
     dailyCalorieTarget: string
     macroMode: "percentage" | "grams"
@@ -24,6 +25,7 @@
   let {
     tdee,
     weightGoalLbsPerWeek,
+    targetWeight,
     dailyCalorieOverride,
     dailyCalorieTarget,
     macroMode,
@@ -144,6 +146,17 @@
           {calculatedCalorieTarget()?.toLocaleString() ?? "—"} kcal.
         </p>
       {/if}
+    </div>
+
+    <div class="field">
+      <label class="field-label" for="s-target-weight">Target weight (lbs)</label>
+      <input
+        id="s-target-weight"
+        type="number"
+        value={targetWeight}
+        oninput={(e) => onchange("targetWeight", e.currentTarget.value)}
+        placeholder="e.g. 165"
+      />
     </div>
 
     <div class="field">

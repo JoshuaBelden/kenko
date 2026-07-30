@@ -206,7 +206,7 @@ export const GET: RequestHandler = async ({ locals, params }) => {
     result.kata = { dailyCommitments, otherCommitments }
   }
 
-  // Weight log data (scoped to journey date range)
+  // Weight log data (all-time history, journey-scoped goal/target)
   const weightLogCol = await getWeightLogCollection()
   const journeyStartStr = journey.startDate instanceof Date
     ? journey.startDate.toISOString()
@@ -214,12 +214,11 @@ export const GET: RequestHandler = async ({ locals, params }) => {
   const journeyEndStr = journey.endDate instanceof Date
     ? journey.endDate.toISOString()
     : String(journey.endDate)
-  const journeyStartDateOnly = journeyStartStr.split("T")[0]
 
   const weightEntries = await weightLogCol
     .find({
       userId,
-      date: { $gte: journeyStartDateOnly, $lte: today },
+      date: { $lte: today },
     })
     .sort({ date: 1 })
     .toArray()
@@ -229,6 +228,7 @@ export const GET: RequestHandler = async ({ locals, params }) => {
     journeyStart: journeyStartStr,
     journeyEnd: journeyEndStr,
     weightGoalLbsPerWeek: journey.shokuTargets?.weightGoalLbsPerWeek ?? null,
+    targetWeight: journey.shokuTargets?.targetWeight ?? null,
   }
 
   return json(result)

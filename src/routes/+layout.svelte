@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte"
   import "../app.css"
+  import { Tooltip } from "$lib/components"
 
   interface Props {
     children: Snippet
@@ -10,3 +11,4 @@
 </script>
 
 {@render children()}
+<Tooltip />
