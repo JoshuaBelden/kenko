@@ -26,6 +26,8 @@
   let showSettings = $state(false)
 
   // ── Progress tab: calendar state ──
+  type CalendarView = "week" | "month"
+  let calendarViewMode = $state<CalendarView>("week")
   let calendarMonth = $state(new Date())
   const calendarToday = $derived(localToday(tz))
   let calendarData = $state<Record<string, any>>({})
@@ -34,32 +36,56 @@
   let selectedDay = $state<string | null>(null)
   let progressSidebarOpen = $state(false)
 
-  function calendarMonthStr() {
-    const y = calendarMonth.getFullYear()
-    const m = String(calendarMonth.getMonth() + 1).padStart(2, "0")
-    return `${y}-${m}`
+  function monthStrOf(d: Date) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
   }
 
-  let lastLoadedMonth = ""
+  // Monday-start week: JS getDay() is 0=Sun..6=Sat, so shift by (dow + 6) % 7 days back to Monday
+  function startOfWeekMonday(d: Date): Date {
+    const date = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+    date.setDate(date.getDate() - ((date.getDay() + 6) % 7))
+    return date
+  }
+
+  const calendarLoadKey = $derived.by(() => {
+    if (calendarViewMode === "month") return monthStrOf(calendarMonth)
+    const start = startOfWeekMonday(calendarMonth)
+    const end = new Date(start)
+    end.setDate(end.getDate() + 6)
+    const startM = monthStrOf(start)
+    const endM = monthStrOf(end)
+    return startM === endM ? startM : `${startM},${endM}`
+  })
+
+  let lastLoadedKey = ""
   $effect(() => {
     if (activeTab === "progress" && journey) {
-      const monthKey = calendarMonthStr()
-      if (monthKey !== lastLoadedMonth) {
-        lastLoadedMonth = monthKey
-        loadCalendarData(monthKey)
+      const key = calendarLoadKey
+      if (key !== lastLoadedKey) {
+        lastLoadedKey = key
+        loadCalendarData(key)
       }
     }
   })
 
-  async function loadCalendarData(monthStr: string) {
+  async function loadCalendarData(key: string) {
     calendarLoading = true
     try {
-      const res = await fetch(`/api/journeys/${journey.id}/calendar?month=${monthStr}`)
-      if (res.ok) {
-        const data = await res.json()
-        calendarData = data.days ?? {}
-        calendarTdee = data.tdee ?? null
+      const months = key.split(",")
+      const results = await Promise.all(
+        months.map((m) =>
+          fetch(`/api/journeys/${journey.id}/calendar?month=${m}`).then((res) => (res.ok ? res.json() : null)),
+        ),
+      )
+      const mergedDays: Record<string, any> = {}
+      let tdee: number | null = null
+      for (const result of results) {
+        if (!result) continue
+        Object.assign(mergedDays, result.days ?? {})
+        if (result.tdee != null) tdee = result.tdee
       }
+      calendarData = mergedDays
+      calendarTdee = tdee
     } catch (err) {
       console.error("Failed to load calendar data:", err)
     }
@@ -74,14 +100,27 @@
     return !!calendarData[dateStr]
   }
 
+  type Cell = { day: number; dateStr: string } | null
+
   const calendarRows = $derived.by(() => {
+    if (calendarViewMode === "week") {
+      const start = startOfWeekMonday(calendarMonth)
+      const days: Cell[] = []
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(start)
+        d.setDate(d.getDate() + i)
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+        days.push({ day: d.getDate(), dateStr })
+      }
+      return [{ days, weekIndex: 0 }]
+    }
+
     const year = calendarMonth.getFullYear()
     const month = calendarMonth.getMonth()
-    const startDow = new Date(year, month, 1).getDay()
+    const startDow = (new Date(year, month, 1).getDay() + 6) % 7 // Monday-start offset
     const daysInMonth = new Date(year, month + 1, 0).getDate()
 
     // Build flat list of day cells (null = blank)
-    type Cell = { day: number; dateStr: string } | null
     const flat: Cell[] = Array(startDow).fill(null)
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`
@@ -102,15 +141,32 @@
     new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(calendarMonth),
   )
 
-  function calendarPrevMonth() {
+  const calendarWeekLabel = $derived.by(() => {
+    const start = startOfWeekMonday(calendarMonth)
+    const end = new Date(start)
+    end.setDate(end.getDate() + 6)
+    const sameMonth = start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()
+    const startFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" })
+    const endFmt = new Intl.DateTimeFormat(
+      "en-US",
+      sameMonth ? { day: "numeric", year: "numeric" } : { month: "short", day: "numeric", year: "numeric" },
+    )
+    return `${startFmt.format(start)} – ${endFmt.format(end)}`
+  })
+
+  const calendarHeaderLabel = $derived(calendarViewMode === "month" ? calendarMonthLabel : calendarWeekLabel)
+
+  function calendarPrev() {
     const d = new Date(calendarMonth)
-    d.setMonth(d.getMonth() - 1)
+    if (calendarViewMode === "month") d.setMonth(d.getMonth() - 1)
+    else d.setDate(d.getDate() - 7)
     calendarMonth = d
   }
 
-  function calendarNextMonth() {
+  function calendarNext() {
     const d = new Date(calendarMonth)
-    d.setMonth(d.getMonth() + 1)
+    if (calendarViewMode === "month") d.setMonth(d.getMonth() + 1)
+    else d.setDate(d.getDate() + 7)
     calendarMonth = d
   }
 
@@ -618,6 +674,7 @@
   }
 
   const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+  const WEEK_DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
 </script>
@@ -1138,20 +1195,40 @@
         <Card>
           <div class="calendar-widget">
             <div class="calendar-header">
-              <button class="date-btn" onclick={calendarPrevMonth}>&larr;</button>
-              <span class="calendar-month-label">{calendarMonthLabel}</span>
-              <button class="date-btn" onclick={calendarNextMonth}>&rarr;</button>
+              <div class="calendar-nav">
+                <button class="date-btn" onclick={calendarPrev} aria-label="Previous">&larr;</button>
+                <span class="calendar-month-label">{calendarHeaderLabel}</span>
+                <button class="date-btn" onclick={calendarNext} aria-label="Next">&rarr;</button>
+              </div>
+              <div class="calendar-view-toggle">
+                <button
+                  type="button"
+                  class="calendar-view-btn"
+                  class:calendar-view-btn-active={calendarViewMode === "week"}
+                  onclick={() => (calendarViewMode = "week")}
+                >
+                  Week
+                </button>
+                <button
+                  type="button"
+                  class="calendar-view-btn"
+                  class:calendar-view-btn-active={calendarViewMode === "month"}
+                  onclick={() => (calendarViewMode = "month")}
+                >
+                  Month
+                </button>
+              </div>
             </div>
-            <div class="calendar-grid">
+            <div class="calendar-grid" class:calendar-grid-week={calendarViewMode === "week"}>
               <div class="calendar-row calendar-row-header">
-                {#each ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as dow}
+                {#each WEEK_DOW as dow}
                   <div class="calendar-dow">{dow}</div>
                 {/each}
                 <div class="calendar-dow calendar-dow-summary"></div>
               </div>
               {#each calendarRows as row}
                 <div class="calendar-row" class:calendar-row-alt={row.weekIndex % 2 === 1}>
-                  {#each row.days as cell}
+                  {#each row.days as cell, i}
                     {#if cell}
                       {@const dd = dayData(cell.dateStr)}
                       <div
@@ -1163,8 +1240,8 @@
                         tabindex={dd ? 0 : undefined}
                         onkeydown={(e) => { if (dd && (e.key === "Enter" || e.key === " ")) selectedDay = cell.dateStr }}
                       >
-                        <!-- Top-left: day number -->
-                        <span class="calendar-day-number">{cell.day}</span>
+                        <!-- Top-left: day name (mobile week view) + day number -->
+                        <span class="calendar-day-number"><span class="cal-dow-label">{WEEK_DOW[i]}</span>{cell.day}</span>
                         <!-- Top-center: weather -->
                         {#if dd?.weather}
                           <span class="cal-weather">{weatherIcon(dd.weather.weatherCode)} {dd.weather.temperatureMax}°/{dd.weather.temperatureMin}°</span>
@@ -1971,6 +2048,49 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  .calendar-nav {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .calendar-view-toggle {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+
+  .calendar-view-btn {
+    background: none;
+    border: none;
+    padding: var(--space-2) var(--space-3);
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-faint);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .calendar-view-btn + .calendar-view-btn {
+    border-left: 1px solid var(--border);
+  }
+
+  .calendar-view-btn:hover {
+    color: var(--ink);
+  }
+
+  .calendar-view-btn-active {
+    background: var(--accent-light, rgba(0, 0, 0, 0.05));
+    color: var(--ink);
+    font-weight: 600;
   }
 
   .calendar-month-label {
@@ -2047,6 +2167,10 @@
     line-height: 1;
   }
 
+  .cal-dow-label {
+    display: none;
+  }
+
   .cal-weather {
     justify-self: center;
     align-self: start;
@@ -2114,6 +2238,74 @@
 
   .cal-surplus {
     color: var(--accent);
+  }
+
+  /* Week view stacks into a readable list on narrow screens instead of shrinking 7 columns */
+  @media (max-width: 767px) {
+    .calendar-grid-week .calendar-row.calendar-row-header {
+      display: none;
+    }
+
+    .calendar-grid-week .calendar-row {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+
+    .calendar-grid-week .calendar-cell {
+      aspect-ratio: unset;
+      grid-template-columns: auto 1fr auto;
+      grid-template-rows: auto auto;
+      row-gap: var(--space-2);
+      padding: var(--space-3);
+      border-radius: var(--radius-sm);
+    }
+
+    .calendar-grid-week .cal-dow-label {
+      display: inline;
+      margin-right: var(--space-1);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--ink-faint);
+      font-size: var(--text-xs);
+    }
+
+    .calendar-grid-week .calendar-day-number {
+      font-size: var(--text-base);
+    }
+
+    .calendar-grid-week .cal-stats {
+      grid-column: 1 / -1;
+      align-self: start;
+      gap: var(--space-1);
+    }
+
+    .calendar-grid-week .cal-icon {
+      width: 16px;
+      height: 16px;
+    }
+
+    .calendar-grid-week .cal-micro {
+      font-size: var(--text-sm);
+      white-space: normal;
+    }
+
+    .calendar-grid-week .calendar-cell-summary {
+      border-left: none;
+      border-top: 2px solid var(--border);
+      padding: var(--space-3) var(--space-1) 0;
+      align-items: stretch;
+    }
+
+    .calendar-grid-week .calendar-cell-summary::before {
+      content: "This Week";
+      font-size: var(--text-xs);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--ink-faint);
+    }
   }
 
   /* ── Day Detail Modal ── */
