@@ -20,6 +20,11 @@ export async function getWorkoutLogsCollection() {
   return db.collection("workoutLogs")
 }
 
+export async function getPlanForUser(userId: ObjectId, planId: string) {
+  const plans = await getWorkoutPlansCollection()
+  return plans.findOne({ _id: new ObjectId(planId), userId })
+}
+
 // ========================================
 // Types
 // ========================================

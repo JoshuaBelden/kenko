@@ -1,6 +1,6 @@
 import { getJourneysCollection, getWeightLogCollection } from "$lib/server/collections"
 import { getFastsCollection } from "$lib/server/danjiki"
-import { startOfDayTz, endOfDayTz, startOfWeekTz, endOfWeekTz, todayStr } from "$lib/server/dates"
+import { startOfDayTz, endOfDayTz, startOfWeekTz, endOfWeekTz, todayStr, dayOfWeekTz } from "$lib/server/dates"
 import { getWorkoutLogsCollection, getWorkoutPlansCollection, serializeWorkoutPlan, getTodaysCaloriesBurned } from "$lib/server/dojo"
 import { getCommitmentsCollection, getCommitmentLogsCollection, serializeCommitment, calculateTaperPhaseInfo } from "$lib/server/kata"
 import { getFoodItemLogsCollection, getWaterLogCollection } from "$lib/server/shoku"
@@ -120,20 +120,32 @@ export const GET: RequestHandler = async ({ locals, params }) => {
       ? await plans.find({ _id: { $in: planIds }, userId }).toArray()
       : []
 
-    // Build a set of completed plan+session combos this week
+    // Build a set of completed plan+session+day combos this week, keyed by the
+    // actual calendar day (in the user's timezone) each log was completed on —
+    // not just "happened sometime this week" — so an early/backfilled session
+    // only marks its own scheduled day complete, not every day of the week.
     const completedKeys = new Set(
-      weekLogs.map((l) => `${l.planId?.toString()}::${l.planSnapshot?.sessionName}`),
+      weekLogs.map((l) => {
+        const completedDow = l.completedAt ? dayOfWeekTz(new Date(l.completedAt), userTz) : null
+        return `${l.planId?.toString()}::${l.planSnapshot?.sessionName}::${completedDow}`
+      }),
     )
 
-    const todayDow = now.getUTCDay()
+    const todayDow = dayOfWeekTz(now, userTz)
     const upcoming: Array<{ planName: string; sessionName: string; targetDay: number | null; completed: boolean }> = []
     for (const plan of selectedPlans) {
       for (const session of plan.sessions ?? []) {
+        const targetDay = session.targetDayOfWeek ?? null
+        const completed = targetDay === null
+          ? weekLogs.some(
+              (l) => l.planId?.toString() === plan._id.toString() && l.planSnapshot?.sessionName === session.name,
+            )
+          : completedKeys.has(`${plan._id.toString()}::${session.name}::${targetDay}`)
         upcoming.push({
           planName: plan.name,
           sessionName: session.name,
-          targetDay: session.targetDayOfWeek ?? null,
-          completed: completedKeys.has(`${plan._id.toString()}::${session.name}`),
+          targetDay,
+          completed,
         })
       }
     }

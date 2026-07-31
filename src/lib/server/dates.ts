@@ -80,6 +80,15 @@ export function endOfDayTz(dateStr: string, tz: string): Date {
 }
 
 /**
+ * Day of week (0=Sun..6=Sat) for `date` in the specified timezone.
+ */
+export function dayOfWeekTz(date: Date, tz: string): number {
+  const fmt = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" })
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+  return dayNames.indexOf(fmt.format(date))
+}
+
+/**
  * Start of week (Monday 00:00:00.000) for the week containing `date`,
  * in the specified timezone.
  */

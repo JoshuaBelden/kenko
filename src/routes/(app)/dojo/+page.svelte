@@ -20,16 +20,40 @@
   }
   const REGION_ORDER = ["torso", "arms", "lower_body"]
 
+  const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+
   let plans = $state(page.data.plans ?? [])
-  let logs = $state(page.data.logs ?? [])
+  let inProgressLogs = $state(page.data.inProgressLogs ?? [])
   let recovery = $state(page.data.recovery ?? [])
+  let stats = $state(page.data.stats ?? { thisWeekCount: 0, totalSessions: 0 })
   $effect(() => {
     plans = page.data.plans ?? []
-    logs = page.data.logs ?? []
+    inProgressLogs = page.data.inProgressLogs ?? []
     recovery = page.data.recovery ?? []
+    stats = page.data.stats ?? { thisWeekCount: 0, totalSessions: 0 }
   })
 
-  let activeTab = $state<"recent" | "recovery">("recent")
+  let activeTab = $state<"recovery" | "recent">("recovery")
+
+  // Recent Sessions data is only fetched once that tab is opened.
+  let recentLogs = $state<any[] | null>(null)
+  let recentLogsLoading = $state(false)
+
+  async function loadRecentLogs() {
+    if (recentLogs !== null || recentLogsLoading) return
+    recentLogsLoading = true
+    const res = await fetch("/api/dojo/logs?status=completed")
+    if (res.ok) {
+      const data = await res.json()
+      recentLogs = data.slice(0, 10)
+    }
+    recentLogsLoading = false
+  }
+
+  function openRecentTab() {
+    activeTab = "recent"
+    loadRecentLogs()
+  }
 
   // Cardio start picker state
   let cardioPickerOpen = $state(false)
@@ -56,17 +80,6 @@
   function muscleLabel(muscle: string): string {
     return muscle?.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) ?? ""
   }
-
-  const inProgressLogs = $derived(logs.filter((l: any) => l.status === "in_progress"))
-  const completedLogs = $derived(logs.filter((l: any) => l.status === "completed"))
-
-  const thisWeekCount = $derived(() => {
-    const now = new Date()
-    const startOfWeek = new Date(now)
-    startOfWeek.setDate(now.getDate() - now.getDay())
-    startOfWeek.setHours(0, 0, 0, 0)
-    return completedLogs.filter((l: any) => new Date(l.completedAt) >= startOfWeek).length
-  })
 
   function formatDate(iso: string): string {
     const d = new Date(iso)
@@ -137,14 +150,18 @@
     await fetch(`/api/dojo/logs/${id}`, { method: "DELETE" })
     deletingLogId = null
     await invalidateAll()
+    if (activeTab === "recent") {
+      recentLogs = null
+      await loadRecentLogs()
+    }
   }
 </script>
 
 <PageHeader icon={icons.dojo} title="Dojo" subtitle="Forge your strength" />
 
 <div class="stats-row">
-  <StatNumber value={thisWeekCount()} label="this week" size="md" />
-  <StatNumber value={completedLogs.length} label="total sessions" size="md" />
+  <StatNumber value={stats.thisWeekCount} label="this week" size="md" />
+  <StatNumber value={stats.totalSessions} label="total sessions" size="md" />
 </div>
 
 <!-- In-progress Sessions -->
@@ -178,9 +195,21 @@
 {/if}
 
 <!-- Quick Start -->
-{#if plans.length > 0}
-  <section class="section">
+<section class="section">
+  <div class="section-header">
     <h2 class="section-title">Start Workout</h2>
+    <a href="/dojo/plans" class="manage-plans-link">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="3" />
+        <path
+          d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+        />
+      </svg>
+      Manage Plans
+    </a>
+  </div>
+
+  {#if plans.length > 0}
     {#each plans as plan (plan.id)}
       <Card>
         <div class="quick-start-plan">
@@ -189,35 +218,26 @@
             {#each plan.sessions as session}
               <Button variant="secondary" onclick={() => startSession(plan.id, session.id)}>
                 {session.name}
+                {#if session.targetDayOfWeek !== null}
+                  <span class="day-badge">{DAY_NAMES[session.targetDayOfWeek]}</span>
+                {/if}
               </Button>
             {/each}
           </div>
         </div>
       </Card>
     {/each}
-  </section>
-{:else}
-  <section class="section">
+  {:else}
     <div class="empty-state">
       <p>Create a workout plan to get started.</p>
       <Button variant="primary" href="/dojo/plans">Create Plan</Button>
     </div>
-  </section>
-{/if}
+  {/if}
+</section>
 
-<!-- Recent Sessions / Recovery Tabs -->
+<!-- Recovery / Recent Sessions Tabs -->
 <section class="section">
   <div class="dojo-tabs" role="tablist">
-    <button
-      type="button"
-      class="dojo-tab"
-      class:active={activeTab === "recent"}
-      role="tab"
-      aria-selected={activeTab === "recent"}
-      onclick={() => (activeTab = "recent")}
-    >
-      Recent Sessions
-    </button>
     <button
       type="button"
       class="dojo-tab"
@@ -228,11 +248,25 @@
     >
       Recovery
     </button>
+    <button
+      type="button"
+      class="dojo-tab"
+      class:active={activeTab === "recent"}
+      role="tab"
+      aria-selected={activeTab === "recent"}
+      onclick={openRecentTab}
+    >
+      Recent Sessions
+    </button>
   </div>
 
   {#if activeTab === "recent"}
-    {#if completedLogs.length > 0}
-      {#each completedLogs.slice(0, 10) as log (log.id)}
+    {#if recentLogsLoading}
+      <div class="empty-state">
+        <p>Loading...</p>
+      </div>
+    {:else if recentLogs && recentLogs.length > 0}
+      {#each recentLogs as log (log.id)}
         <Card>
           <div class="completed-log-row">
             <a href="/dojo/session/{log.id}" class="log-card log-link completed-log-link">
@@ -346,10 +380,6 @@
   </div>
 {/if}
 
-<div class="nav-links">
-  <Button variant="ghost" href="/dojo/plans">Manage Plans</Button>
-</div>
-
 <style>
   .stats-row {
     display: flex;
@@ -362,6 +392,36 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-3);
+  }
+
+  .section-header .section-title {
+    margin-bottom: 0;
+  }
+
+  .manage-plans-link {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    background: none;
+    border: none;
+    padding: var(--space-2) 0;
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+    text-decoration: none;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .manage-plans-link:hover {
+    color: var(--ink-light);
   }
 
   .section-title {
@@ -539,6 +599,15 @@
     flex-wrap: wrap;
   }
 
+  .day-badge {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    padding: 2px var(--space-2);
+    border-radius: var(--radius-pill);
+    background: var(--paper-warm);
+    color: var(--ink-light);
+  }
+
   .empty-state {
     text-align: center;
     padding: var(--space-6);
@@ -549,11 +618,6 @@
     flex-direction: column;
     align-items: center;
     gap: var(--space-4);
-  }
-
-  .nav-links {
-    text-align: center;
-    margin-top: var(--space-4);
   }
 
   .dojo-tabs {
