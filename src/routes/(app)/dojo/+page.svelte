@@ -235,7 +235,7 @@
   }
 </script>
 
-<PageHeader icon={icons.dojo} title="Dojo" subtitle="Forge your strength" />
+<PageHeader icon={icons.dojo} title="Workout" subtitle="Forge your strength" />
 
 {#if !manualOpen}
   <div class="dojo-controls">

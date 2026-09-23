@@ -220,7 +220,7 @@
 
 </script>
 
-<PageHeader icon={icons.shoku} title="Shoku" subtitle="Nourish with intention" />
+<PageHeader icon={icons.shoku} title="Nutrition" subtitle="Nourish with intention" />
 
 <!-- Date picker, meal plan selector, quick add -->
 <section class="date-nav">

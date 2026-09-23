@@ -134,7 +134,7 @@
   <PageHeader icon={icons.kata} title="Not Found" />
   <div class="empty-state">
     <p>This commitment doesn't exist.</p>
-    <Button variant="primary" href="/kata">Back to Kata</Button>
+    <Button variant="primary" href="/kata">Back to Habits</Button>
   </div>
 {:else}
   <PageHeader icon={icons.kata} title="Edit Commitment" subtitle={commitment.name} />

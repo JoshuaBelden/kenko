@@ -10,7 +10,7 @@
 </script>
 
 <Card>
-  <h3 class="card-title">Danjiki — Fasting</h3>
+  <h3 class="card-title">Fasting</h3>
   <div class="settings-fields">
     <div class="field">
       <label class="field-label" for="s-fasting">Weekly fasting hours target</label>

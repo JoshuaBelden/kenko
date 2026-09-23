@@ -98,7 +98,7 @@
   }
 </script>
 
-<PageHeader icon={icons.tabi} title="Tabi" subtitle="Every journey begins with a single step" />
+<PageHeader icon={icons.tabi} title="Journey" subtitle="Every journey begins with a single step" />
 
 {#if journeys.length === 0 && !creating}
   <section class="empty-state">

@@ -18,7 +18,7 @@
 </script>
 
 <Card>
-  <h3 class="card-title">Kata — Commitments</h3>
+  <h3 class="card-title">Habits</h3>
   {#if allCommitments.length === 0}
     <p class="module-hint">
       <a href="/kata">Add commitments</a> to track habits within this journey.

@@ -39,11 +39,11 @@
   )
 
   const navItems = $derived([
-    { href: tabiHref, label: "Tabi", icon: "tabi" },
-    { href: "/shoku", label: "Shoku", icon: "shoku" },
-    { href: "/danjiki", label: "Danjiki", icon: "danjiki" },
-    { href: "/dojo", label: "Dojo", icon: "dojo" },
-    { href: "/kata", label: "Kata", icon: "kata" },
+    { href: tabiHref, label: "Journey", icon: "tabi" },
+    { href: "/shoku", label: "Nutrition", icon: "shoku" },
+    { href: "/danjiki", label: "Fasting", icon: "danjiki" },
+    { href: "/dojo", label: "Workout", icon: "dojo" },
+    { href: "/kata", label: "Habits", icon: "kata" },
   ])
 
   function isActive(href: string): boolean {

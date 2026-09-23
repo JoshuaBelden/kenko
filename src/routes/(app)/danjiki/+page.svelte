@@ -245,7 +245,7 @@
   }
 </script>
 
-<PageHeader icon={icons.danjiki} title="Danjiki" subtitle="Discipline through fasting" />
+<PageHeader icon={icons.danjiki} title="Fasting" subtitle="Discipline through fasting" />
 
 <!-- Active fast -->
 {#if activeFast}

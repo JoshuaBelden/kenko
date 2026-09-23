@@ -406,7 +406,7 @@
   <PageHeader icon={icons.dojo} title="Session Not Found" subtitle="" />
   <div class="empty-state">
     <p>This workout session doesn't exist.</p>
-    <Button variant="primary" href="/dojo">Back to Dojo</Button>
+    <Button variant="primary" href="/dojo">Back to Workout</Button>
   </div>
 {:else}
   <PageHeader

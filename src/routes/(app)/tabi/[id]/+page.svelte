@@ -221,15 +221,15 @@
   let fatValue = $state("")
   let dailyWaterTargetOz = $state("")
 
-  // Danjiki settings
+  // Fasting settings
   let weeklyFastingHours = $state("")
 
-  // Dojo settings
+  // Workout settings
   let selectedPlanIds = $state<string[]>([])
   let dojoSessionsPerWeek = $state("")
   let dojoWeeklyCalorieBurn = $state("")
 
-  // Kata settings
+  // Habits settings
   let selectedCommitmentIds = $state<string[]>([])
 
   // Meal plan settings
@@ -808,7 +808,7 @@
 </script>
 
 <!-- Page header -->
-<a href="/tabi" class="back-link">&larr; Tabi</a>
+<a href="/tabi" class="back-link">&larr; Journey</a>
 <div class="journey-header">
   <div class="header-left">
     <h1 class="journey-title">{journey?.name ?? "Journey"}</h1>
@@ -930,7 +930,7 @@
       <p class="loading-text">Loading...</p>
     {:else if overviewData}
       <div class="widget-grid">
-        <!-- Shoku Widget -->
+        <!-- Nutrition Widget -->
         {#if journey.shokuTargets && overviewData.shoku}
           {@const shoku = overviewData.shoku}
           {@const targets = journey.shokuTargets}
@@ -939,7 +939,7 @@
               <div class="widget-header">
                 <h3 class="widget-title">
                   <svg class="widget-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">{@html icons.shoku}</svg>
-                  Shoku
+                  Nutrition
                 </h3>
                 <a href="/shoku" class="widget-link">View &rarr;</a>
               </div>
@@ -1115,7 +1115,7 @@
           </Card>
         {/if}
 
-        <!-- Kata Widget -->
+        <!-- Habits Widget -->
         {#if journey.kataTargets && overviewData.kata}
           {@const kata = overviewData.kata}
           <Card>
@@ -1123,7 +1123,7 @@
               <div class="widget-header">
                 <h3 class="widget-title">
                   <svg class="widget-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">{@html icons.kata}</svg>
-                  Kata
+                  Habits
                 </h3>
                 <a href="/kata" class="widget-link">View &rarr;</a>
               </div>
@@ -1161,7 +1161,7 @@
           </Card>
         {/if}
 
-        <!-- Dojo Widget -->
+        <!-- Workout Widget -->
         {#if journey.dojoTargets && overviewData.dojo}
           {@const dojo = overviewData.dojo}
           {@const targets = journey.dojoTargets}
@@ -1170,7 +1170,7 @@
               <div class="widget-header">
                 <h3 class="widget-title">
                   <svg class="widget-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">{@html icons.dojo}</svg>
-                  Dojo
+                  Workout
                 </h3>
                 <a href="/dojo" class="widget-link">View &rarr;</a>
               </div>
@@ -1212,7 +1212,7 @@
           </Card>
         {/if}
 
-        <!-- Danjiki Widget -->
+        <!-- Fasting Widget -->
         {#if journey.danjikiTargets && overviewData.danjiki}
           {@const danjiki = overviewData.danjiki}
           {@const target = journey.danjikiTargets.weeklyFastingHours}
@@ -1221,7 +1221,7 @@
               <div class="widget-header">
                 <h3 class="widget-title">
                   <svg class="widget-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">{@html icons.danjiki}</svg>
-                  Danjiki
+                  Fasting
                 </h3>
                 <a href="/danjiki" class="widget-link">View &rarr;</a>
               </div>

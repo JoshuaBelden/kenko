@@ -20,7 +20,7 @@
 </script>
 
 <Card>
-  <h3 class="card-title">Dojo — Training</h3>
+  <h3 class="card-title">Workout</h3>
   {#if allPlans.length === 0}
     <p class="module-hint">
       <a href="/dojo/plans">Add workout plans</a> to configure training targets.

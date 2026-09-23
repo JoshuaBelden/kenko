@@ -67,7 +67,7 @@
     scannerSupported = typeof window !== "undefined" && !!navigator.mediaDevices?.getUserMedia
   })
 
-  let libraryOnly = $state(false)
+  let libraryOnly = $state(true)
   let suggestions = $state<{ recent: any[]; frequent: any[] } | null>(null)
   let suggestionsLoaded = $state(false)
   let hasSearched = $state(false)
@@ -315,7 +315,7 @@
     manualBarcode = ""
     manualLookingUp = false
     hasSearched = false
-    libraryOnly = false
+    libraryOnly = true
   }
 
   function handleClose() {

@@ -32,14 +32,14 @@
     mealBuilds: any[]
     mealPlanFoods: any[]
     categories: any[]
-    // Danjiki
+    // Fasting
     weeklyFastingHours: string
-    // Dojo
+    // Workout
     allPlans: any[]
     selectedPlanIds: string[]
     dojoSessionsPerWeek: string
     dojoWeeklyCalorieBurn: string
-    // Kata
+    // Habits
     allCommitments: any[]
     selectedCommitmentIds: string[]
     // Trainer
@@ -83,10 +83,10 @@
 
   const TABS: { key: SettingsTab; label: string }[] = [
     { key: "general", label: "General" },
-    { key: "shoku", label: "Shoku" },
-    { key: "danjiki", label: "Danjiki" },
-    { key: "dojo", label: "Dojo" },
-    { key: "kata", label: "Kata" },
+    { key: "shoku", label: "Nutrition" },
+    { key: "danjiki", label: "Fasting" },
+    { key: "dojo", label: "Workout" },
+    { key: "kata", label: "Habits" },
     { key: "trainer", label: "Trainer" },
   ]
 </script>

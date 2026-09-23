@@ -7,7 +7,7 @@ import { getFoodItemLogsCollection, getWaterLogCollection } from "$lib/server/sh
 import { ObjectId, type Document, type WithId } from "mongodb"
 
 /**
- * Builds the Tabi dashboard data (Shoku, Danjiki, Dojo, Kata, Weight) for a journey.
+ * Builds the Journey dashboard data (Nutrition, Fasting, Workout, Habits, Weight) for a journey.
  * Shared by the overview API and the AI Trainer so both see the same numbers.
  */
 export async function getJourneyOverview(
@@ -24,7 +24,7 @@ export async function getJourneyOverview(
 
   const result: Record<string, any> = {}
 
-  // Shoku data
+  // Nutrition data
   if (journey.shokuTargets) {
     const foodItemLogs = await getFoodItemLogsCollection()
     const todayEntries = await foodItemLogs
@@ -55,7 +55,7 @@ export async function getJourneyOverview(
     }
   }
 
-  // Danjiki data
+  // Fasting data
   if (journey.danjikiTargets) {
     const fasts = await getFastsCollection()
 
@@ -84,7 +84,7 @@ export async function getJourneyOverview(
     }
   }
 
-  // Dojo data
+  // Workout data
   if (journey.dojoTargets) {
     const logs = await getWorkoutLogsCollection()
 
@@ -163,7 +163,7 @@ export async function getJourneyOverview(
     }
   }
 
-  // Kata data
+  // Habits data
   if (journey.kataTargets) {
     const commitmentIds = (journey.kataTargets.commitmentIds ?? []).map((id: any) =>
       id instanceof ObjectId ? id : new ObjectId(id),

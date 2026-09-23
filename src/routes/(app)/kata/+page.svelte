@@ -136,7 +136,7 @@
   }
 </script>
 
-<PageHeader icon={icons.kata} title="Kata" subtitle="Shape your habits" />
+<PageHeader icon={icons.kata} title="Habits" subtitle="Shape your habits" />
 
 <section class="date-nav">
   <button class="date-btn" onclick={prevDay}>&larr;</button>
