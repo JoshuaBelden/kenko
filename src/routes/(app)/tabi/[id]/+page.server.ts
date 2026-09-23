@@ -2,6 +2,7 @@ import { getJourneysCollection } from "$lib/server/collections"
 import { getWorkoutPlansCollection, serializeWorkoutPlan } from "$lib/server/dojo"
 import { getCommitmentsCollection, serializeCommitment } from "$lib/server/kata"
 import { serializeJourney } from "$lib/server/journeys"
+import { getTrainerKeyStatus } from "$lib/server/trainer"
 import { getUsersCollection } from "$lib/server/collections"
 import { calculateTdee, type ActivityLevel } from "$lib/server/tdee"
 import { getFoodItemsCollection, getFoodItemCategoriesCollection, serializeFoodItem, serializeFoodItemCategory } from "$lib/server/shoku"
@@ -71,5 +72,6 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
     tdee,
     categories: categories.map(serializeFoodItemCategory),
     mealPlanFoods,
+    trainerKey: await getTrainerKeyStatus(userId),
   }
 }

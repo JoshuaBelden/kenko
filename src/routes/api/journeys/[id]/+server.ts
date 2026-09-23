@@ -1,5 +1,11 @@
 import { getJourneysCollection } from "$lib/server/collections"
-import { serializeJourney } from "$lib/server/journeys"
+import {
+  JourneyValidationError,
+  parseDanjikiTargets,
+  parseShokuTargets,
+  parseTrainerSettings,
+  serializeJourney,
+} from "$lib/server/journeys"
 import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
 import type { Document } from "mongodb"
@@ -30,8 +36,14 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
   if (body.startDate !== undefined) updates.startDate = new Date(body.startDate)
   if (body.endDate !== undefined) updates.endDate = new Date(body.endDate)
   if (body.status !== undefined) updates.status = body.status
-  if (body.shokuTargets !== undefined) updates.shokuTargets = body.shokuTargets
-  if (body.danjikiTargets !== undefined) updates.danjikiTargets = body.danjikiTargets
+  try {
+    if (body.shokuTargets !== undefined) updates.shokuTargets = parseShokuTargets(body.shokuTargets)
+    if (body.danjikiTargets !== undefined) updates.danjikiTargets = parseDanjikiTargets(body.danjikiTargets)
+    if (body.trainerSettings !== undefined) updates.trainerSettings = parseTrainerSettings(body.trainerSettings)
+  } catch (err) {
+    if (err instanceof JourneyValidationError) return json({ error: err.message }, { status: 400 })
+    throw err
+  }
   if (body.dojoTargets !== undefined) {
     updates.dojoTargets = body.dojoTargets
       ? {

@@ -60,12 +60,15 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
   const now = new Date()
   const journeysCol = await getJourneysCollection()
-  const activeJourney = await journeysCol.findOne({
-    userId,
-    status: "active",
-    startDate: { $lte: now },
-    endDate: { $gte: now },
-  })
+  const activeJourney = await journeysCol.findOne(
+    {
+      userId,
+      status: "active",
+      startDate: { $lte: now },
+      endDate: { $gte: now },
+    },
+    { sort: { startDate: -1 } },
+  )
 
   if (activeJourney?.shokuMealBuilds?.length) {
     activeJourneyId = activeJourney._id.toString()

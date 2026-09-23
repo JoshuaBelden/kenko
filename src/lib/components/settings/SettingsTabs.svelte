@@ -5,6 +5,7 @@
   import SettingsDanjiki from "./SettingsDanjiki.svelte"
   import SettingsDojo from "./SettingsDojo.svelte"
   import SettingsKata from "./SettingsKata.svelte"
+  import SettingsTrainer from "./SettingsTrainer.svelte"
 
   interface Props {
     // General
@@ -41,6 +42,13 @@
     // Kata
     allCommitments: any[]
     selectedCommitmentIds: string[]
+    // Trainer
+    trainerKey: { hasKey: boolean; last4: string | null }
+    trainerApiKeyDraft: string
+    trainerModel: string
+    trainerSystemPrompt: string
+    trainerKickoffPrompt: string
+    onremovetrainerkey: () => Promise<void>
     // Actions
     saving: boolean
     saveError: string
@@ -62,11 +70,12 @@
     weeklyFastingHours,
     allPlans, selectedPlanIds, dojoSessionsPerWeek, dojoWeeklyCalorieBurn,
     allCommitments, selectedCommitmentIds,
+    trainerKey, trainerApiKeyDraft, trainerModel, trainerSystemPrompt, trainerKickoffPrompt, onremovetrainerkey,
     saving, saveError, saveSuccess, isArchived,
     onchange, onsave, onclose, onarchive, onunarchive, ondelete,
   }: Props = $props()
 
-  type SettingsTab = "general" | "shoku" | "danjiki" | "dojo" | "kata"
+  type SettingsTab = "general" | "shoku" | "danjiki" | "dojo" | "kata" | "trainer"
   let activeTab = $state<SettingsTab>("general")
 
   let confirmingArchive = $state(false)
@@ -78,6 +87,7 @@
     { key: "danjiki", label: "Danjiki" },
     { key: "dojo", label: "Dojo" },
     { key: "kata", label: "Kata" },
+    { key: "trainer", label: "Trainer" },
   ]
 </script>
 
@@ -131,6 +141,14 @@
 
   {#if activeTab === "kata"}
     <SettingsKata {allCommitments} {selectedCommitmentIds} {onchange} />
+  {/if}
+
+  {#if activeTab === "trainer"}
+    <SettingsTrainer
+      {trainerKey} {trainerApiKeyDraft} {trainerModel} {trainerSystemPrompt} {trainerKickoffPrompt}
+      {onchange}
+      onremovekey={onremovetrainerkey}
+    />
   {/if}
 
   <div class="settings-actions">

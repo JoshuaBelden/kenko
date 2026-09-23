@@ -20,6 +20,11 @@ export async function getJournalEntriesCollection() {
   return db.collection("journalEntries")
 }
 
+export async function getTrainerChatsCollection() {
+  const db = await getDb()
+  return db.collection("trainerChats")
+}
+
 export async function getWeightLogCollection() {
   const db = await getDb()
   return db.collection("weightLog")

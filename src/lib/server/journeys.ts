@@ -1,5 +1,12 @@
 import type { Document, ObjectId, WithId } from "mongodb"
 import { getJourneysCollection } from "./collections"
+import {
+  DEFAULT_KICKOFF_PROMPT,
+  DEFAULT_SYSTEM_PROMPT,
+  DEFAULT_TRAINER_MODEL,
+  TRAINER_PROMPT_MAX_LENGTH,
+  isTrainerModel,
+} from "$lib/trainer"
 
 export async function createDefaultJourney(userId: ObjectId, tz: string = "America/Los_Angeles"): Promise<void> {
   const journeys = await getJourneysCollection()
@@ -45,6 +52,13 @@ export function serializeJourney(doc: WithId<Document>) {
           commitmentIds: (doc.kataTargets.commitmentIds ?? []).map((id: any) => id.toString()),
         }
       : null,
+    trainerSettings: doc.trainerSettings
+      ? {
+          model: doc.trainerSettings.model ?? DEFAULT_TRAINER_MODEL,
+          systemPrompt: doc.trainerSettings.systemPrompt ?? null,
+          kickoffPrompt: doc.trainerSettings.kickoffPrompt ?? null,
+        }
+      : null,
     shokuMealPlan: doc.shokuMealPlan
       ? {
           items: (doc.shokuMealPlan.items ?? []).map((item: any) => ({
@@ -87,5 +101,69 @@ export function serializeJourney(doc: WithId<Document>) {
     })),
     createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
     updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
+  }
+}
+
+export class JourneyValidationError extends Error {}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function numberOrNull(value: unknown, field: string): number | null {
+  if (value === null || value === undefined || value === "") return null
+  const n = Number(value)
+  if (!Number.isFinite(n)) throw new JourneyValidationError(`${field} must be a number`)
+  return n
+}
+
+export function parseShokuTargets(input: unknown) {
+  if (input === null) return null
+  if (!isPlainObject(input)) throw new JourneyValidationError("shokuTargets must be an object")
+  const macros = isPlainObject(input.macros) ? input.macros : {}
+  const macro = (key: "protein" | "carbs" | "fat") => {
+    const m = isPlainObject(macros[key]) ? macros[key] : {}
+    return {
+      percentage: numberOrNull(m.percentage, `macros.${key}.percentage`),
+      grams: numberOrNull(m.grams, `macros.${key}.grams`),
+    }
+  }
+  return {
+    weightGoalLbsPerWeek: numberOrNull(input.weightGoalLbsPerWeek, "weightGoalLbsPerWeek"),
+    targetWeight: numberOrNull(input.targetWeight, "targetWeight"),
+    dailyCalorieTarget: numberOrNull(input.dailyCalorieTarget, "dailyCalorieTarget"),
+    dailyCalorieOverride: input.dailyCalorieOverride === true,
+    macros: { protein: macro("protein"), carbs: macro("carbs"), fat: macro("fat") },
+    dailyWaterTargetOz: numberOrNull(input.dailyWaterTargetOz, "dailyWaterTargetOz"),
+  }
+}
+
+export function parseDanjikiTargets(input: unknown) {
+  if (input === null) return null
+  if (!isPlainObject(input)) throw new JourneyValidationError("danjikiTargets must be an object")
+  return { weeklyFastingHours: numberOrNull(input.weeklyFastingHours, "weeklyFastingHours") }
+}
+
+/** Prompts equal to the default (or empty) are stored as null so users keep getting default improvements. */
+function parseTrainerPrompt(value: unknown, defaultValue: string, field: string): string | null {
+  if (value === null || value === undefined) return null
+  if (typeof value !== "string") throw new JourneyValidationError(`${field} must be a string`)
+  const trimmed = value.trim()
+  if (trimmed.length > TRAINER_PROMPT_MAX_LENGTH) {
+    throw new JourneyValidationError(`${field} must be ${TRAINER_PROMPT_MAX_LENGTH} characters or fewer`)
+  }
+  if (!trimmed || trimmed === defaultValue.trim()) return null
+  return trimmed
+}
+
+export function parseTrainerSettings(input: unknown) {
+  if (input === null) return null
+  if (!isPlainObject(input)) throw new JourneyValidationError("trainerSettings must be an object")
+  const model = input.model ?? DEFAULT_TRAINER_MODEL
+  if (!isTrainerModel(model)) throw new JourneyValidationError("Unsupported trainer model")
+  return {
+    model,
+    systemPrompt: parseTrainerPrompt(input.systemPrompt, DEFAULT_SYSTEM_PROMPT, "systemPrompt"),
+    kickoffPrompt: parseTrainerPrompt(input.kickoffPrompt, DEFAULT_KICKOFF_PROMPT, "kickoffPrompt"),
   }
 }

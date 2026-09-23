@@ -3,9 +3,11 @@
   import { page } from "$app/state"
   import { Button, Card, ProgressBar, RadialProgress, StarRating, DotRating, TipTapEditor } from "$lib/components"
   import SettingsTabs from "$lib/components/settings/SettingsTabs.svelte"
+  import TrainerChat from "$lib/components/TrainerChat.svelte"
   import { localToday, localDateStr, localTimeStr, toDatetime } from "$lib/dates"
   import { formatDate, formatDateShort } from "$lib/format"
   import { icons } from "$lib/icons"
+  import { DEFAULT_KICKOFF_PROMPT, DEFAULT_SYSTEM_PROMPT, DEFAULT_TRAINER_MODEL } from "$lib/trainer"
   import { tooltip } from "$lib/tooltip.svelte"
 
   function weightDotTooltip(date: string, weight: number): string {
@@ -21,6 +23,7 @@
   const tdee = $derived(data.tdee as number | null)
   const categories = $derived(data.categories ?? [])
   const mealPlanFoods = $derived(data.mealPlanFoods ?? [])
+  const trainerKey = $derived(data.trainerKey ?? { hasKey: false, last4: null })
 
   // Determine if newly created (no targets configured)
   const hasAnyTargets = $derived(
@@ -233,6 +236,12 @@
   let mealPlanItems = $state<any[]>([])
   let mealBuilds = $state<any[]>([])
 
+  // Trainer settings
+  let trainerApiKeyDraft = $state("")
+  let trainerModel = $state<string>(DEFAULT_TRAINER_MODEL)
+  let trainerSystemPrompt = $state(DEFAULT_SYSTEM_PROMPT)
+  let trainerKickoffPrompt = $state(DEFAULT_KICKOFF_PROMPT)
+
   // Effective calorie target (needed for saveSettings)
   const effectiveCalorieTarget = $derived(() => {
     if (dailyCalorieOverride && dailyCalorieTarget) return Number(dailyCalorieTarget)
@@ -267,6 +276,10 @@
       case "selectedCommitmentIds": selectedCommitmentIds = value; break
       case "mealPlanItems": mealPlanItems = value; break
       case "mealBuilds": mealBuilds = value; break
+      case "trainerApiKeyDraft": trainerApiKeyDraft = value; break
+      case "trainerModel": trainerModel = value; break
+      case "trainerSystemPrompt": trainerSystemPrompt = value; break
+      case "trainerKickoffPrompt": trainerKickoffPrompt = value; break
     }
   }
 
@@ -326,6 +339,10 @@
 
     mealPlanItems = j.shokuMealPlan?.items ?? []
     mealBuilds = j.shokuMealBuilds ?? []
+
+    trainerModel = j.trainerSettings?.model ?? DEFAULT_TRAINER_MODEL
+    trainerSystemPrompt = j.trainerSettings?.systemPrompt ?? DEFAULT_SYSTEM_PROMPT
+    trainerKickoffPrompt = j.trainerSettings?.kickoffPrompt ?? DEFAULT_KICKOFF_PROMPT
   })
 
   async function saveSettings() {
@@ -392,6 +409,22 @@
       ? mealBuilds
       : []
 
+    // The API key is saved separately (it lives on the user, encrypted) and verified with Anthropic first
+    if (trainerApiKeyDraft.trim()) {
+      const keyRes = await fetch("/api/trainer/key", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey: trainerApiKeyDraft.trim() }),
+      })
+      if (!keyRes.ok) {
+        const err = await keyRes.json().catch(() => ({}))
+        saveError = err.error ?? "Couldn't save your API key."
+        saving = false
+        return
+      }
+      trainerApiKeyDraft = ""
+    }
+
     const res = await fetch(`/api/journeys/${journey.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -407,6 +440,11 @@
         kataTargets,
         shokuMealPlan,
         shokuMealBuilds,
+        trainerSettings: {
+          model: trainerModel,
+          systemPrompt: trainerSystemPrompt,
+          kickoffPrompt: trainerKickoffPrompt,
+        },
       }),
     })
 
@@ -420,6 +458,11 @@
       setTimeout(() => (saveSuccess = false), 2000)
     }
     saving = false
+  }
+
+  async function removeTrainerKey() {
+    await fetch("/api/trainer/key", { method: "DELETE" })
+    await invalidateAll()
   }
 
   async function archiveJourney() {
@@ -604,7 +647,7 @@
   let journalDate = $state("")
   let journalEntry = $state<any>(null)
   let journalLoading = $state(false)
-  let journalTab = $state<"morning" | "evening">("morning")
+  let journalTab = $state<"morning" | "evening" | "trainer">("morning")
   let yesterdayIntention = $state<string | null>(null)
   let weatherRefreshing = $state(false)
 
@@ -655,7 +698,7 @@
 
     // Auto-switch to evening tab if morning has been filled in
     const hasMorning = m.bodyWeight != null || m.sleepDuration != null || m.sleepQuality != null || m.notes
-    if (hasMorning) journalTab = "evening"
+    if (hasMorning && journalTab === "morning") journalTab = "evening"
   }
 
   async function loadJournalEntry() {
@@ -684,16 +727,18 @@
     }
   })
 
+  // Pure calendar arithmetic on YYYY-MM-DD; mixing local midnight with toISOString() skipped days east of UTC
+  function shiftDateStr(dateStr: string, days: number): string {
+    const [y, m, d] = dateStr.split("-").map(Number)
+    return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10)
+  }
+
   function journalPrevDay() {
-    const d = new Date(journalDate + "T00:00:00")
-    d.setDate(d.getDate() - 1)
-    journalDate = d.toISOString().split("T")[0]
+    journalDate = shiftDateStr(journalDate, -1)
   }
 
   function journalNextDay() {
-    const d = new Date(journalDate + "T00:00:00")
-    d.setDate(d.getDate() + 1)
-    const next = d.toISOString().split("T")[0]
+    const next = shiftDateStr(journalDate, 1)
     if (next <= todayStr) {
       journalDate = next
     }
@@ -828,6 +873,12 @@
     dojoWeeklyCalorieBurn={dojoWeeklyCalorieBurn}
     {allCommitments}
     {selectedCommitmentIds}
+    {trainerKey}
+    {trainerApiKeyDraft}
+    {trainerModel}
+    {trainerSystemPrompt}
+    {trainerKickoffPrompt}
+    onremovetrainerkey={removeTrainerKey}
     {saving}
     {saveError}
     {saveSuccess}
@@ -1227,36 +1278,27 @@
 
       {#if journalLoading}
         <p class="loading-text">Loading...</p>
-      {:else if !journalEntry}
-        <!-- Empty state -->
-        <Card>
-          <div class="journal-empty">
-            <p class="empty-message">No entry for this day. Start your morning check-in or evening reflection.</p>
-            <div class="journal-empty-actions">
-              <Button onclick={async () => { await ensureEntry(); journalTab = "morning" }}>Start Morning</Button>
-              <Button variant="secondary" onclick={async () => { await ensureEntry(); journalTab = "evening" }}>Start Evening</Button>
-            </div>
-          </div>
-        </Card>
       {:else}
-        {#if journalEntry?.weather}
-          <div class="journal-weather">
-            <span class="weather-icon">{weatherIcon(journalEntry.weather.weatherCode)}</span>
-            <span class="weather-temps">{journalEntry.weather.temperatureMax}° / {journalEntry.weather.temperatureMin}°F</span>
-            <span class="weather-label">{journalEntry.weather.weatherLabel}</span>
-            {#if journalEntry.weather.precipitation > 0}
-              <span class="weather-precip">{journalEntry.weather.precipitation}mm</span>
-            {/if}
-          </div>
-        {:else}
-          <div class="journal-weather">
-            <button class="weather-fetch-btn" onclick={refreshWeather} disabled={weatherRefreshing}>
-              {weatherRefreshing ? "Fetching…" : "Get weather"}
-            </button>
-          </div>
+        {#if journalEntry}
+          {#if journalEntry?.weather}
+            <div class="journal-weather">
+              <span class="weather-icon">{weatherIcon(journalEntry.weather.weatherCode)}</span>
+              <span class="weather-temps">{journalEntry.weather.temperatureMax}° / {journalEntry.weather.temperatureMin}°F</span>
+              <span class="weather-label">{journalEntry.weather.weatherLabel}</span>
+              {#if journalEntry.weather.precipitation > 0}
+                <span class="weather-precip">{journalEntry.weather.precipitation}mm</span>
+              {/if}
+            </div>
+          {:else}
+            <div class="journal-weather">
+              <button class="weather-fetch-btn" onclick={refreshWeather} disabled={weatherRefreshing}>
+                {weatherRefreshing ? "Fetching…" : "Get weather"}
+              </button>
+            </div>
+          {/if}
         {/if}
 
-        <!-- Morning / Evening tab toggle -->
+        <!-- Morning / Evening / Trainer tab toggle -->
         <nav class="journal-tabs">
           <button class="journal-tab" class:journal-tab-active={journalTab === "morning"} onclick={() => (journalTab = "morning")}>
             Morning
@@ -1264,9 +1306,25 @@
           <button class="journal-tab" class:journal-tab-active={journalTab === "evening"} onclick={() => (journalTab = "evening")}>
             Evening
           </button>
+          <button class="journal-tab" class:journal-tab-active={journalTab === "trainer"} onclick={() => (journalTab = "trainer")}>
+            Your Trainer
+          </button>
         </nav>
 
-        {#if journalTab === "morning"}
+        {#if journalTab === "trainer"}
+          <TrainerChat journeyId={journey.id} date={journalDate} isToday={journalDate === todayStr} />
+        {:else if !journalEntry}
+          <!-- Empty state -->
+          <Card>
+            <div class="journal-empty">
+              <p class="empty-message">No entry for this day. Start your morning check-in or evening reflection.</p>
+              <div class="journal-empty-actions">
+                <Button onclick={async () => { await ensureEntry(); journalTab = "morning" }}>Start Morning</Button>
+                <Button variant="secondary" onclick={async () => { await ensureEntry(); journalTab = "evening" }}>Start Evening</Button>
+              </div>
+            </div>
+          </Card>
+        {:else if journalTab === "morning"}
           <div class="journal-form">
             <div class="journal-field">
               <label class="field-label" for="j-weight">Body weight (lbs)</label>

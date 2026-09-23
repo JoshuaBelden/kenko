@@ -27,12 +27,15 @@
     "vite": "^7.3.1"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
     "@tiptap/core": "^3.22.1",
     "@tiptap/pm": "^3.22.1",
     "@tiptap/starter-kit": "^3.22.1",
     "barcode-detector": "^3.1.2",
     "bcryptjs": "^3.0.3",
+    "dompurify": "^3.4.16",
     "jspdf": "^4.2.1",
+    "marked": "^18.0.14",
     "mongodb": "^7.1.1"
   }
 }

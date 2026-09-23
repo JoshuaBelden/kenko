@@ -42,7 +42,14 @@ function celsiusToFahrenheit(c: number): number {
   return Math.round((c * 9) / 5 + 32)
 }
 
-export async function geocodeZip(zip: string): Promise<{ latitude: number; longitude: number } | null> {
+export interface GeocodeResult {
+  latitude: number
+  longitude: number
+  /** e.g. "Portland, Oregon, United States" */
+  placeName: string | null
+}
+
+export async function geocodeZip(zip: string): Promise<GeocodeResult | null> {
   try {
     const res = await fetch(
       `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(zip)}&count=1`,
@@ -58,7 +65,8 @@ export async function geocodeZip(zip: string): Promise<{ latitude: number; longi
     if (!Array.isArray(data.results) || data.results.length === 0) return null
 
     const result = data.results[0]
-    return { latitude: result.latitude, longitude: result.longitude }
+    const placeName = [result.name, result.admin1, result.country].filter(Boolean).join(", ") || null
+    return { latitude: result.latitude, longitude: result.longitude, placeName }
   } catch {
     return null
   }
