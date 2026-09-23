@@ -1,4 +1,4 @@
-import type { Document, ObjectId, WithId } from "mongodb"
+import { ObjectId, type Document, type WithId } from "mongodb"
 import { getDb } from "./db"
 
 // ========================================
@@ -30,6 +30,20 @@ export interface TaperPhase {
   weekNumber: number
   label: string
   dailyLimit: number
+}
+
+// Sorts phases by weekNumber and renumbers them contiguously from week 1
+export function normalizeTaperPhases(
+  phases: Array<{ id?: string; weekNumber: number; label?: string; dailyLimit: number }>,
+): TaperPhase[] {
+  return [...phases]
+    .sort((a, b) => a.weekNumber - b.weekNumber)
+    .map((p, i) => ({
+      _id: p.id ? new ObjectId(p.id) : new ObjectId(),
+      weekNumber: i + 1,
+      label: p.label?.trim() || `Week ${i + 1}`,
+      dailyLimit: p.dailyLimit,
+    }))
 }
 
 export const VALID_DIRECTIONS: Direction[] = ["achieve", "limit"]
@@ -346,11 +360,16 @@ export function calculateTaperPhaseInfo(
   }
 
   const weeksElapsed = Math.floor(diffDays / 7)
-  const activePhase = taperPhases.find((p) => p.weekNumber === weeksElapsed + 1) ?? null
+  const currentWeek = weeksElapsed + 1
+  const sorted = [...taperPhases].sort((a, b) => a.weekNumber - b.weekNumber)
+  const lastWeek = sorted.length > 0 ? sorted[sorted.length - 1].weekNumber : 0
 
-  if (!activePhase) {
+  if (currentWeek > lastWeek) {
     return { weeksElapsed, activePhase: null, status: "beyond_phases" }
   }
+
+  // Latest phase that has started; before the first phase, use the first phase
+  const activePhase = sorted.filter((p) => p.weekNumber <= currentWeek).pop() ?? sorted[0]
 
   return { weeksElapsed, activePhase, status: "active" }
 }
@@ -386,16 +405,14 @@ export async function getTaperProgress(
   // Next phase
   let nextPhase: TaperProgress["nextPhase"] = null
   if (activePhase) {
-    const next = sortedPhases.find((p) => p.weekNumber === activePhase.weekNumber + 1)
+    const next = sortedPhases.find((p) => p.weekNumber > Math.max(activePhase.weekNumber, weeksElapsed + 1))
     if (next) {
-      const daysIntoCurrentWeek = Math.floor(
-        ((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) % 7,
-      )
+      const daysElapsed = Math.floor((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
       nextPhase = {
         label: next.label,
         weekNumber: next.weekNumber,
         dailyLimit: next.dailyLimit,
-        daysUntilStart: 7 - daysIntoCurrentWeek,
+        daysUntilStart: (next.weekNumber - 1) * 7 - daysElapsed,
       }
     }
   }
@@ -409,10 +426,10 @@ export async function getTaperProgress(
     status:
       status === "completed"
         ? "past"
-        : p.weekNumber < weeksElapsed + 1
-          ? "past"
-          : p.weekNumber === weeksElapsed + 1
-            ? "active"
+        : activePhase && p._id.equals(activePhase._id)
+          ? "active"
+          : p.weekNumber < weeksElapsed + 1
+            ? "past"
             : "upcoming",
   }))
 

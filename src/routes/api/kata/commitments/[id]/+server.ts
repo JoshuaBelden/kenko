@@ -3,6 +3,7 @@ import {
   serializeCommitment,
   calculatePeriodProgress,
   getTaperProgress,
+  normalizeTaperPhases,
   VALID_DIRECTIONS,
   VALID_PERIODS,
   VALID_LOGGING_STYLES,
@@ -92,12 +93,7 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
           return json({ error: "each phase must have a valid dailyLimit (>= 0)" }, { status: 400 })
         }
       }
-      updates.taperPhases = body.taperPhases.map((p: { id?: string; weekNumber: number; label?: string; dailyLimit: number }) => ({
-        _id: p.id ? new ObjectId(p.id) : new ObjectId(),
-        weekNumber: p.weekNumber,
-        label: p.label?.trim() || `Week ${p.weekNumber}`,
-        dailyLimit: p.dailyLimit,
-      }))
+      updates.taperPhases = normalizeTaperPhases(body.taperPhases)
     }
   }
 

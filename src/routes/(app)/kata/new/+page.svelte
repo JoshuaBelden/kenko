@@ -27,7 +27,7 @@
   }
 
   function removePhase(index: number) {
-    taperPhases = taperPhases.filter((_, i) => i !== index)
+    taperPhases = taperPhases.filter((_, i) => i !== index).map((p, i) => ({ ...p, weekNumber: i + 1 }))
   }
 
   async function handleSubmit() {

@@ -1,6 +1,7 @@
 import {
   getCommitmentsCollection,
   serializeCommitment,
+  normalizeTaperPhases,
   VALID_DIRECTIONS,
   VALID_PERIODS,
   VALID_LOGGING_STYLES,
@@ -53,12 +54,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
     const now = new Date()
     const startDate = new Date(body.startDate)
-    const taperPhases = body.taperPhases.map((p: { weekNumber: number; label?: string; dailyLimit: number }) => ({
-      _id: new ObjectId(),
-      weekNumber: p.weekNumber,
-      label: p.label?.trim() || `Week ${p.weekNumber}`,
-      dailyLimit: p.dailyLimit,
-    }))
+    const taperPhases = normalizeTaperPhases(body.taperPhases)
 
     // Determine initial status based on startDate
     const todayStart = new Date(now)
