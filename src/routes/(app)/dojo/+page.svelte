@@ -4,6 +4,7 @@
   import { Button, Card, PageHeader, StatNumber } from "$lib/components"
   import { icons } from "$lib/icons"
   import { cardioTypeLabel } from "$lib/format"
+  import { localDateStr, localTimeStr, toDatetime } from "$lib/dates"
 
   const CARDIO_TYPE_OPTIONS = [
     { value: "run", label: "Run" },
@@ -144,6 +145,83 @@
     cardioPickerSessionId = null
   }
 
+  // Manual cardio entry state
+  const tz = $derived(page.data.user?.profile?.timezone ?? "America/Los_Angeles")
+  let manualOpen = $state(false)
+  let manualType = $state("run")
+  let manualStartDate = $state("")
+  let manualStartTime = $state("")
+  let manualEndDate = $state("")
+  let manualEndTime = $state("")
+  let manualDistance = $state<number | null>(null)
+  let manualCalories = $state<number | null>(null)
+  let manualNotes = $state("")
+  let manualError = $state("")
+  let manualSaving = $state(false)
+
+  function openManualCardio() {
+    const end = new Date()
+    const start = new Date(end.getTime() - 30 * 60000)
+    manualType = "run"
+    manualStartDate = localDateStr(start, tz)
+    manualStartTime = localTimeStr(start, tz)
+    manualEndDate = localDateStr(end, tz)
+    manualEndTime = localTimeStr(end, tz)
+    manualDistance = null
+    manualCalories = null
+    manualNotes = ""
+    manualError = ""
+    manualOpen = true
+  }
+
+  function closeManualCardio() {
+    manualOpen = false
+    manualError = ""
+  }
+
+  async function saveManualCardio() {
+    if (!manualStartDate || !manualStartTime || !manualEndDate || !manualEndTime) {
+      manualError = "Started and completed are required"
+      return
+    }
+    const startedAt = toDatetime(manualStartDate, manualStartTime, tz)
+    const completedAt = toDatetime(manualEndDate, manualEndTime, tz)
+    if (new Date(completedAt) <= new Date(startedAt)) {
+      manualError = "Completed must be after started"
+      return
+    }
+    if (manualDistance == null || manualDistance <= 0) {
+      manualError = "Distance is required"
+      return
+    }
+
+    manualSaving = true
+    const res = await fetch("/api/dojo/logs/manual", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        cardioType: manualType,
+        startedAt,
+        completedAt,
+        cardioDistance: manualDistance,
+        caloriesBurned: manualCalories ?? null,
+        notes: manualNotes.trim() || null,
+      }),
+    })
+    manualSaving = false
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      manualError = data.error ?? "Failed to save cardio"
+      return
+    }
+
+    manualOpen = false
+    await invalidateAll()
+    recentLogs = null
+    openRecentTab()
+  }
+
   let deletingLogId = $state<string | null>(null)
 
   async function handleDeleteLog(id: string) {
@@ -158,6 +236,80 @@
 </script>
 
 <PageHeader icon={icons.dojo} title="Dojo" subtitle="Forge your strength" />
+
+{#if !manualOpen}
+  <div class="dojo-controls">
+    <Button variant="primary" onclick={openManualCardio}>+ LOG CARDIO</Button>
+  </div>
+{:else}
+  <section class="section">
+    <Card>
+      <div class="manual-form">
+        <h3 class="manual-title">Log Cardio</h3>
+
+        <div class="form-field">
+          <span class="field-label">Type</span>
+          <div class="manual-type-options">
+            {#each CARDIO_TYPE_OPTIONS as opt}
+              <button
+                type="button"
+                class="cardio-picker-option"
+                class:selected={manualType === opt.value}
+                onclick={() => (manualType = opt.value)}
+              >
+                {opt.label}
+              </button>
+            {/each}
+          </div>
+        </div>
+
+        <div class="manual-row">
+          <div class="form-field">
+            <span class="field-label">Started</span>
+            <div class="datetime-inputs">
+              <input type="date" class="field-input" aria-label="Start date" bind:value={manualStartDate} />
+              <input type="time" class="field-input" aria-label="Start time" bind:value={manualStartTime} />
+            </div>
+          </div>
+          <div class="form-field">
+            <span class="field-label">Completed</span>
+            <div class="datetime-inputs">
+              <input type="date" class="field-input" aria-label="Completed date" bind:value={manualEndDate} />
+              <input type="time" class="field-input" aria-label="Completed time" bind:value={manualEndTime} />
+            </div>
+          </div>
+        </div>
+
+        <div class="manual-row">
+          <div class="form-field">
+            <label class="field-label" for="manual-distance">Distance (miles)</label>
+            <input id="manual-distance" type="number" class="field-input" bind:value={manualDistance} min="0" step="any" />
+          </div>
+          <div class="form-field">
+            <label class="field-label" for="manual-calories">Calories Burned</label>
+            <input id="manual-calories" type="number" class="field-input" bind:value={manualCalories} placeholder="Optional" min="0" />
+          </div>
+        </div>
+
+        <div class="form-field">
+          <label class="field-label" for="manual-notes">Session Notes</label>
+          <textarea id="manual-notes" class="notes-input" bind:value={manualNotes} placeholder="How did it go?" rows="3"></textarea>
+        </div>
+
+        {#if manualError}
+          <p class="form-error">{manualError}</p>
+        {/if}
+
+        <div class="form-actions">
+          <Button variant="primary" onclick={saveManualCardio} disabled={manualSaving}>
+            {manualSaving ? "Saving..." : "Save"}
+          </Button>
+          <Button variant="secondary" onclick={closeManualCardio}>Cancel</Button>
+        </div>
+      </div>
+    </Card>
+  </section>
+{/if}
 
 <div class="stats-row">
   <StatNumber value={stats.thisWeekCount} label="this week" size="md" />
@@ -765,6 +917,119 @@
     background: var(--accent);
     color: white;
     border-color: var(--accent);
+  }
+
+  .dojo-controls {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: var(--space-4);
+  }
+
+  .manual-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .manual-title {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: 500;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  .manual-type-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  .manual-type-options .cardio-picker-option {
+    padding: var(--space-2) var(--space-4);
+  }
+
+  .manual-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-4);
+  }
+
+  .form-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    flex: 1;
+    min-width: 0;
+  }
+
+  .field-label {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--ink-faint);
+  }
+
+  .field-input {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    padding: var(--space-2) 0;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    color: var(--ink);
+    outline: none;
+    transition: border-color var(--transition-fast);
+  }
+
+  .field-input:focus {
+    border-bottom-color: var(--border-strong);
+  }
+
+  .datetime-inputs {
+    display: flex;
+    gap: var(--space-2);
+  }
+
+  .datetime-inputs input[type="date"] {
+    flex: 3;
+    min-width: 0;
+  }
+
+  .datetime-inputs input[type="time"] {
+    flex: 2;
+    min-width: 0;
+  }
+
+  .notes-input {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    padding: var(--space-2);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--ink);
+    outline: none;
+    resize: vertical;
+    transition: border-color var(--transition-fast);
+  }
+
+  .notes-input:focus {
+    border-color: var(--border-strong);
+  }
+
+  .form-error {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--accent);
+    margin: 0;
+  }
+
+  .form-actions {
+    display: flex;
+    gap: var(--space-2);
+    align-items: center;
   }
 
   .cardio-picker-actions {

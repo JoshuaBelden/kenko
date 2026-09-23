@@ -103,7 +103,8 @@ export const GET: RequestHandler = async ({ locals, params }) => {
       completedAt: { $gte: weekStart, $lte: weekEnd },
     }
     if (planIds.length > 0) {
-      weekLogQuery.planId = { $in: planIds }
+      // Manual cardio entries have no plan, so always count them
+      weekLogQuery.$or = [{ planId: { $in: planIds } }, { planId: null }]
     }
 
     const weekLogs = await logs.find(weekLogQuery).toArray()

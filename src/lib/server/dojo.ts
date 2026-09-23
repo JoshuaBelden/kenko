@@ -360,6 +360,50 @@ export async function startWorkoutLog(
   return created!
 }
 
+export const MANUAL_CARDIO_PLAN_NAME = "Manual Entry"
+
+export async function createManualCardioLog(
+  userId: ObjectId,
+  entry: {
+    cardioType: CardioType
+    startedAt: Date
+    completedAt: Date
+    cardioDistance: number | null
+    caloriesBurned: number | null
+    notes: string | null
+  },
+) {
+  const now = new Date()
+  const typeLabel = entry.cardioType.charAt(0).toUpperCase() + entry.cardioType.slice(1)
+
+  const logs = await getWorkoutLogsCollection()
+  const result = await logs.insertOne({
+    userId,
+    planId: null,
+    planSnapshot: {
+      planName: MANUAL_CARDIO_PLAN_NAME,
+      sessionName: entry.cardioType === "other" ? "Cardio" : typeLabel,
+      sessionType: "cardio",
+      exercises: [],
+    },
+    sets: [],
+    notes: entry.notes,
+    caloriesBurned: entry.caloriesBurned,
+    cardioDistance: entry.cardioDistance,
+    cardioType: entry.cardioType,
+    rpe: null,
+    status: "completed",
+    startedAt: entry.startedAt,
+    completedAt: entry.completedAt,
+    createdAt: now,
+    updatedAt: now,
+  })
+
+  const created = await logs.findOne({ _id: result.insertedId })
+  await calculateCardioPerformance(created!)
+  return (await logs.findOne({ _id: result.insertedId }))!
+}
+
 // ========================================
 // Performance Calculations
 // ========================================
