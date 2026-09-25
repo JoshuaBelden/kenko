@@ -41,6 +41,44 @@
   )
   const isOverBudget = $derived(remaining != null && remaining < 0)
 
+  type MacroKey = "calories" | "protein" | "netCarbs" | "fat"
+  const MACROS: { key: MacroKey; label: string; unit: string; field: string }[] = [
+    { key: "calories", label: "Calories", unit: "", field: "calculatedCalories" },
+    { key: "protein", label: "Protein", unit: "g", field: "calculatedProtein" },
+    { key: "netCarbs", label: "Net Carbs", unit: "g", field: "calculatedNetCarbs" },
+    { key: "fat", label: "Fat", unit: "g", field: "calculatedFat" },
+  ]
+
+  // Macro breakdown: which foods contributed to the selected macro
+  let selectedMacro = $state<MacroKey | null>(null)
+  const selectedMacroDef = $derived(MACROS.find(m => m.key === selectedMacro) ?? null)
+
+  const contributors = $derived.by(() => {
+    if (!selectedMacroDef) return []
+    const byFood = new Map<string, { name: string; amount: number }>()
+    for (const entries of Object.values(grouped) as any[][]) {
+      for (const entry of entries) {
+        const amount = entry[selectedMacroDef.field] ?? 0
+        if (amount <= 0) continue
+        const existing = byFood.get(entry.foodItemId)
+        if (existing) existing.amount += amount
+        else byFood.set(entry.foodItemId, { name: entry.foodName, amount })
+      }
+    }
+    const total = totals[selectedMacroDef.key] || 1
+    return [...byFood.values()]
+      .sort((a, b) => b.amount - a.amount)
+      .map(c => ({ ...c, percent: Math.round((c.amount / total) * 100) }))
+  })
+
+  function toggleMacro(key: MacroKey) {
+    selectedMacro = selectedMacro === key ? null : key
+  }
+
+  function formatMacro(value: number, unit: string) {
+    return unit ? `${Math.round(value * 10) / 10}${unit}` : `${Math.round(value)}`
+  }
+
   // Food search modal state
   let searchOpen = $state(false)
   let searchCategory = $state("uncategorized")
@@ -247,55 +285,58 @@
 <section class="macro-bar">
   <Card>
     <div class="macro-grid">
-      {#if macroTargets}
-        {#if macroTargets.calories != null}
-          <div class="macro-target macro-remaining" class:over={isOverBudget}>
-            <RadialProgress percent={remainingPercent} over={isOverBudget} size={84} strokeWidth={7}>
-              <span class="remaining-value">{Math.round(remaining ?? 0)}</span>
-              <span class="remaining-caption">remaining</span>
-            </RadialProgress>
-            <div class="remaining-breakdown">
-              <span>Goal {macroTargets.calories}</span>
-              <span>Food {Math.round(totals.calories)}</span>
-              <span>Exercise {Math.round(caloriesBurnedToday)}</span>
-            </div>
+      {#if macroTargets?.calories != null}
+        <div class="macro-target macro-remaining" class:over={isOverBudget}>
+          <RadialProgress percent={remainingPercent} over={isOverBudget} size={84} strokeWidth={7}>
+            <span class="remaining-value">{Math.round(remaining ?? 0)}</span>
+            <span class="remaining-caption">remaining</span>
+          </RadialProgress>
+          <div class="remaining-breakdown">
+            <span>Goal {macroTargets.calories}</span>
+            <span>Food {Math.round(totals.calories)}</span>
+            <span>Exercise {Math.round(caloriesBurnedToday)}</span>
           </div>
-        {/if}
-        <div class="macro-target" class:over={macroTargets.calories != null && totals.calories > macroTargets.calories * 1.05}>
-          <StatNumber value={totals.calories.toString()} label="Calories" size="sm" />
-          {#if macroTargets.calories}
-            <div class="progress-track"><div class="progress-fill" style="width: {Math.min(100, (totals.calories / macroTargets.calories) * 100)}%"></div></div>
-            <span class="target-label">{macroTargets.calories} goal</span>
-          {/if}
         </div>
-        <div class="macro-target" class:over={macroTargets.protein != null && totals.protein > macroTargets.protein * 1.05}>
-          <StatNumber value={`${totals.protein}g`} label="Protein" size="sm" />
-          {#if macroTargets.protein}
-            <div class="progress-track"><div class="progress-fill" style="width: {Math.min(100, (totals.protein / macroTargets.protein) * 100)}%"></div></div>
-            <span class="target-label">{macroTargets.protein}g goal</span>
-          {/if}
-        </div>
-        <div class="macro-target" class:over={macroTargets.netCarbs != null && totals.netCarbs > macroTargets.netCarbs * 1.05}>
-          <StatNumber value={`${totals.netCarbs}g`} label="Net Carbs" size="sm" />
-          {#if macroTargets.netCarbs}
-            <div class="progress-track"><div class="progress-fill" style="width: {Math.min(100, (totals.netCarbs / macroTargets.netCarbs) * 100)}%"></div></div>
-            <span class="target-label">{macroTargets.netCarbs}g goal</span>
-          {/if}
-        </div>
-        <div class="macro-target" class:over={macroTargets.fat != null && totals.fat > macroTargets.fat * 1.05}>
-          <StatNumber value={`${totals.fat}g`} label="Fat" size="sm" />
-          {#if macroTargets.fat}
-            <div class="progress-track"><div class="progress-fill" style="width: {Math.min(100, (totals.fat / macroTargets.fat) * 100)}%"></div></div>
-            <span class="target-label">{macroTargets.fat}g goal</span>
-          {/if}
-        </div>
-      {:else}
-        <StatNumber value={totals.calories.toString()} label="Calories" size="sm" />
-        <StatNumber value={`${totals.protein}g`} label="Protein" size="sm" />
-        <StatNumber value={`${totals.netCarbs}g`} label="Net Carbs" size="sm" />
-        <StatNumber value={`${totals.fat}g`} label="Fat" size="sm" />
       {/if}
+      {#each MACROS as macro (macro.key)}
+        {@const target = macroTargets?.[macro.key] ?? null}
+        <button
+          class="macro-target macro-toggle"
+          class:over={target != null && totals[macro.key] > target * 1.05}
+          class:active={selectedMacro === macro.key}
+          aria-pressed={selectedMacro === macro.key}
+          onclick={() => toggleMacro(macro.key)}
+        >
+          <StatNumber value={`${totals[macro.key]}${macro.unit}`} label={macro.label} size="sm" />
+          {#if target}
+            <div class="progress-track"><div class="progress-fill" style="width: {Math.min(100, (totals[macro.key] / target) * 100)}%"></div></div>
+            <span class="target-label">{target}{macro.unit} goal</span>
+          {/if}
+        </button>
+      {/each}
     </div>
+    {#if selectedMacroDef}
+      <div class="contributors">
+        <div class="contributors-header">
+          <span class="contributors-title">{selectedMacroDef.label} sources</span>
+          <button class="btn-text" onclick={() => (selectedMacro = null)}>Close</button>
+        </div>
+        {#if contributors.length === 0}
+          <p class="empty-cat">No {selectedMacroDef.label.toLowerCase()} logged yet</p>
+        {:else}
+          <ul class="contributors-list">
+            {#each contributors as c}
+              <li class="contributor">
+                <span class="contributor-name">{c.name}</span>
+                <span class="contributor-amount">{formatMacro(c.amount, selectedMacroDef.unit)}</span>
+                <span class="contributor-percent">{c.percent}%</span>
+                <div class="contributor-bar"><div class="contributor-fill" style="width: {c.percent}%"></div></div>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </div>
+    {/if}
   </Card>
 </section>
 
@@ -404,8 +445,13 @@
             {:else}
               <button class="entry-row" onclick={() => startEdit(entry)}>
                 <span class="entry-name">{entry.foodName}</span>
-                <span class="entry-servings">{entry.quantity} {entry.unit === "serving" ? (entry.quantity === 1 ? "serving" : "servings") : unitLabel(entry.unit)}</span>
-                <span class="entry-cals">{entry.calculatedCalories} cal</span>
+                <span class="entry-detail">
+                  <span class="entry-main">
+                    <span class="entry-servings">{entry.quantity} {entry.unit === "serving" ? (entry.quantity === 1 ? "serving" : "servings") : unitLabel(entry.unit)}</span>
+                    <span class="entry-cals">{entry.calculatedCalories} cal</span>
+                  </span>
+                  <span class="entry-macros">P {formatMacro(entry.calculatedProtein, "g")} &middot; C {formatMacro(entry.calculatedNetCarbs, "g")} &middot; F {formatMacro(entry.calculatedFat, "g")}</span>
+                </span>
               </button>
             {/if}
           </Card>
@@ -660,6 +706,100 @@
     transition: width var(--transition-fast);
   }
 
+  .macro-toggle {
+    background: none;
+    border: 0.5px solid transparent;
+    border-radius: var(--radius-sm);
+    padding: var(--space-2);
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    transition: all var(--transition-fast);
+  }
+
+  .macro-toggle:hover {
+    background: var(--paper-warm);
+  }
+
+  .macro-toggle.active {
+    border-color: var(--accent);
+  }
+
+  /* Macro contributors */
+  .contributors {
+    margin-top: var(--space-4);
+    padding-top: var(--space-4);
+    border-top: 0.5px solid var(--border);
+  }
+
+  .contributors-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-2);
+  }
+
+  .contributors-title {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--ink-faint);
+  }
+
+  .contributors-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .contributor {
+    display: grid;
+    grid-template-columns: 1fr auto 3rem;
+    align-items: center;
+    column-gap: var(--space-3);
+    row-gap: 2px;
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+  }
+
+  .contributor-name {
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .contributor-amount {
+    color: var(--ink-light);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .contributor-percent {
+    color: var(--ink-faint);
+    font-size: var(--text-xs);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .contributor-bar {
+    grid-column: 1 / -1;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .contributor-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+
   .macro-target.over .progress-fill {
     background: var(--accent-red);
   }
@@ -753,11 +893,30 @@
     flex: 1;
   }
 
+  .entry-detail {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+  }
+
+  .entry-main {
+    display: flex;
+    align-items: center;
+  }
+
   .entry-servings {
     font-size: var(--text-sm);
     color: var(--ink-faint);
     white-space: nowrap;
     padding: 0 var(--space-3);
+  }
+
+  .entry-macros {
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
 
   .entry-cals {
