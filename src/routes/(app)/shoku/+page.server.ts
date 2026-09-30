@@ -42,6 +42,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     totals.fat += entry.calculatedFat
   }
 
+  totals.calories = Math.round(totals.calories * 10) / 10
   totals.protein = Math.round(totals.protein * 10) / 10
   totals.netCarbs = Math.round(totals.netCarbs * 10) / 10
   totals.fat = Math.round(totals.fat * 10) / 10

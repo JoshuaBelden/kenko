@@ -76,7 +76,7 @@
   }
 
   function formatMacro(value: number, unit: string) {
-    return unit ? `${Math.round(value * 10) / 10}${unit}` : `${Math.round(value)}`
+    return `${Math.round(value * 10) / 10}${unit}`
   }
 
   // Food search modal state
@@ -307,7 +307,7 @@
           aria-pressed={selectedMacro === macro.key}
           onclick={() => toggleMacro(macro.key)}
         >
-          <StatNumber value={`${totals[macro.key]}${macro.unit}`} label={macro.label} size="sm" />
+          <StatNumber value={formatMacro(totals[macro.key], macro.unit)} label={macro.label} size="sm" />
           {#if target}
             <div class="progress-track"><div class="progress-fill" style="width: {Math.min(100, (totals[macro.key] / target) * 100)}%"></div></div>
             <span class="target-label">{target}{macro.unit} goal</span>
@@ -448,7 +448,7 @@
                 <span class="entry-detail">
                   <span class="entry-main">
                     <span class="entry-servings">{entry.quantity} {entry.unit === "serving" ? (entry.quantity === 1 ? "serving" : "servings") : unitLabel(entry.unit)}</span>
-                    <span class="entry-cals">{entry.calculatedCalories} cal</span>
+                    <span class="entry-cals">{formatMacro(entry.calculatedCalories, "")} cal</span>
                   </span>
                   <span class="entry-macros">P {formatMacro(entry.calculatedProtein, "g")} &middot; C {formatMacro(entry.calculatedNetCarbs, "g")} &middot; F {formatMacro(entry.calculatedFat, "g")}</span>
                 </span>
