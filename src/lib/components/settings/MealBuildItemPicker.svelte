@@ -24,9 +24,9 @@
     return foods.find((f: any) => f.id === id)
   }
 
-  type MacroSection = "protein" | "carbs" | "fat"
-  const SECTIONS: MacroSection[] = ["protein", "carbs", "fat"]
-  const LABELS: Record<MacroSection, string> = { protein: "Protein", carbs: "Carbs", fat: "Fat" }
+  type MacroSection = "protein" | "carbs" | "fat" | "supplements"
+  const SECTIONS: MacroSection[] = ["protein", "carbs", "fat", "supplements"]
+  const LABELS: Record<MacroSection, string> = { protein: "Protein", carbs: "Carbs", fat: "Fat", supplements: "Supplements" }
 
   function itemsBySection(section: MacroSection) {
     const query = searchQuery.trim().toLowerCase()

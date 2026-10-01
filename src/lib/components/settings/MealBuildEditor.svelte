@@ -7,7 +7,7 @@
     foodItemId: string
     servingSize: number
     servingUnit: string
-    macroType: "protein" | "carbs" | "fat"
+    macroType: "protein" | "carbs" | "fat" | "supplements"
   }
 
   interface MealBuild {
@@ -285,6 +285,7 @@
       protein: { items: [], totalP: 0, totalC: 0, totalF: 0, totalCal: 0 },
       carbs: { items: [], totalP: 0, totalC: 0, totalF: 0, totalCal: 0 },
       fat: { items: [], totalP: 0, totalC: 0, totalF: 0, totalCal: 0 },
+      supplements: { items: [], totalP: 0, totalC: 0, totalF: 0, totalCal: 0 },
     }
 
     mealItems.forEach((item, index) => {
@@ -298,7 +299,7 @@
       group.totalCal += Math.round(food.calories * item.servingSize)
     })
 
-    return (["protein", "carbs", "fat"] as const)
+    return (["protein", "carbs", "fat", "supplements"] as const)
       .filter((type) => groups[type].items.length > 0)
       .map((type) => ({ type, ...groups[type] }))
   }
@@ -361,14 +362,40 @@
         {/if}
       </div>
 
+      <div class="totals-summary">
+        {#each [
+          { label: "Calories", value: buildTotals.calories, target: targets.calories, unit: "" },
+          { label: "Protein", value: buildTotals.protein, target: targets.protein, unit: "g" },
+          { label: "Carbs", value: buildTotals.carbs, target: targets.carbs, unit: "g" },
+          { label: "Fat", value: buildTotals.fat, target: targets.fat, unit: "g" },
+        ] as row}
+          <div class="totals-item">
+            <span class="totals-label">{row.label}</span>
+            <span class="totals-value">{row.value}{row.unit}</span>
+            {#if row.target}
+              <div class="progress-track">
+                <div
+                  class="progress-fill"
+                  style="width: {progressPct(row.value, row.target)}%; background: {progressColor(row.value, row.target)}"
+                ></div>
+              </div>
+              <span class="totals-target">target {row.target}{row.unit}</span>
+            {/if}
+          </div>
+        {/each}
+      </div>
+
       {#each MEAL_CATEGORIES as category}
         {@const rows = mealMacroRows(category)}
         {@const mealCal = mealCalories(category)}
+        {@const mealP = rows.reduce((sum, r) => sum + r.totalP, 0)}
+        {@const mealC = rows.reduce((sum, r) => sum + r.totalC, 0)}
+        {@const mealF = rows.reduce((sum, r) => sum + r.totalF, 0)}
         <div class="meal-section">
           <div class="meal-section-header">
             <h5 class="meal-section-title">
               {MEAL_LABELS[category]}
-              {#if mealCal > 0}<span class="meal-cal">{mealCal} cal</span>{/if}
+              {#if mealCal > 0}<span class="meal-cal">{mealCal} cal, {mealP}g P, {mealC}g C, {mealF}g F</span>{/if}
             </h5>
           </div>
 
@@ -409,31 +436,6 @@
           </button>
         </div>
       {/each}
-    {/if}
-
-    {#if selectedBuild}
-      <div class="totals-summary">
-        {#each [
-          { label: "Calories", value: buildTotals.calories, target: targets.calories, unit: "" },
-          { label: "Protein", value: buildTotals.protein, target: targets.protein, unit: "g" },
-          { label: "Carbs", value: buildTotals.carbs, target: targets.carbs, unit: "g" },
-          { label: "Fat", value: buildTotals.fat, target: targets.fat, unit: "g" },
-        ] as row}
-          <div class="totals-item">
-            <span class="totals-label">{row.label}</span>
-            <span class="totals-value">{row.value}{row.unit}</span>
-            {#if row.target}
-              <div class="progress-track">
-                <div
-                  class="progress-fill"
-                  style="width: {progressPct(row.value, row.target)}%; background: {progressColor(row.value, row.target)}"
-                ></div>
-              </div>
-              <span class="totals-target">target {row.target}{row.unit}</span>
-            {/if}
-          </div>
-        {/each}
-      </div>
     {/if}
   {/if}
 </div>

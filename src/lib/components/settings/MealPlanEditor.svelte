@@ -1,10 +1,11 @@
 <script lang="ts">
   import { Button } from "$lib/components"
   import FoodSearchModal from "$lib/components/FoodSearchModal.svelte"
+  import LibraryFoodPicker from "./LibraryFoodPicker.svelte"
 
   interface MealPlanItem {
     foodItemId: string
-    macroType: "protein" | "carbs" | "fat"
+    macroType: "protein" | "carbs" | "fat" | "supplements"
   }
 
   interface Props {
@@ -19,8 +20,9 @@
 
   let { items, foods, categories, journeyId, macroTargets, effectiveCalorieTarget, onchange }: Props = $props()
 
-  type MacroSection = "protein" | "carbs" | "fat"
+  type MacroSection = "protein" | "carbs" | "fat" | "supplements"
   let activeSection = $state<MacroSection>("protein")
+  let showLibraryPicker = $state(false)
   let showFoodSearch = $state(false)
   let localFoods = $state<any[]>([])
 
@@ -37,7 +39,7 @@
   }
 
   function sectionTarget(section: MacroSection) {
-    if (!macroTargets || !effectiveCalorieTarget) return null
+    if (section === "supplements" || !macroTargets || !effectiveCalorieTarget) return null
     const macro = macroTargets[section]
     if (!macro) return null
 
@@ -80,7 +82,10 @@
     return sorted
   }
 
-  async function handleFoodSelected(foodId: string) {
+  async function handleFoodSelected(foodId: string, food?: any) {
+    if (food && !getFoodById(foodId)) {
+      localFoods = [...localFoods, food]
+    }
     // Fetch food details if not already in our local foods array
     if (!getFoodById(foodId)) {
       const res = await fetch(`/api/shoku/foods/${foodId}`)
@@ -100,6 +105,7 @@
     // Auto-save to journey
     await saveToJourney(newItems)
     showFoodSearch = false
+    showLibraryPicker = false
   }
 
   async function removeItem(index: number) {
@@ -141,6 +147,15 @@
     protein: "Protein",
     carbs: "Carbs",
     fat: "Fat",
+    supplements: "Supplements",
+  }
+
+  const sortedCategories = $derived([...categories].sort((a, b) => a.name.localeCompare(b.name)))
+  const SECTION_SORT: Record<MacroSection, "protein" | "netCarbs" | "fat" | "name"> = {
+    protein: "protein",
+    carbs: "netCarbs",
+    fat: "fat",
+    supplements: "name",
   }
 
   const activeTarget = $derived(sectionTarget(activeSection))
@@ -149,7 +164,7 @@
 
 <div class="meal-plan-editor">
   <div class="section-toggle">
-    {#each (["protein", "carbs", "fat"] as MacroSection[]) as section}
+    {#each (["protein", "carbs", "fat", "supplements"] as MacroSection[]) as section}
       {@const target = sectionTarget(section)}
       <button
         class="section-btn"
@@ -157,7 +172,7 @@
         onclick={() => (activeSection = section)}
       >
         {SECTION_LABELS[section]}
-        {#if target}
+        {#if target || section === "supplements"}
           <span class="section-count">{sectionItems(section).length}</span>
         {/if}
       </button>
@@ -200,7 +215,7 @@
                   onchange={(e) => updateFoodCategory(item.food.id, e.currentTarget.value || null)}
                 >
                   <option value="">Uncategorized</option>
-                  {#each categories as cat}
+                  {#each sortedCategories as cat}
                     <option value={cat.id}>{cat.name}</option>
                   {/each}
                 </select>
@@ -217,10 +232,22 @@
   {/if}
 
   <div class="add-area">
-    <Button variant="secondary" onclick={() => (showFoodSearch = true)}>Add food</Button>
+    <Button variant="secondary" onclick={() => (showLibraryPicker = true)}>Add food</Button>
   </div>
 
 </div>
+
+<LibraryFoodPicker
+  open={showLibraryPicker}
+  initialSort={SECTION_SORT[activeSection]}
+  excludeIds={sectionItems(activeSection).map((i) => i.foodItemId)}
+  onclose={() => (showLibraryPicker = false)}
+  onselect={(food) => handleFoodSelected(food.id, food)}
+  onsearch={() => {
+    showLibraryPicker = false
+    showFoodSearch = true
+  }}
+/>
 
 <FoodSearchModal
   open={showFoodSearch}
