@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte"
   import { goto, invalidateAll } from "$app/navigation"
   import { page } from "$app/state"
   import { Button, Card, PageHeader, StatNumber } from "$lib/components"
@@ -34,9 +35,9 @@
     stats = page.data.stats ?? { thisWeekCount: 0, totalSessions: 0 }
   })
 
-  let activeTab = $state<"recovery" | "recent">("recovery")
+  let activeTab = $state<"recovery" | "recent">("recent")
 
-  // Recent Sessions data is only fetched once that tab is opened.
+  // Recent Sessions is the default tab; its data is fetched client-side on mount.
   let recentLogs = $state<any[] | null>(null)
   let recentLogsLoading = $state(false)
 
@@ -50,6 +51,8 @@
     }
     recentLogsLoading = false
   }
+
+  onMount(loadRecentLogs)
 
   function openRecentTab() {
     activeTab = "recent"
@@ -387,19 +390,9 @@
   {/if}
 </section>
 
-<!-- Recovery / Recent Sessions Tabs -->
+<!-- Recent Sessions / Recovery Tabs -->
 <section class="section">
   <div class="dojo-tabs" role="tablist">
-    <button
-      type="button"
-      class="dojo-tab"
-      class:active={activeTab === "recovery"}
-      role="tab"
-      aria-selected={activeTab === "recovery"}
-      onclick={() => (activeTab = "recovery")}
-    >
-      Recovery
-    </button>
     <button
       type="button"
       class="dojo-tab"
@@ -409,6 +402,16 @@
       onclick={openRecentTab}
     >
       Recent Sessions
+    </button>
+    <button
+      type="button"
+      class="dojo-tab"
+      class:active={activeTab === "recovery"}
+      role="tab"
+      aria-selected={activeTab === "recovery"}
+      onclick={() => (activeTab = "recovery")}
+    >
+      Recovery
     </button>
   </div>
 

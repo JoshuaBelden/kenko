@@ -116,31 +116,28 @@ export async function getJourneyOverview(
       ? await plans.find({ _id: { $in: planIds }, userId }).toArray()
       : []
 
-    // Build a set of completed plan+session+day combos this week, keyed by the
-    // actual calendar day (in the user's timezone) each log was completed on —
-    // not just "happened sometime this week" — so an early/backfilled session
-    // only marks its own scheduled day complete, not every day of the week.
-    const completedKeys = new Set(
-      weekLogs.map((l) => {
-        const completedDow = l.completedAt ? dayOfWeekTz(new Date(l.completedAt), userTz) : null
-        return `${l.planId?.toString()}::${l.planSnapshot?.sessionName}::${completedDow}`
-      }),
-    )
+    // Target days are suggestions: any completed log this week for a plan's
+    // session crosses it off, regardless of which day it was recorded. Logs are
+    // counted per plan+session name so a session listed twice in a plan needs
+    // two logs to cross off both.
+    const remaining = new Map<string, number>()
+    for (const l of weekLogs) {
+      const key = `${l.planId?.toString()}::${l.planSnapshot?.sessionName}`
+      remaining.set(key, (remaining.get(key) ?? 0) + 1)
+    }
 
     const todayDow = dayOfWeekTz(now, userTz)
     const upcoming: Array<{ planName: string; sessionName: string; targetDay: number | null; completed: boolean }> = []
     for (const plan of selectedPlans) {
       for (const session of plan.sessions ?? []) {
-        const targetDay = session.targetDayOfWeek ?? null
-        const completed = targetDay === null
-          ? weekLogs.some(
-              (l) => l.planId?.toString() === plan._id.toString() && l.planSnapshot?.sessionName === session.name,
-            )
-          : completedKeys.has(`${plan._id.toString()}::${session.name}::${targetDay}`)
+        const key = `${plan._id.toString()}::${session.name}`
+        const left = remaining.get(key) ?? 0
+        const completed = left > 0
+        if (completed) remaining.set(key, left - 1)
         upcoming.push({
           planName: plan.name,
           sessionName: session.name,
-          targetDay,
+          targetDay: session.targetDayOfWeek ?? null,
           completed,
         })
       }
