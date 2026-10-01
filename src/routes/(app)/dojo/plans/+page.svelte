@@ -84,6 +84,7 @@
   {#if !creating}
     <Button variant="secondary" onclick={() => importInput.click()}>Import</Button>
     <input type="file" accept=".json" bind:this={importInput} onchange={handleImportFile} class="hidden-input" />
+    <Button variant="secondary" href="/dojo/plans/generate">Plan Generator</Button>
     <Button variant="primary" onclick={startCreatePlan}>+ New Plan</Button>
   {/if}
 </div>

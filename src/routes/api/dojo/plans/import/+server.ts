@@ -1,8 +1,9 @@
 import {
-  getExercisesCollection,
   getWorkoutPlansCollection,
-  exerciseFilterForUser,
   serializeWorkoutPlan,
+  loadExerciseNameIndex,
+  resolveOrCreateExercise,
+  buildPlanSessionDoc,
 } from "$lib/server/dojo"
 import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
@@ -17,11 +18,9 @@ export const POST: RequestHandler = async ({ locals, request }) => {
   if (!Array.isArray(body.sessions)) return json({ error: "Invalid plan: sessions array is required" }, { status: 400 })
 
   const userId = new ObjectId(locals.userId)
-  const exercisesCol = await getExercisesCollection()
 
   // Load all exercises visible to this user for name matching
-  const userExercises = await exercisesCol.find(exerciseFilterForUser(userId)).toArray()
-  const exerciseByName = new Map(userExercises.map(e => [e.name.toLowerCase(), e]))
+  const exerciseByName = await loadExerciseNameIndex(userId)
 
   // Resolve each exercise by name — create user-scoped exercises for any that don't exist
   const resolvedSessions = []
@@ -31,41 +30,23 @@ export const POST: RequestHandler = async ({ locals, request }) => {
       const name = ex.exerciseName?.trim()
       if (!name) continue
 
-      let matched: { _id: ObjectId; [key: string]: any } | undefined = exerciseByName.get(name.toLowerCase())
-      if (!matched) {
-        // Create a user-scoped exercise
-        const now = new Date()
-        const result = await exercisesCol.insertOne({
-          userId,
-          isGlobal: false,
-          name,
-          muscleGroup: ex.muscleGroup ?? { region: "torso", muscle: "chest" },
-          equipment: ex.equipment ?? "bodyweight",
-          createdAt: now,
-          updatedAt: now,
-        })
-        matched = (await exercisesCol.findOne({ _id: result.insertedId })) ?? undefined
-        exerciseByName.set(name.toLowerCase(), matched!)
-      }
+      const matched = await resolveOrCreateExercise(userId, exerciseByName, {
+        name,
+        muscleGroup: ex.muscleGroup ?? { region: "torso", muscle: "chest" },
+        equipment: ex.equipment ?? "bodyweight",
+      })
 
       resolvedExercises.push({
-        _id: new ObjectId(),
-        exerciseId: matched!._id,
+        exerciseId: matched._id,
         order: ex.order ?? resolvedExercises.length,
-        targetSets: ex.targetSets ?? 3,
-        targetReps: ex.targetReps ?? 10,
-        targetWeight: ex.targetWeight ?? null,
-        restSeconds: ex.restSeconds ?? 90,
+        targetSets: ex.targetSets,
+        targetReps: ex.targetReps,
+        targetWeight: ex.targetWeight,
+        restSeconds: ex.restSeconds,
       })
     }
 
-    resolvedSessions.push({
-      _id: new ObjectId(),
-      name: session.name ?? "Session",
-      type: session.type === "cardio" ? "cardio" : "strength",
-      targetDayOfWeek: session.targetDayOfWeek ?? null,
-      exercises: resolvedExercises,
-    })
+    resolvedSessions.push(buildPlanSessionDoc(session, resolvedExercises))
   }
 
   const now = new Date()

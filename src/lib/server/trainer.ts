@@ -272,18 +272,31 @@ export function streamTrainerReply(chat: TrainerChatState, apiKey: string, effor
     // Caches the growing conversation so follow-ups re-read the context snapshot at ~10% cost
     cache_control: { type: "ephemeral" },
     messages,
+    ...modelParams(chat.model, effort),
   }
 
-  if (chat.model !== "claude-haiku-4-5") {
-    params.output_config = { effort }
+  return new Anthropic({ apiKey }).beta.messages.stream(params)
+}
+
+/** Model-specific request params: effort (not supported on Haiku) and Opus's server-side fallback. */
+export function modelParams(
+  model: TrainerModel,
+  effort: TrainerEffort,
+  format?: Anthropic.Beta.BetaJSONOutputFormat,
+): Pick<Anthropic.Beta.MessageCreateParams, "output_config" | "betas" | "fallbacks"> {
+  const params: Pick<Anthropic.Beta.MessageCreateParams, "output_config" | "betas" | "fallbacks"> = {}
+  if (model !== "claude-haiku-4-5" || format) {
+    params.output_config = {
+      ...(model !== "claude-haiku-4-5" ? { effort } : {}),
+      ...(format ? { format } : {}),
+    }
   }
-  if (chat.model === "claude-opus-5") {
+  if (model === "claude-opus-5") {
     // If Opus declines a request, the API re-runs it on a fallback model within the same call
     params.betas = ["server-side-fallback-2026-07-01"]
     params.fallbacks = "default"
   }
-
-  return new Anthropic({ apiKey }).beta.messages.stream(params)
+  return params
 }
 
 /**

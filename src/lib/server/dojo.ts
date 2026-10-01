@@ -1,4 +1,5 @@
 import { ObjectId, type Document, type Filter, type WithId } from "mongodb"
+import type { Equipment, Muscle, MuscleRegion } from "$lib/planDraft"
 import { getDb } from "./db"
 
 // ========================================
@@ -29,35 +30,7 @@ export async function getPlanForUser(userId: ObjectId, planId: string) {
 // Types
 // ========================================
 
-export type MuscleRegion = "torso" | "arms" | "lower_body"
-
-export type Muscle =
-  | "chest"
-  | "abs"
-  | "back"
-  | "lower_back"
-  | "trapezius"
-  | "neck"
-  | "shoulders"
-  | "biceps"
-  | "triceps"
-  | "forearms"
-  | "glutes"
-  | "quads"
-  | "hamstrings"
-  | "calves"
-  | "abductors"
-  | "adductors"
-
-export type Equipment =
-  | "barbell"
-  | "dumbbell"
-  | "cable"
-  | "machine"
-  | "medicine_ball"
-  | "resistance_band"
-  | "bodyweight"
-  | "other"
+export type { Equipment, Muscle, MuscleRegion }
 
 export type SessionType = "strength" | "cardio"
 
@@ -282,6 +255,72 @@ export function serializeWorkoutLog(doc: WithId<Document>) {
 // ========================================
 // Helpers
 // ========================================
+
+/** Lowercased name → exercise, for every exercise visible to the user. The user's own exercises win name collisions. */
+export async function loadExerciseNameIndex(userId: ObjectId): Promise<Map<string, WithId<Document>>> {
+  const exercises = await getExercisesCollection()
+  const docs = await exercises.find(exerciseFilterForUser(userId)).toArray()
+  const index = new Map<string, WithId<Document>>()
+  for (const doc of docs) {
+    const key = doc.name.toLowerCase()
+    if (!index.has(key) || !doc.isGlobal) index.set(key, doc)
+  }
+  return index
+}
+
+/** Finds an exercise by name (case-insensitive) or creates a user-scoped one, adding it to the index. */
+export async function resolveOrCreateExercise(
+  userId: ObjectId,
+  index: Map<string, WithId<Document>>,
+  ex: { name: string; muscleGroup: { region: MuscleRegion; muscle: Muscle }; equipment: Equipment },
+): Promise<WithId<Document>> {
+  const key = ex.name.toLowerCase()
+  const existing = index.get(key)
+  if (existing) return existing
+
+  const now = new Date()
+  const exercises = await getExercisesCollection()
+  const result = await exercises.insertOne({
+    userId,
+    isGlobal: false,
+    name: ex.name,
+    muscleGroup: ex.muscleGroup,
+    equipment: ex.equipment,
+    createdAt: now,
+    updatedAt: now,
+  })
+  const created = (await exercises.findOne({ _id: result.insertedId }))!
+  index.set(key, created)
+  return created
+}
+
+export function buildPlanSessionDoc(
+  session: { name?: string; type?: string; targetDayOfWeek?: number | null },
+  exercises: {
+    exerciseId: ObjectId
+    order?: number
+    targetSets?: number
+    targetReps?: number
+    targetWeight?: number | null
+    restSeconds?: number
+  }[],
+) {
+  return {
+    _id: new ObjectId(),
+    name: session.name ?? "Session",
+    type: session.type === "cardio" ? "cardio" : "strength",
+    targetDayOfWeek: session.targetDayOfWeek ?? null,
+    exercises: exercises.map((e, i) => ({
+      _id: new ObjectId(),
+      exerciseId: e.exerciseId,
+      order: e.order ?? i,
+      targetSets: e.targetSets ?? 3,
+      targetReps: e.targetReps ?? 10,
+      targetWeight: e.targetWeight ?? null,
+      restSeconds: e.restSeconds ?? 90,
+    })),
+  }
+}
 
 export async function startWorkoutLog(
   userId: ObjectId,
