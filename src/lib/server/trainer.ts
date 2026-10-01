@@ -1,4 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk"
+import { dev } from "$app/environment"
+import { json } from "@sveltejs/kit"
 import { ObjectId, type Document, type WithId } from "mongodb"
 import { getJournalEntriesCollection, getTrainerChatsCollection, getUsersCollection } from "./collections"
 import { dateStrFromDate, getCalendarDays } from "./calendar"
@@ -92,7 +94,7 @@ export function serializeTrainerChat(doc: WithId<Document>) {
 
 // ── Context snapshot ──
 
-function htmlToText(html: string | null | undefined): string | null {
+export function htmlToText(html: string | null | undefined): string | null {
   if (!html) return null
   const text = html
     .replace(/<\/(p|li|h[1-6]|blockquote)>|<br\s*\/?>/gi, "\n")
@@ -109,7 +111,7 @@ function htmlToText(html: string | null | undefined): string | null {
   return text || null
 }
 
-function ageFrom(birthDate: unknown, now: Date): number | null {
+export function ageFrom(birthDate: unknown, now: Date): number | null {
   if (!birthDate) return null
   const b = new Date(birthDate as string)
   if (isNaN(b.getTime())) return null
@@ -119,7 +121,7 @@ function ageFrom(birthDate: unknown, now: Date): number | null {
   return age
 }
 
-function section(title: string, data: unknown): string {
+export function section(title: string, data: unknown): string {
   return `## ${title}\n\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\``
 }
 
@@ -254,8 +256,10 @@ export interface TrainerChatState {
   messages: { role: "user" | "assistant"; content: string }[]
 }
 
+export type TrainerEffort = "low" | "medium" | "high"
+
 /** Starts a streaming reply for the chat. The first user turn is the frozen context + kickoff prompt. */
-export function streamTrainerReply(chat: TrainerChatState, apiKey: string) {
+export function streamTrainerReply(chat: TrainerChatState, apiKey: string, effort: TrainerEffort = "medium") {
   const messages: Anthropic.Beta.BetaMessageParam[] = [
     { role: "user", content: `${chat.contextSnapshot}\n\n${chat.kickoffPrompt}` },
     ...chat.messages.map((m) => ({ role: m.role, content: m.content })),
@@ -271,7 +275,7 @@ export function streamTrainerReply(chat: TrainerChatState, apiKey: string) {
   }
 
   if (chat.model !== "claude-haiku-4-5") {
-    params.output_config = { effort: "medium" }
+    params.output_config = { effort }
   }
   if (chat.model === "claude-opus-5") {
     // If Opus declines a request, the API re-runs it on a fallback model within the same call
@@ -280,4 +284,101 @@ export function streamTrainerReply(chat: TrainerChatState, apiKey: string) {
   }
 
   return new Anthropic({ apiKey }).beta.messages.stream(params)
+}
+
+/**
+ * Streams the assistant's reply to the client as plain text, then hands the full reply to `onComplete`
+ * for saving. Waits for the first event so auth/rate-limit/config errors return a proper status
+ * instead of a broken stream.
+ */
+export async function streamTrainerResponse(
+  chat: TrainerChatState,
+  apiKey: string,
+  onComplete: (reply: string) => Promise<void>,
+  options: { effort?: TrainerEffort; logTag?: string } = {},
+): Promise<Response> {
+  const tag = options.logTag ?? "trainer"
+  let stream: ReturnType<typeof streamTrainerReply>
+  let iterator: AsyncIterator<Anthropic.Beta.BetaRawMessageStreamEvent>
+  let first: IteratorResult<Anthropic.Beta.BetaRawMessageStreamEvent>
+  try {
+    stream = streamTrainerReply(chat, apiKey, options.effort)
+    iterator = stream[Symbol.asyncIterator]()
+    first = await iterator.next()
+  } catch (err) {
+    return trainerErrorResponse(err, tag)
+  }
+
+  const encoder = new TextEncoder()
+  const body = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        let event = first
+        while (!event.done) {
+          const e = event.value
+          if (e.type === "content_block_delta" && e.delta.type === "text_delta") {
+            controller.enqueue(encoder.encode(e.delta.text))
+          }
+          event = await iterator.next()
+        }
+
+        const final = await stream.finalMessage()
+        let reply = final.content
+          .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")
+          .map((b) => b.text)
+          .join("")
+
+        if (final.stop_reason === "refusal") {
+          const note = "I'm not able to help with that one. Let's get back to your journey — what else can I help you with?"
+          const suffix = reply ? `\n\n${note}` : note
+          reply += suffix
+          controller.enqueue(encoder.encode(suffix))
+        } else if (final.stop_reason === "max_tokens") {
+          reply += "…"
+          controller.enqueue(encoder.encode("…"))
+        }
+
+        if (dev) {
+          const u = final.usage
+          console.log(
+            `[${tag}] ${final.model} in=${u.input_tokens} cache_read=${u.cache_read_input_tokens ?? 0} cache_write=${u.cache_creation_input_tokens ?? 0} out=${u.output_tokens}`,
+          )
+        }
+
+        await onComplete(reply)
+        controller.close()
+      } catch (err) {
+        console.error(`[${tag}] stream failed`, err)
+        controller.error(err)
+      }
+    },
+    cancel() {
+      stream.abort()
+    },
+  })
+
+  return new Response(body, {
+    headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
+  })
+}
+
+export function trainerErrorResponse(err: unknown, tag = "trainer") {
+  if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
+    return json(
+      { error: "Anthropic rejected your API key. Update it in Journey Settings → Trainer." },
+      { status: 403 },
+    )
+  }
+  if (err instanceof Anthropic.RateLimitError) {
+    return json(
+      { error: "Your Anthropic account hit a rate or spend limit. Try again in a minute, or check your Anthropic Console billing." },
+      { status: 429 },
+    )
+  }
+  if (err instanceof Anthropic.APIError) {
+    console.error(`[${tag}] API error ${err.status}`, err.message)
+    return json({ error: "The trainer couldn't respond. Please try again." }, { status: 502 })
+  }
+  console.error(`[${tag}] unexpected error`, err)
+  return json({ error: "The trainer couldn't respond. Please try again." }, { status: 500 })
 }

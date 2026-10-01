@@ -25,6 +25,11 @@ export async function getTrainerChatsCollection() {
   return db.collection("trainerChats")
 }
 
+export async function getTrainerGuidanceCollection() {
+  const db = await getDb()
+  return db.collection("trainerGuidance")
+}
+
 export async function getWeightLogCollection() {
   const db = await getDb()
   return db.collection("weightLog")

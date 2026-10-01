@@ -1,5 +1,3 @@
-import Anthropic from "@anthropic-ai/sdk"
-import { dev } from "$app/environment"
 import { getJourneysCollection, getTrainerChatsCollection } from "$lib/server/collections"
 import { todayStr } from "$lib/server/dates"
 import {
@@ -9,7 +7,7 @@ import {
   getTrainerKeyStatus,
   resolveTrainerSettings,
   serializeTrainerChat,
-  streamTrainerReply,
+  streamTrainerResponse,
   type TrainerChatState,
 } from "$lib/server/trainer"
 import { json } from "@sveltejs/kit"
@@ -119,69 +117,9 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     }
   }
 
-  let stream: ReturnType<typeof streamTrainerReply>
-  let iterator: AsyncIterator<Anthropic.Beta.BetaRawMessageStreamEvent>
-  let first: IteratorResult<Anthropic.Beta.BetaRawMessageStreamEvent>
-  try {
-    stream = streamTrainerReply(chat, apiKey)
-    iterator = stream[Symbol.asyncIterator]()
-    // Wait for the first event so auth/rate-limit/config errors return a proper status instead of a broken stream
-    first = await iterator.next()
-  } catch (err) {
-    return trainerErrorResponse(err)
-  }
-
-  const encoder = new TextEncoder()
-  const body$ = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      try {
-        let event = first
-        while (!event.done) {
-          const e = event.value
-          if (e.type === "content_block_delta" && e.delta.type === "text_delta") {
-            controller.enqueue(encoder.encode(e.delta.text))
-          }
-          event = await iterator.next()
-        }
-
-        const final = await stream.finalMessage()
-        let reply = final.content
-          .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")
-          .map((b) => b.text)
-          .join("")
-
-        if (final.stop_reason === "refusal") {
-          const note = "I'm not able to help with that one. Let's get back to your journey — what else can I help you with today?"
-          const suffix = reply ? `\n\n${note}` : note
-          reply += suffix
-          controller.enqueue(encoder.encode(suffix))
-        } else if (final.stop_reason === "max_tokens") {
-          reply += "…"
-          controller.enqueue(encoder.encode("…"))
-        }
-
-        if (dev) {
-          const u = final.usage
-          console.log(
-            `[trainer] ${final.model} in=${u.input_tokens} cache_read=${u.cache_read_input_tokens ?? 0} cache_write=${u.cache_creation_input_tokens ?? 0} out=${u.output_tokens}`,
-          )
-        }
-
-        await saveTurn(userId, journeyId, today, chat, existing !== null, message, reply)
-        controller.close()
-      } catch (err) {
-        console.error("[trainer] stream failed", err)
-        controller.error(err)
-      }
-    },
-    cancel() {
-      stream.abort()
-    },
-  })
-
-  return new Response(body$, {
-    headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
-  })
+  return streamTrainerResponse(chat, apiKey, (reply) =>
+    saveTurn(userId, journeyId, today, chat, existing !== null, message, reply),
+  )
 }
 
 async function saveTurn(
@@ -225,25 +163,4 @@ async function saveTurn(
     // Two "Today's Recommendations" clicks raced; keep the first chat
     if (!(err instanceof MongoServerError && err.code === 11000)) throw err
   }
-}
-
-function trainerErrorResponse(err: unknown) {
-  if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
-    return json(
-      { error: "Anthropic rejected your API key. Update it in Journey Settings → Trainer." },
-      { status: 403 },
-    )
-  }
-  if (err instanceof Anthropic.RateLimitError) {
-    return json(
-      { error: "Your Anthropic account hit a rate or spend limit. Try again in a minute, or check your Anthropic Console billing." },
-      { status: 429 },
-    )
-  }
-  if (err instanceof Anthropic.APIError) {
-    console.error(`[trainer] API error ${err.status}`, err.message)
-    return json({ error: "The trainer couldn't respond. Please try again." }, { status: 502 })
-  }
-  console.error("[trainer] unexpected error", err)
-  return json({ error: "The trainer couldn't respond. Please try again." }, { status: 500 })
 }

@@ -7,7 +7,7 @@
   import { localToday, localDateStr, localTimeStr, toDatetime } from "$lib/dates"
   import { formatDate, formatDateShort } from "$lib/format"
   import { icons } from "$lib/icons"
-  import { DEFAULT_KICKOFF_PROMPT, DEFAULT_SYSTEM_PROMPT, DEFAULT_TRAINER_MODEL } from "$lib/trainer"
+  import { DEFAULT_KICKOFF_PROMPT, DEFAULT_SYSTEM_PROMPT, DEFAULT_TRAINER_MODEL, trainerModelLabel } from "$lib/trainer"
   import { tooltip } from "$lib/tooltip.svelte"
 
   function weightDotTooltip(date: string, weight: number): string {
@@ -30,9 +30,65 @@
     journey?.shokuTargets || journey?.danjikiTargets || journey?.dojoTargets || journey?.kataTargets,
   )
 
-  type Tab = "overview" | "journal" | "progress"
-  let activeTab = $state<Tab>("overview")
+  type Tab = "overview" | "journal" | "progress" | "guidance"
+  const TABS: Tab[] = ["overview", "journal", "progress", "guidance"]
+  const initialTab = page.url.searchParams.get("tab") as Tab | null
+  let activeTab = $state<Tab>(initialTab && TABS.includes(initialTab) ? initialTab : "overview")
   let showSettings = $state(false)
+
+  // ── Guidance tab ──
+  type GuidanceSummary = { id: string; date: string; requestedAt: string; model: string }
+  let guidanceList = $state<GuidanceSummary[]>([])
+  let guidanceTodayId = $state<string | null>(null)
+  let guidanceHasKey = $state(false)
+  let guidanceLoading = $state(false)
+  let guidanceLoaded = $state(false)
+  let guidanceRequesting = $state(false)
+  let guidanceError = $state("")
+
+  $effect(() => {
+    if (activeTab === "guidance" && journey && !guidanceLoaded) loadGuidance()
+  })
+
+  async function loadGuidance() {
+    guidanceLoading = true
+    guidanceError = ""
+    try {
+      const res = await fetch(`/api/guidance?journeyId=${journey.id}`)
+      if (!res.ok) throw new Error()
+      const body = await res.json()
+      guidanceList = body.guidance
+      guidanceTodayId = body.todayId
+      guidanceHasKey = body.hasApiKey
+      guidanceLoaded = true
+    } catch {
+      guidanceError = "Couldn't load your guidance history."
+    } finally {
+      guidanceLoading = false
+    }
+  }
+
+  async function requestGuidance() {
+    if (guidanceTodayId) {
+      goto(`/tabi/${journey.id}/guidance/${guidanceTodayId}`)
+      return
+    }
+    guidanceRequesting = true
+    guidanceError = ""
+    try {
+      const res = await fetch("/api/guidance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ journeyId: journey.id }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(body.error ?? "Couldn't start your guidance. Please try again.")
+      goto(`/tabi/${journey.id}/guidance/${body.id}`)
+    } catch (err) {
+      guidanceError = err instanceof Error ? err.message : "Couldn't start your guidance. Please try again."
+      guidanceRequesting = false
+    }
+  }
 
   // ── Progress tab: calendar state ──
   type CalendarView = "week" | "month"
@@ -901,6 +957,9 @@
     </button>
     <button class="tab" class:tab-active={activeTab === "progress"} onclick={() => (activeTab = "progress")}>
       Progress
+    </button>
+    <button class="tab" class:tab-active={activeTab === "guidance"} onclick={() => (activeTab = "guidance")}>
+      Guidance
     </button>
     <button class="settings-link" onclick={() => (showSettings = true)}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -1829,6 +1888,49 @@
         </div>
       </div>
     {/if}
+  {:else if activeTab === "guidance"}
+    <div class="guidance">
+      <div class="guidance-header">
+        <p class="guidance-intro">
+          A big-picture review of your whole journey: whether you're really hitting your targets, what's holding you
+          back and what to change. Measured against why this journey matters to you.
+        </p>
+        {#if guidanceHasKey || guidanceTodayId}
+          <Button onclick={requestGuidance} disabled={guidanceRequesting || guidanceLoading}>
+            {guidanceRequesting ? "PREPARING…" : guidanceTodayId ? "VIEW TODAY'S GUIDANCE" : "GET GUIDANCE"}
+          </Button>
+        {/if}
+      </div>
+
+      {#if guidanceLoaded && !guidanceHasKey && !guidanceTodayId}
+        <Card>
+          <p class="guidance-muted">
+            Guidance needs an Anthropic API key. Add one in <strong>Journey Settings → Trainer</strong>.
+          </p>
+        </Card>
+      {/if}
+
+      {#if guidanceError}
+        <p class="guidance-error">{guidanceError}</p>
+      {/if}
+
+      {#if guidanceLoading && !guidanceLoaded}
+        <p class="guidance-muted">Loading...</p>
+      {:else if guidanceLoaded && guidanceList.length === 0}
+        <p class="guidance-muted">No guidance yet.</p>
+      {:else if guidanceList.length > 0}
+        <ul class="guidance-list">
+          {#each guidanceList as g (g.id)}
+            <li>
+              <a class="guidance-item" href={`/tabi/${journey.id}/guidance/${g.id}`}>
+                <span class="guidance-date">{formatDate(g.requestedAt, tz)}</span>
+                <span class="guidance-model">{trainerModelLabel(g.model)}</span>
+              </a>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </div>
   {/if}
 {/if}
 
@@ -1946,6 +2048,74 @@
   .btn-archive:hover {
     border-color: var(--border-strong);
     color: var(--ink);
+  }
+
+  /* ── Guidance tab ── */
+  .guidance {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+  }
+
+  .guidance-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-4);
+  }
+
+  .guidance-intro,
+  .guidance-muted {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink-light);
+    margin: 0;
+    max-width: 60ch;
+  }
+
+  .guidance-error {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--accent-red);
+    margin: 0;
+  }
+
+  .guidance-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .guidance-item {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding: var(--space-4) 0;
+    border-bottom: 1px solid var(--border);
+    text-decoration: none;
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    transition: color var(--transition-fast);
+  }
+
+  .guidance-item:hover {
+    color: var(--accent);
+  }
+
+  .guidance-model {
+    font-size: var(--text-xs);
+    letter-spacing: 0.05em;
+    color: var(--ink-faint);
+  }
+
+  @media (max-width: 640px) {
+    .guidance-header {
+      flex-direction: column;
+      align-items: stretch;
+    }
   }
 
   /* ── Tab navigation ── */
