@@ -11,9 +11,9 @@
   import { DEFAULT_WORKOUT_TYPES, type WorkoutType } from "$lib/workoutTypes"
   import { tooltip } from "$lib/tooltip.svelte"
 
-  function weightDotTooltip(date: string, weight: number): string {
+  function weightDotTooltip(date: string, weight: number, unit = "lbs"): string {
     const label = new Date(date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-    return `${label}: ${weight} lbs`
+    return `${label}: ${weight} ${unit}`
   }
 
   const data = $derived(page.data as any)
@@ -624,39 +624,16 @@
   type WeightCardRange = "week" | "month" | "all"
   let weightCardRange = $state<WeightCardRange>("week")
 
-  const weightProgressCard = $derived.by(() => {
-    const w = overviewData?.weight
-    const targetWeightGoal = w?.targetWeight as number | null | undefined
-    if (!w || targetWeightGoal == null) return null
+  type TrendSeries = {
+    entries: Array<{ date: string; weight: number }>
+    trendStart: { date: string; weight: number }
+    trendEnd: { date: string; weight: number }
+    yMin: number
+    yMax: number
+  }
 
-    const currentWeight = page.data.user?.profile?.weight ?? null
-    const allEntries = w.entries as Array<{ date: string; weight: number }>
-
-    if (!allEntries.length) {
-      return { hasEntries: false as const, targetWeight: targetWeightGoal, currentWeight }
-    }
-
-    const todayDate = new Date(calendarToday + "T00:00:00")
-    const cutoff =
-      weightCardRange === "week"
-        ? new Date(todayDate.getTime() - 6 * 86400000)
-        : weightCardRange === "month"
-          ? new Date(todayDate.getTime() - 29 * 86400000)
-          : null
-
-    const entries = cutoff
-      ? allEntries.filter((e) => new Date(e.date + "T00:00:00").getTime() >= cutoff.getTime())
-      : allEntries
-
-    if (!entries.length) {
-      return { hasEntries: false as const, targetWeight: targetWeightGoal, currentWeight }
-    }
-
-    const chartStart = cutoff ?? new Date(entries[0].date + "T00:00:00")
-    const chartEnd = todayDate
-    const totalMs = Math.max(chartEnd.getTime() - chartStart.getTime(), 1)
-
-    // Linear (least-squares) trend line over the plotted entries
+  /** Least-squares trend and y-range for a measurement series; `refs` are extra values the y-range must include. */
+  function buildTrendSeries(entries: Array<{ date: string; weight: number }>, chartStart: Date, refs: number[] = []): TrendSeries {
     const xs = entries.map((e) => (new Date(e.date + "T00:00:00").getTime() - chartStart.getTime()) / 86400000)
     const ys = entries.map((e) => e.weight)
     const n = xs.length
@@ -670,26 +647,60 @@
 
     const trendStart = { date: entries[0].date, weight: intercept + slope * xs[0] }
     const trendEnd = { date: entries[n - 1].date, weight: intercept + slope * xs[n - 1] }
-    const trendDirection = slope > 0.01 ? "up" : slope < -0.01 ? "down" : "flat"
 
-    const allWeights = [...ys, targetWeightGoal, trendStart.weight, trendEnd.weight]
-    const minW = Math.min(...allWeights)
-    const maxW = Math.max(...allWeights)
+    const all = [...ys, ...refs, trendStart.weight, trendEnd.weight]
+    const minW = Math.min(...all)
+    const maxW = Math.max(...all)
     const padding = Math.max((maxW - minW) * 0.15, 1)
+
+    return { entries, trendStart, trendEnd, yMin: minW - padding, yMax: maxW + padding }
+  }
+
+  const weightProgressCard = $derived.by(() => {
+    const w = overviewData?.weight
+    const targetWeightGoal = w?.targetWeight as number | null | undefined
+    if (!w || targetWeightGoal == null) return null
+
+    const currentWeight = page.data.user?.profile?.weight ?? null
+    const allEntries = w.entries as Array<{ date: string; weight: number }>
+    const allWaist = ((w.waistEntries ?? []) as Array<{ date: string; waist: number }>).map((e) => ({
+      date: e.date,
+      weight: e.waist,
+    }))
+    const currentWaist = allWaist.at(-1)?.weight ?? null
+
+    const todayDate = new Date(calendarToday + "T00:00:00")
+    const cutoff =
+      weightCardRange === "week"
+        ? new Date(todayDate.getTime() - 6 * 86400000)
+        : weightCardRange === "month"
+          ? new Date(todayDate.getTime() - 29 * 86400000)
+          : null
+
+    const inRange = (e: { date: string }) => !cutoff || new Date(e.date + "T00:00:00").getTime() >= cutoff.getTime()
+    const entries = allEntries.filter(inRange)
+    const waistEntries = allWaist.filter(inRange)
+
+    if (!entries.length && !waistEntries.length) {
+      return { hasEntries: false as const, targetWeight: targetWeightGoal, currentWeight, currentWaist }
+    }
+
+    // Both charts share the x-axis so weight and waist line up by date
+    const firstDate = [entries[0]?.date, waistEntries[0]?.date].filter(Boolean).sort()[0] as string
+    const chartStart = cutoff ?? new Date(firstDate + "T00:00:00")
+    const chartEnd = todayDate
+    const totalMs = Math.max(chartEnd.getTime() - chartStart.getTime(), 1)
 
     return {
       hasEntries: true as const,
-      entries,
       targetWeight: targetWeightGoal,
       currentWeight,
+      currentWaist,
       chartStart,
       chartEnd,
       totalMs,
-      trendStart,
-      trendEnd,
-      trendDirection,
-      yMin: minW - padding,
-      yMax: maxW + padding,
+      weight: entries.length ? buildTrendSeries(entries, chartStart, [targetWeightGoal]) : null,
+      waist: waistEntries.length ? buildTrendSeries(waistEntries, chartStart) : null,
     }
   })
 
@@ -719,6 +730,7 @@
 
   // Journal field states
   let jBodyWeight = $state("")
+  let jWaistInches = $state("")
   let jSleepDuration = $state("")
   let jSleepQuality = $state<number | null>(null)
   let jMorningNotes = $state<string | null>(null)
@@ -736,6 +748,7 @@
   function syncJournalFields(entry: any) {
     if (!entry) {
       jBodyWeight = ""
+      jWaistInches = ""
       jSleepDuration = ""
       jSleepQuality = null
       jMorningNotes = null
@@ -751,6 +764,7 @@
     const m = entry.morning ?? {}
     const e = entry.evening ?? {}
     jBodyWeight = m.bodyWeight?.toString() ?? ""
+    jWaistInches = m.waistInches?.toString() ?? ""
     jSleepDuration = m.sleepDuration?.toString() ?? ""
     jSleepQuality = m.sleepQuality ?? null
     jMorningNotes = m.notes ?? null
@@ -763,7 +777,7 @@
     jEveningNotes = e.notes ?? null
 
     // Auto-switch to evening tab if morning has been filled in
-    const hasMorning = m.bodyWeight != null || m.sleepDuration != null || m.sleepQuality != null || m.notes
+    const hasMorning = m.bodyWeight != null || m.waistInches != null || m.sleepDuration != null || m.sleepQuality != null || m.notes
     if (hasMorning && journalTab === "morning") journalTab = "evening"
   }
 
@@ -1076,6 +1090,70 @@
           </Card>
         {/if}
 
+        {#snippet trendChart(
+          range: { chartStart: Date; chartEnd: Date; totalMs: number },
+          series: TrendSeries,
+          unit: string,
+          target: number | null,
+        )}
+          {@const cW = 600}
+          {@const cH = 200}
+          {@const cPad = { top: 20, right: 20, bottom: 34, left: 56 }}
+          {@const plotW = cW - cPad.left - cPad.right}
+          {@const plotH = cH - cPad.top - cPad.bottom}
+          {@const xForDate = (d: Date) => cPad.left + (plotW * (d.getTime() - range.chartStart.getTime())) / range.totalMs}
+          {@const yForValue = (v: number) => cPad.top + plotH - (plotH * (v - series.yMin)) / (series.yMax - series.yMin)}
+          {@const tx1 = xForDate(new Date(series.trendStart.date + "T00:00:00"))}
+          {@const ty1 = yForValue(series.trendStart.weight)}
+          {@const tx2 = xForDate(new Date(series.trendEnd.date + "T00:00:00"))}
+          {@const ty2 = yForValue(series.trendEnd.weight)}
+
+          <svg class="weight-chart" viewBox="0 0 {cW} {cH}" preserveAspectRatio="xMidYMid meet">
+            <!-- Y-axis gridlines and labels -->
+            {#each Array(5) as _, i}
+              {@const yVal = series.yMin + ((series.yMax - series.yMin) * (4 - i)) / 4}
+              {@const y = cPad.top + (plotH * i) / 4}
+              <line x1={cPad.left} y1={y} x2={cW - cPad.right} y2={y} class="chart-grid" />
+              <text x={cPad.left - 6} y={y + 4} class="chart-label" text-anchor="end">{Math.round(yVal * 10) / 10}</text>
+            {/each}
+
+            <!-- X-axis labels -->
+            <text x={xForDate(range.chartStart)} y={cH - 4} class="chart-label" text-anchor="start">
+              {formatDateShort(range.chartStart.toISOString(), tz)}
+            </text>
+            <text x={xForDate(range.chartEnd)} y={cH - 4} class="chart-label" text-anchor="end">
+              {formatDateShort(range.chartEnd.toISOString(), tz)}
+            </text>
+
+            <!-- Target reference line -->
+            {#if target != null}
+              {@const yTarget = yForValue(target)}
+              <line x1={cPad.left} y1={yTarget} x2={cW - cPad.right} y2={yTarget} class="chart-line-target" />
+              <text x={cW - cPad.right} y={yTarget - 6} class="chart-label-goal" text-anchor="end">Target</text>
+            {/if}
+
+            <!-- Actual line -->
+            {#if series.entries.length >= 2}
+              <polyline
+                fill="none"
+                class="chart-line-actual"
+                points={series.entries.map((e) => `${xForDate(new Date(e.date + "T00:00:00"))},${yForValue(e.weight)}`).join(" ")}
+              />
+            {/if}
+
+            <!-- Actual dots -->
+            {#each series.entries as e}
+              {@const x = xForDate(new Date(e.date + "T00:00:00"))}
+              {@const y = yForValue(e.weight)}
+              <circle cx={x} cy={y} r="8" class="chart-dot-hit" use:tooltip={weightDotTooltip(e.date, e.weight, unit)} />
+              <circle cx={x} cy={y} r="3" class="chart-dot" />
+            {/each}
+
+            <!-- Linear trend line -->
+            <line x1={tx1} y1={ty1} x2={tx2} y2={ty2} class="chart-line-trend" />
+          </svg>
+        {/snippet}
+
         <!-- Weight Widget -->
         {#if weightProgressCard}
           {@const wp = weightProgressCard}
@@ -1119,69 +1197,19 @@
               <div class="remaining-rows">
                 <div class="remaining-row"><span class="stat-label">Current</span><span class="stat-values">{wp.currentWeight != null ? `${wp.currentWeight} lbs` : "—"}</span></div>
                 <div class="remaining-row"><span class="stat-label">Target</span><span class="stat-values">{wp.targetWeight} lbs</span></div>
+                <div class="remaining-row"><span class="stat-label">Waist</span><span class="stat-values">{wp.currentWaist != null ? `${wp.currentWaist} in` : "—"}</span></div>
               </div>
 
               {#if wp.hasEntries}
-                {@const cW = 600}
-                {@const cH = 200}
-                {@const cPad = { top: 20, right: 20, bottom: 34, left: 56 }}
-                {@const plotW = cW - cPad.left - cPad.right}
-                {@const plotH = cH - cPad.top - cPad.bottom}
-                {@const xForDate = (d: Date) => cPad.left + (plotW * (d.getTime() - wp.chartStart.getTime())) / wp.totalMs}
-                {@const yForWeight = (w: number) => cPad.top + plotH - (plotH * (w - wp.yMin)) / (wp.yMax - wp.yMin)}
-                {@const yTarget = yForWeight(wp.targetWeight)}
-                {@const tx1 = xForDate(new Date(wp.trendStart.date + "T00:00:00"))}
-                {@const ty1 = yForWeight(wp.trendStart.weight)}
-                {@const tx2 = xForDate(new Date(wp.trendEnd.date + "T00:00:00"))}
-                {@const ty2 = yForWeight(wp.trendEnd.weight)}
-
-                <svg class="weight-chart" viewBox="0 0 {cW} {cH}" preserveAspectRatio="xMidYMid meet">
-                  <!-- Y-axis gridlines and labels -->
-                  {#each Array(5) as _, i}
-                    {@const yVal = wp.yMin + ((wp.yMax - wp.yMin) * (4 - i)) / 4}
-                    {@const y = cPad.top + (plotH * i) / 4}
-                    <line x1={cPad.left} y1={y} x2={cW - cPad.right} y2={y} class="chart-grid" />
-                    <text x={cPad.left - 6} y={y + 4} class="chart-label" text-anchor="end">{Math.round(yVal * 10) / 10}</text>
-                  {/each}
-
-                  <!-- X-axis labels -->
-                  <text x={xForDate(wp.chartStart)} y={cH - 4} class="chart-label" text-anchor="start">
-                    {formatDateShort(wp.chartStart.toISOString(), tz)}
-                  </text>
-                  <text x={xForDate(wp.chartEnd)} y={cH - 4} class="chart-label" text-anchor="end">
-                    {formatDateShort(wp.chartEnd.toISOString(), tz)}
-                  </text>
-
-                  <!-- Target weight reference line -->
-                  <line x1={cPad.left} y1={yTarget} x2={cW - cPad.right} y2={yTarget} class="chart-line-target" />
-                  <text x={cW - cPad.right} y={yTarget - 6} class="chart-label-goal" text-anchor="end">Target</text>
-
-                  <!-- Actual weight line -->
-                  {#if wp.entries.length >= 2}
-                    <polyline
-                      fill="none"
-                      class="chart-line-actual"
-                      points={wp.entries.map((e: {date: string, weight: number}) => {
-                        const x = xForDate(new Date(e.date + "T00:00:00"))
-                        const y = yForWeight(e.weight)
-                        return `${x},${y}`
-                      }).join(" ")}
-                    />
-                  {/if}
-
-                  <!-- Actual weight dots -->
-                  {#each wp.entries as e}
-                    {@const x = xForDate(new Date(e.date + "T00:00:00"))}
-                    {@const y = yForWeight(e.weight)}
-                    <circle cx={x} cy={y} r="8" class="chart-dot-hit" use:tooltip={weightDotTooltip(e.date, e.weight)} />
-                    <circle cx={x} cy={y} r="3" class="chart-dot" />
-                  {/each}
-
-                  <!-- Linear trend line -->
-                  <line x1={tx1} y1={ty1} x2={tx2} y2={ty2} class="chart-line-trend" />
-                </svg>
+                {#if wp.weight}
+                  {@render trendChart(wp, wp.weight, "lbs", wp.targetWeight)}
+                {/if}
+                {#if wp.waist}
+                  <span class="stat-label weight-chart-caption">Waist (in)</span>
+                  {@render trendChart(wp, wp.waist, "in", null)}
+                {/if}
               {:else}
-                <p class="widget-text">Log your weight in today's journal check-in to start tracking progress.</p>
+                <p class="widget-text">Log your weight and waist in today's journal check-in to start tracking progress.</p>
               {/if}
             </div>
           </Card>
@@ -1407,6 +1435,18 @@
                 bind:value={jBodyWeight}
                 placeholder="Optional"
                 onblur={() => saveMorningField("bodyWeight", jBodyWeight ? Number(jBodyWeight) : null)}
+              />
+            </div>
+
+            <div class="journal-field">
+              <label class="field-label" for="j-waist">Waist (inches)</label>
+              <input
+                id="j-waist"
+                type="number"
+                step="any"
+                bind:value={jWaistInches}
+                placeholder="Optional"
+                onblur={() => saveMorningField("waistInches", jWaistInches ? Number(jWaistInches) : null)}
               />
             </div>
 
@@ -1907,11 +1947,12 @@
           {/if}
 
           <!-- Weight -->
-          {#if sd.weight}
+          {#if sd.weight || sd.waist}
             <div class="day-section">
               <span class="day-section-title">Weight</span>
               <div class="day-section-content">
-                <span>{sd.weight} lbs</span>
+                {#if sd.weight}<span>{sd.weight} lbs</span>{/if}
+                {#if sd.waist}<span>{sd.waist} in waist</span>{/if}
               </div>
             </div>
           {/if}
@@ -2456,6 +2497,11 @@
     stroke: var(--accent, #2ecc71);
     stroke-width: 1.5;
     stroke-dasharray: 5 3;
+  }
+
+  .weight-chart-caption {
+    display: block;
+    margin-top: var(--space-3);
   }
 
   .weight-range-toggle {

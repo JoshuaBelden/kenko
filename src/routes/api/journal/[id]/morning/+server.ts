@@ -3,7 +3,7 @@ import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
 import type { RequestHandler } from "./$types"
 
-const VALID_MORNING_FIELDS = ["bodyWeight", "sleepDuration", "sleepQuality", "notes"]
+const VALID_MORNING_FIELDS = ["bodyWeight", "waistInches", "sleepDuration", "sleepQuality", "notes"]
 
 export const PUT: RequestHandler = async ({ locals, request, params }) => {
   if (!locals.userId) return json({ error: "Unauthorized" }, { status: 401 })
@@ -39,15 +39,21 @@ export const PUT: RequestHandler = async ({ locals, request, params }) => {
   }
 
   // If bodyWeight was set, upsert weight log and update profile
+  const date = updated.date as string
   if (fields.bodyWeight != null) {
     const weight = Number(fields.bodyWeight)
     if (weight > 0) {
-      const date = updated.date as string
       await Promise.all([
-        upsertWeightLog(userId, date, weight),
+        upsertWeightLog(userId, date, { weight }),
         updateProfileWeight(userId, weight),
       ])
     }
+  }
+
+  // If waistInches was set, record it on the same day's weight log
+  if (fields.waistInches != null) {
+    const waist = Number(fields.waistInches)
+    if (waist > 0) await upsertWeightLog(userId, date, { waist })
   }
 
   return json(serializeJournalEntry(updated))

@@ -229,7 +229,8 @@ export async function getJourneyOverview(
     .toArray()
 
   result.weight = {
-    entries: weightEntries.map((e) => ({ date: e.date, weight: e.weight })),
+    entries: weightEntries.filter((e) => e.weight != null).map((e) => ({ date: e.date, weight: e.weight })),
+    waistEntries: weightEntries.filter((e) => e.waist != null).map((e) => ({ date: e.date, waist: e.waist })),
     journeyStart: journeyStartStr,
     journeyEnd: journeyEndStr,
     weightGoalLbsPerWeek: journey.shokuTargets?.weightGoalLbsPerWeek ?? null,

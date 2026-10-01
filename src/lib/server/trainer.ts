@@ -159,6 +159,7 @@ export async function buildTrainerContext(
   const place = profile.zipCode ? await geocodeZip(profile.zipCode) : null
   const weight = overview.weight ?? {}
   const weightEntries: { date: string; weight: number }[] = weight.entries ?? []
+  const waistEntries: { date: string; waist: number }[] = weight.waistEntries ?? []
   const journeyStartDay = dateStrFromDate(new Date(journey.startDate), tz)
   const startingWeight =
     [...weightEntries].reverse().find((e) => e.date <= journeyStartDay) ??
@@ -180,6 +181,7 @@ export async function buildTrainerContext(
     date: e.date,
     morning: {
       bodyWeight: e.morning?.bodyWeight ?? null,
+      waistInches: e.morning?.waistInches ?? null,
       sleepDuration: e.morning?.sleepDuration ?? null,
       sleepQuality: e.morning?.sleepQuality ?? null,
       notes: htmlToText(e.morning?.notes),
@@ -219,7 +221,7 @@ export async function buildTrainerContext(
 
   const parts = [
     `# Trainer context for ${today} (timezone ${tz})`,
-    "Day-of-week numbers use 0 = Sunday. Weights are in lbs, water in oz, fasting and sleep in hours. Journal ratings are 1–5.",
+    "Day-of-week numbers use 0 = Sunday. Weights are in lbs, waist in inches, water in oz, fasting and sleep in hours. Journal ratings are 1–5.",
     section("Profile", {
       firstName: profile.firstName ?? null,
       age: ageFrom(profile.birthDate, now),
@@ -238,6 +240,14 @@ export async function buildTrainerContext(
       targetWeight: weight.targetWeight ?? null,
       weightGoalLbsPerWeek: weight.weightGoalLbsPerWeek ?? null,
       recentEntries: weightEntries.slice(-14),
+    }),
+    section("Waist trend (inches)", {
+      startingWaist:
+        [...waistEntries].reverse().find((e) => e.date <= journeyStartDay) ??
+        waistEntries.find((e) => e.date >= journeyStartDay) ??
+        null,
+      latest: waistEntries.at(-1) ?? null,
+      recentEntries: waistEntries.slice(-14),
     }),
     section(`Progress by day (${lastWeekStart} to ${today})`, progressDays),
     section("Journal entries (last week and this week)", journal),

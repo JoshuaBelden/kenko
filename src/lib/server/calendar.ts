@@ -130,6 +130,7 @@ export async function getCalendarDays(
         commitmentsMet: 0,
         commitmentsTotal: totalCommitments,
         weight: null,
+        waist: null,
         weather: null,
         caloriesConsumed: 0,
         caloriesBurned: 0,
@@ -197,7 +198,8 @@ export async function getCalendarDays(
   // Weight entries
   for (const entry of weightEntries) {
     const day = ensureDay(entry.date)
-    day.weight = entry.weight
+    day.weight = entry.weight ?? null
+    day.waist = entry.waist ?? null
   }
 
   // Food item logs

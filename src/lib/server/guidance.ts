@@ -175,7 +175,7 @@ export async function buildGuidanceContext(
           )
         : [],
       getWeightLogCollection().then((col) =>
-        col.find({ userId, date: { $lte: lastDay } }).sort({ date: 1 }).toArray(),
+        col.find({ userId, date: { $lte: lastDay }, weight: { $ne: null } }).sort({ date: 1 }).toArray(),
       ),
       planIds.length
         ? getWorkoutPlansCollection().then((col) => col.find({ _id: { $in: planIds }, userId }).toArray())

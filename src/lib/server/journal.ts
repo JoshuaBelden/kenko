@@ -21,6 +21,7 @@ export async function createJournalEntry(userId: ObjectId, journeyId: ObjectId, 
     date,
     morning: {
       bodyWeight: null,
+      waistInches: null,
       sleepDuration: null,
       sleepQuality: null,
       notes: null,
@@ -79,13 +80,14 @@ export async function updateWeather(entryId: ObjectId, userId: ObjectId, weather
   )
 }
 
-export async function upsertWeightLog(userId: ObjectId, date: string, weight: number) {
+/** Upserts the day's body measurements (weight in lbs, waist in inches); only provided fields are set. */
+export async function upsertWeightLog(userId: ObjectId, date: string, fields: { weight?: number; waist?: number }) {
   const weightLog = await getWeightLogCollection()
   const now = new Date()
   await weightLog.updateOne(
     { userId, date },
     {
-      $set: { weight, updatedAt: now },
+      $set: { ...fields, updatedAt: now },
       $setOnInsert: { userId, date, createdAt: now },
     },
     { upsert: true },
@@ -126,6 +128,7 @@ export function serializeJournalEntry(doc: WithId<Document>) {
     date: doc.date,
     morning: doc.morning ?? {
       bodyWeight: null,
+      waistInches: null,
       sleepDuration: null,
       sleepQuality: null,
       notes: null,
@@ -150,7 +153,8 @@ export function serializeWeightLogEntry(doc: WithId<Document>) {
     id: doc._id.toString(),
     userId: doc.userId.toString(),
     date: doc.date,
-    weight: doc.weight,
+    weight: doc.weight ?? null,
+    waist: doc.waist ?? null,
     createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
     updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
   }
