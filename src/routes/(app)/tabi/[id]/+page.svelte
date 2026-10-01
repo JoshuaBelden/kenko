@@ -705,6 +705,10 @@
   let journalLoading = $state(false)
   let journalTab = $state<"morning" | "evening" | "trainer">("morning")
   let yesterdayIntention = $state<string | null>(null)
+  let dayCheck = $state<{ habits: string[]; workouts: string[]; meals: string[] } | null>(null)
+  const hasUnfinished = $derived(
+    !!dayCheck && dayCheck.habits.length + dayCheck.workouts.length + dayCheck.meals.length > 0,
+  )
   let weatherRefreshing = $state(false)
 
   // Journal field states
@@ -760,9 +764,10 @@
   async function loadJournalEntry() {
     if (!journey) return
     journalLoading = true
-    const [entryRes, intentionRes] = await Promise.all([
+    const [entryRes, intentionRes, checkRes] = await Promise.all([
       fetch(`/api/journal?journeyId=${journey.id}&date=${journalDate}`),
       fetch(`/api/journal/yesterday-intention?journeyId=${journey.id}&date=${journalDate}`),
+      fetch(`/api/journal/day-check?journeyId=${journey.id}&date=${journalDate}`),
     ])
     if (entryRes.ok) {
       const data = await entryRes.json()
@@ -773,6 +778,7 @@
       const data = await intentionRes.json()
       yesterdayIntention = data.intention
     }
+    dayCheck = checkRes.ok ? await checkRes.json() : null
     journalLoading = false
   }
 
@@ -1429,6 +1435,23 @@
 
         {:else}
           <div class="journal-form">
+            {#if hasUnfinished && dayCheck}
+              <div class="day-check">
+                <span class="day-check-label">Unfinished business</span>
+                <ul class="day-check-list">
+                  {#if dayCheck.habits.length > 0}
+                    <li>Unchecked habits: {dayCheck.habits.join(", ")}</li>
+                  {/if}
+                  {#if dayCheck.workouts.length > 0}
+                    <li>Workouts not recorded: {dayCheck.workouts.join(", ")}</li>
+                  {/if}
+                  {#if dayCheck.meals.length > 0}
+                    <li>No food logged for {dayCheck.meals.join(", ")}</li>
+                  {/if}
+                </ul>
+              </div>
+            {/if}
+
             <div class="journal-field">
               <span class="field-label">Mood</span>
               <StarRating
@@ -3099,6 +3122,33 @@
     letter-spacing: 0.1em;
     color: var(--ink-faint);
     white-space: nowrap;
+  }
+
+  .day-check {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding: var(--space-3);
+    background: var(--accent-red-soft);
+    border-left: 3px solid var(--accent-red);
+    border-radius: var(--radius-sm);
+  }
+
+  .day-check-label {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent-red);
+  }
+
+  .day-check-list {
+    margin: 0;
+    padding-left: var(--space-4);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--ink);
   }
 
   .intention-text {
