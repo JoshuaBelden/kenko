@@ -1,10 +1,10 @@
 import {
-  CARDIO_TYPES,
   calculateAndStorePerformance,
   calculateCardioPerformance,
   getWorkoutLogsCollection,
   serializeWorkoutLog,
 } from "$lib/server/dojo"
+import { isWorkoutTypeKey } from "$lib/workoutTypes"
 import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
 import type { RequestHandler } from "./$types"
@@ -28,7 +28,7 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
   if (body.cardioDistance !== undefined) updates.cardioDistance = body.cardioDistance
 
   if (body.cardioType !== undefined) {
-    if (body.cardioType !== null && !CARDIO_TYPES.includes(body.cardioType)) {
+    if (body.cardioType !== null && !isWorkoutTypeKey(body.cardioType)) {
       return json({ error: "Invalid cardioType" }, { status: 400 })
     }
     updates.cardioType = body.cardioType

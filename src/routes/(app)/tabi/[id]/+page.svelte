@@ -8,6 +8,7 @@
   import { formatDate, formatDateShort } from "$lib/format"
   import { icons } from "$lib/icons"
   import { DEFAULT_KICKOFF_PROMPT, DEFAULT_SYSTEM_PROMPT, DEFAULT_TRAINER_MODEL, trainerModelLabel } from "$lib/trainer"
+  import { DEFAULT_WORKOUT_TYPES, type WorkoutType } from "$lib/workoutTypes"
   import { tooltip } from "$lib/tooltip.svelte"
 
   function weightDotTooltip(date: string, weight: number): string {
@@ -284,6 +285,7 @@
   let selectedPlanIds = $state<string[]>([])
   let dojoSessionsPerWeek = $state("")
   let dojoWeeklyCalorieBurn = $state("")
+  let workoutTypes = $state<WorkoutType[]>(DEFAULT_WORKOUT_TYPES)
 
   // Habits settings
   let selectedCommitmentIds = $state<string[]>([])
@@ -329,6 +331,7 @@
       case "selectedPlanIds": selectedPlanIds = value; break
       case "sessionsPerWeek": dojoSessionsPerWeek = value; break
       case "weeklyCalorieBurn": dojoWeeklyCalorieBurn = value; break
+      case "workoutTypes": workoutTypes = value; break
       case "selectedCommitmentIds": selectedCommitmentIds = value; break
       case "mealPlanItems": mealPlanItems = value; break
       case "mealBuilds": mealBuilds = value; break
@@ -387,6 +390,8 @@
       dojoSessionsPerWeek = dj.sessionsPerWeek?.toString() ?? ""
       dojoWeeklyCalorieBurn = dj.weeklyCalorieBurn?.toString() ?? ""
     }
+
+    workoutTypes = j.workoutTypes ?? DEFAULT_WORKOUT_TYPES
 
     const k = j.kataTargets
     if (k) {
@@ -493,6 +498,7 @@
         shokuTargets,
         danjikiTargets,
         dojoTargets,
+        workoutTypes,
         kataTargets,
         shokuMealPlan,
         shokuMealBuilds,
@@ -933,6 +939,7 @@
     {selectedPlanIds}
     dojoSessionsPerWeek={dojoSessionsPerWeek}
     dojoWeeklyCalorieBurn={dojoWeeklyCalorieBurn}
+    {workoutTypes}
     {allCommitments}
     {selectedCommitmentIds}
     {trainerKey}

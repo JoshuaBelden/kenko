@@ -61,9 +61,8 @@ export type Equipment =
 
 export type SessionType = "strength" | "cardio"
 
-export type CardioType = "run" | "cycle" | "row" | "swim" | "other"
-
-export const CARDIO_TYPES: CardioType[] = ["run", "cycle", "row", "swim", "other"]
+/** Key of a workout type from the journey's configurable list (see $lib/workoutTypes). */
+export type CardioType = string
 
 export const RECOVERY_WINDOW_DAYS = 5
 
@@ -93,6 +92,13 @@ const RUN_MUSCLE_CONTRIBUTIONS: { muscle: Muscle; weight: number }[] = [
   { muscle: "lower_back", weight: 0.4 },
   { muscle: "abs", weight: 0.2 },
 ]
+
+// Foot-based activities load the legs; others (cycle, row, swim, custom) are left out of
+// recovery until they have their own muscle models.
+const FOOT_ACTIVITIES: Record<string, { fatigueScale: number; typicalMinPerMile: number }> = {
+  run: { fatigueScale: 1.0, typicalMinPerMile: 10 },
+  hike: { fatigueScale: 0.5, typicalMinPerMile: 20 },
+}
 
 export function rpeToIntensityFactor(rpe: number | null | undefined): number {
   if (rpe == null) return 0.75
@@ -366,6 +372,7 @@ export async function createManualCardioLog(
   userId: ObjectId,
   entry: {
     cardioType: CardioType
+    typeLabel: string
     startedAt: Date
     completedAt: Date
     cardioDistance: number | null
@@ -374,7 +381,6 @@ export async function createManualCardioLog(
   },
 ) {
   const now = new Date()
-  const typeLabel = entry.cardioType.charAt(0).toUpperCase() + entry.cardioType.slice(1)
 
   const logs = await getWorkoutLogsCollection()
   const result = await logs.insertOne({
@@ -382,7 +388,7 @@ export async function createManualCardioLog(
     planId: null,
     planSnapshot: {
       planName: MANUAL_CARDIO_PLAN_NAME,
-      sessionName: entry.cardioType === "other" ? "Cardio" : typeLabel,
+      sessionName: entry.cardioType === "other" ? "Workout" : entry.typeLabel,
       sessionType: "cardio",
       exercises: [],
     },
@@ -667,7 +673,7 @@ export async function calculateCardioPerformance(
   const logs = await getWorkoutLogsCollection()
   const now = new Date()
 
-  const cardioType: CardioType = (logDoc.cardioType ?? "other") as CardioType
+  const cardioType: CardioType = logDoc.cardioType ?? "other"
   const rpe: number | null = typeof logDoc.rpe === "number" ? logDoc.rpe : null
   const miles: number | null =
     typeof logDoc.cardioDistance === "number" && logDoc.cardioDistance > 0
@@ -687,8 +693,10 @@ export async function calculateCardioPerformance(
 
   const intensityFactor = rpeToIntensityFactor(rpe)
 
+  const foot = FOOT_ACTIVITIES[cardioType] ?? null
+
   const pace =
-    cardioType === "run" && miles && durationMinutes != null && durationMinutes > 0
+    foot && miles && durationMinutes != null && durationMinutes > 0
       ? durationMinutes / miles
       : null
 
@@ -701,8 +709,12 @@ export async function calculateCardioPerformance(
     contributionWeight: number
   }[] | null = null
 
-  if (cardioType === "run" && miles) {
-    const baseFatigue = miles * intensityFactor * 50
+  // Distance is optional — without it, estimate miles from duration at a typical pace
+  const fatigueMiles =
+    miles ?? (foot && durationMinutes ? durationMinutes / foot.typicalMinPerMile : null)
+
+  if (foot && fatigueMiles) {
+    const baseFatigue = fatigueMiles * intensityFactor * 50 * foot.fatigueScale
     muscleFatigue = RUN_MUSCLE_CONTRIBUTIONS.map(({ muscle, weight }) => ({
       muscle,
       region: REGION_BY_MUSCLE[muscle],

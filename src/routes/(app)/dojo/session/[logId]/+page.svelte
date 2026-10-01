@@ -3,15 +3,11 @@
   import { page } from "$app/state"
   import { Button, Card, PageHeader } from "$lib/components"
   import { icons } from "$lib/icons"
-  import { cardioTypeLabel, formatDuration, formatPace } from "$lib/format"
+  import { formatDuration, formatPace } from "$lib/format"
+  import { DEFAULT_WORKOUT_TYPES, workoutTypeLabel, type WorkoutType } from "$lib/workoutTypes"
 
-  const CARDIO_TYPE_OPTIONS = [
-    { value: "run", label: "Run" },
-    { value: "cycle", label: "Cycle" },
-    { value: "row", label: "Row" },
-    { value: "swim", label: "Swim" },
-    { value: "other", label: "Other" },
-  ]
+  const workoutTypes = $derived<WorkoutType[]>(page.data.workoutTypes ?? DEFAULT_WORKOUT_TYPES)
+  const cardioTypeLabel = (key: string | null | undefined) => workoutTypeLabel(key, workoutTypes)
 
   let log = $state(page.data.log)
   let exercises = $state(page.data.exercises ?? [])
@@ -19,6 +15,13 @@
     log = page.data.log
     exercises = page.data.exercises ?? []
   })
+
+  // Keep the log's current type selectable even if it was since removed from the journey
+  const workoutTypeOptions = $derived(
+    log?.cardioType && !workoutTypes.some((t) => t.key === log.cardioType)
+      ? [...workoutTypes, { key: log.cardioType, label: workoutTypeLabel(log.cardioType) }]
+      : workoutTypes,
+  )
 
   // Sets state — mirrors the log's sets array, editable locally
   let sets = $state<any[]>(log?.sets ?? [])
@@ -474,7 +477,7 @@
             <div class="perf-stats">
               <div class="perf-stat">
                 <span class="perf-stat-value">{cardioTypeLabel(log.cardioType)}</span>
-                <span class="perf-stat-label">Cardio Type</span>
+                <span class="perf-stat-label">Type</span>
               </div>
               <div class="perf-stat">
                 <span class="perf-stat-value">{log.rpe ?? "—"}</span>
@@ -537,11 +540,11 @@
             {#if isCardio}
               <div class="form-row">
                 <div class="form-field">
-                  <label class="field-label" for="edit-cardio-type">Cardio Type</label>
+                  <label class="field-label" for="edit-cardio-type">Workout Type</label>
                   <select id="edit-cardio-type" class="field-input" bind:value={editCardioType}>
                     <option value={null}>— Select —</option>
-                    {#each CARDIO_TYPE_OPTIONS as opt}
-                      <option value={opt.value}>{opt.label}</option>
+                    {#each workoutTypeOptions as opt}
+                      <option value={opt.key}>{opt.label}</option>
                     {/each}
                   </select>
                 </div>

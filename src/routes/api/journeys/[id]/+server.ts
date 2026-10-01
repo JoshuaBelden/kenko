@@ -4,6 +4,7 @@ import {
   parseDanjikiTargets,
   parseShokuTargets,
   parseTrainerSettings,
+  parseWorkoutTypes,
   serializeJourney,
 } from "$lib/server/journeys"
 import { json } from "@sveltejs/kit"
@@ -40,6 +41,7 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
     if (body.shokuTargets !== undefined) updates.shokuTargets = parseShokuTargets(body.shokuTargets)
     if (body.danjikiTargets !== undefined) updates.danjikiTargets = parseDanjikiTargets(body.danjikiTargets)
     if (body.trainerSettings !== undefined) updates.trainerSettings = parseTrainerSettings(body.trainerSettings)
+    if (body.workoutTypes !== undefined) updates.workoutTypes = parseWorkoutTypes(body.workoutTypes)
   } catch (err) {
     if (err instanceof JourneyValidationError) return json({ error: err.message }, { status: 400 })
     throw err

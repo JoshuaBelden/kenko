@@ -1,4 +1,6 @@
-import { CARDIO_TYPES, getWorkoutLogsCollection, serializeWorkoutLog } from "$lib/server/dojo"
+import { MANUAL_CARDIO_PLAN_NAME, getWorkoutLogsCollection, serializeWorkoutLog } from "$lib/server/dojo"
+import { getWorkoutTypesForUser } from "$lib/server/journeys"
+import { isWorkoutTypeKey, workoutTypeLabel } from "$lib/workoutTypes"
 import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
 import type { RequestHandler } from "./$types"
@@ -28,7 +30,7 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
   if (body.cardioDistance !== undefined) updates.cardioDistance = body.cardioDistance
 
   if (body.cardioType !== undefined) {
-    if (body.cardioType !== null && !CARDIO_TYPES.includes(body.cardioType)) {
+    if (body.cardioType !== null && !isWorkoutTypeKey(body.cardioType)) {
       return json({ error: "Invalid cardioType" }, { status: 400 })
     }
     updates.cardioType = body.cardioType
@@ -50,11 +52,23 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
     return json({ error: "No valid fields to update" }, { status: 400 })
   }
 
+  const userId = new ObjectId(locals.userId)
   const logs = await getWorkoutLogsCollection()
+
+  // Manual entries are named after their type, so keep the name in sync when the type changes
+  if (typeof updates.cardioType === "string") {
+    const existing = await logs.findOne({ _id: new ObjectId(params.id), userId })
+    if (existing && !existing.planId && existing.planSnapshot?.planName === MANUAL_CARDIO_PLAN_NAME) {
+      const types = await getWorkoutTypesForUser(userId)
+      updates["planSnapshot.sessionName"] =
+        updates.cardioType === "other" ? "Workout" : workoutTypeLabel(updates.cardioType, types)
+    }
+  }
+
   const result = await logs.findOneAndUpdate(
     {
       _id: new ObjectId(params.id),
-      userId: new ObjectId(locals.userId),
+      userId,
     },
     { $set: updates },
     { returnDocument: "after" },

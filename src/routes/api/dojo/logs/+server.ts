@@ -1,10 +1,10 @@
 import {
-  CARDIO_TYPES,
   getWorkoutLogsCollection,
   serializeWorkoutLog,
   startWorkoutLog,
   type CardioType,
 } from "$lib/server/dojo"
+import { isWorkoutTypeKey } from "$lib/workoutTypes"
 import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
 import type { RequestHandler } from "./$types"
@@ -34,7 +34,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
   let cardioType: CardioType | null = null
   if (body.cardioType != null) {
-    if (!CARDIO_TYPES.includes(body.cardioType)) {
+    if (!isWorkoutTypeKey(body.cardioType)) {
       return json({ error: "Invalid cardioType" }, { status: 400 })
     }
     cardioType = body.cardioType

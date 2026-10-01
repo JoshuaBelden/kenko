@@ -1,8 +1,9 @@
 import {
-  CARDIO_TYPES,
   createManualCardioLog,
   serializeWorkoutLog,
 } from "$lib/server/dojo"
+import { getWorkoutTypesForUser } from "$lib/server/journeys"
+import { isWorkoutTypeKey, workoutTypeLabel } from "$lib/workoutTypes"
 import { json } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
 import type { RequestHandler } from "./$types"
@@ -19,8 +20,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
   const body = await request.json().catch(() => ({}))
 
-  if (!CARDIO_TYPES.includes(body.cardioType)) {
-    return json({ error: "Invalid cardioType" }, { status: 400 })
+  if (!isWorkoutTypeKey(body.cardioType)) {
+    return json({ error: "Invalid workout type" }, { status: 400 })
   }
 
   const startedAt = new Date(body.startedAt)
@@ -35,10 +36,12 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     return json({ error: "Completed must be after started" }, { status: 400 })
   }
 
-  const cardioDistance = Number(body.cardioDistance)
-  if (!Number.isFinite(cardioDistance) || cardioDistance <= 0) {
-    return json({ error: "Distance must be greater than 0" }, { status: 400 })
+  // Distance is optional — 0 is treated the same as not entered
+  const distance = optionalNonNegative(body.cardioDistance)
+  if (distance === undefined) {
+    return json({ error: "Distance must be a non-negative number" }, { status: 400 })
   }
+  const cardioDistance = distance || null
   const caloriesBurned = optionalNonNegative(body.caloriesBurned)
   if (caloriesBurned === undefined) {
     return json({ error: "Calories must be a non-negative number" }, { status: 400 })
@@ -46,8 +49,12 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
   const notes = typeof body.notes === "string" && body.notes.trim() ? body.notes.trim() : null
 
-  const created = await createManualCardioLog(new ObjectId(locals.userId), {
+  const userId = new ObjectId(locals.userId)
+  const types = await getWorkoutTypesForUser(userId)
+
+  const created = await createManualCardioLog(userId, {
     cardioType: body.cardioType,
+    typeLabel: workoutTypeLabel(body.cardioType, types),
     startedAt,
     completedAt,
     cardioDistance,

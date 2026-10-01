@@ -7,6 +7,14 @@ import {
   TRAINER_PROMPT_MAX_LENGTH,
   isTrainerModel,
 } from "$lib/trainer"
+import {
+  DEFAULT_WORKOUT_TYPES,
+  WORKOUT_TYPE_LABEL_MAX_LENGTH,
+  WORKOUT_TYPES_MAX_COUNT,
+  isWorkoutTypeKey,
+  workoutTypeKey,
+  type WorkoutType,
+} from "$lib/workoutTypes"
 
 export async function createDefaultJourney(userId: ObjectId, tz: string = "America/Los_Angeles"): Promise<void> {
   const journeys = await getJourneysCollection()
@@ -47,6 +55,7 @@ export function serializeJourney(doc: WithId<Document>) {
           weeklyCalorieBurn: doc.dojoTargets.weeklyCalorieBurn ?? null,
         }
       : null,
+    workoutTypes: serializeWorkoutTypes(doc.workoutTypes),
     kataTargets: doc.kataTargets
       ? {
           commitmentIds: (doc.kataTargets.commitmentIds ?? []).map((id: any) => id.toString()),
@@ -104,6 +113,26 @@ export function serializeJourney(doc: WithId<Document>) {
   }
 }
 
+function serializeWorkoutTypes(value: unknown): WorkoutType[] {
+  if (!Array.isArray(value) || value.length === 0) return DEFAULT_WORKOUT_TYPES
+  return value.map((t: any) => ({ key: t.key, label: t.label }))
+}
+
+/** The journey that drives the dojo: the most recently started active journey covering now. */
+export async function getActiveJourney(userId: ObjectId) {
+  const journeys = await getJourneysCollection()
+  const now = new Date()
+  return journeys.findOne(
+    { userId, status: "active", startDate: { $lte: now }, endDate: { $gte: now } },
+    { sort: { startDate: -1 } },
+  )
+}
+
+export async function getWorkoutTypesForUser(userId: ObjectId): Promise<WorkoutType[]> {
+  const journey = await getActiveJourney(userId)
+  return serializeWorkoutTypes(journey?.workoutTypes)
+}
+
 export class JourneyValidationError extends Error {}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -142,6 +171,35 @@ export function parseDanjikiTargets(input: unknown) {
   if (input === null) return null
   if (!isPlainObject(input)) throw new JourneyValidationError("danjikiTargets must be an object")
   return { weeklyFastingHours: numberOrNull(input.weeklyFastingHours, "weeklyFastingHours") }
+}
+
+export function parseWorkoutType(input: unknown): WorkoutType {
+  if (!isPlainObject(input)) throw new JourneyValidationError("Workout type must be an object")
+  const label = typeof input.label === "string" ? input.label.trim() : ""
+  if (!label) throw new JourneyValidationError("Workout type name is required")
+  if (label.length > WORKOUT_TYPE_LABEL_MAX_LENGTH) {
+    throw new JourneyValidationError(`Workout type names must be ${WORKOUT_TYPE_LABEL_MAX_LENGTH} characters or fewer`)
+  }
+  // Existing types keep their key so renaming a type doesn't orphan logs that reference it
+  const key = isWorkoutTypeKey(input.key) ? input.key : workoutTypeKey(label)
+  if (!key) throw new JourneyValidationError("Workout type name must contain letters or numbers")
+  return { key, label }
+}
+
+export function parseWorkoutTypes(input: unknown): WorkoutType[] | null {
+  if (input === null) return null
+  if (!Array.isArray(input)) throw new JourneyValidationError("workoutTypes must be an array")
+  if (input.length === 0) throw new JourneyValidationError("At least one workout type is required")
+  if (input.length > WORKOUT_TYPES_MAX_COUNT) {
+    throw new JourneyValidationError(`No more than ${WORKOUT_TYPES_MAX_COUNT} workout types`)
+  }
+  const parsed = input.map(parseWorkoutType)
+  const seen = new Set<string>()
+  for (const t of parsed) {
+    if (seen.has(t.key)) throw new JourneyValidationError(`Duplicate workout type: ${t.label}`)
+    seen.add(t.key)
+  }
+  return parsed
 }
 
 /** Prompts equal to the default (or empty) are stored as null so users keep getting default improvements. */

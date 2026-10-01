@@ -6,6 +6,7 @@
   import SettingsDojo from "./SettingsDojo.svelte"
   import SettingsKata from "./SettingsKata.svelte"
   import SettingsTrainer from "./SettingsTrainer.svelte"
+  import type { WorkoutType } from "$lib/workoutTypes"
 
   interface Props {
     // General
@@ -39,6 +40,7 @@
     selectedPlanIds: string[]
     dojoSessionsPerWeek: string
     dojoWeeklyCalorieBurn: string
+    workoutTypes: WorkoutType[]
     // Habits
     allCommitments: any[]
     selectedCommitmentIds: string[]
@@ -68,7 +70,7 @@
     macroMode, proteinValue, carbsValue, fatValue, dailyWaterTargetOz,
     mealPlanItems, mealBuilds, mealPlanFoods, categories,
     weeklyFastingHours,
-    allPlans, selectedPlanIds, dojoSessionsPerWeek, dojoWeeklyCalorieBurn,
+    allPlans, selectedPlanIds, dojoSessionsPerWeek, dojoWeeklyCalorieBurn, workoutTypes,
     allCommitments, selectedCommitmentIds,
     trainerKey, trainerApiKeyDraft, trainerModel, trainerSystemPrompt, trainerKickoffPrompt, onremovetrainerkey,
     saving, saveError, saveSuccess, isArchived,
@@ -135,6 +137,7 @@
       {allPlans} {selectedPlanIds}
       sessionsPerWeek={dojoSessionsPerWeek}
       weeklyCalorieBurn={dojoWeeklyCalorieBurn}
+      {workoutTypes}
       {onchange}
     />
   {/if}

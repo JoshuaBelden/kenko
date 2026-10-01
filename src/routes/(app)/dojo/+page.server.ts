@@ -5,6 +5,8 @@ import {
   serializeWorkoutLog,
   serializeWorkoutPlan,
 } from "$lib/server/dojo"
+import { getWorkoutTypesForUser } from "$lib/server/journeys"
+import { DEFAULT_WORKOUT_TYPES } from "$lib/workoutTypes"
 import { dayOfWeekTz, startOfWeekTz, endOfWeekTz } from "$lib/server/dates"
 import { ObjectId } from "mongodb"
 import type { PageServerLoad } from "./$types"
@@ -16,6 +18,7 @@ export const load: PageServerLoad = async ({ locals }) => {
       inProgressLogs: [],
       recovery: [],
       stats: { thisWeekCount: 0, totalSessions: 0 },
+      workoutTypes: DEFAULT_WORKOUT_TYPES,
     }
   }
 
@@ -30,12 +33,13 @@ export const load: PageServerLoad = async ({ locals }) => {
   const weekStart = startOfWeekTz(new Date(), userTz)
   const weekEnd = endOfWeekTz(new Date(), userTz)
 
-  const [plans, inProgressLogs, totalSessions, thisWeekCount, recovery] = await Promise.all([
+  const [plans, inProgressLogs, totalSessions, thisWeekCount, recovery, workoutTypes] = await Promise.all([
     plansCol.find({ userId }).sort({ createdAt: -1 }).toArray(),
     logsCol.find({ userId, status: "in_progress" }).sort({ startedAt: -1 }).toArray(),
     logsCol.countDocuments({ userId, status: "completed" }),
     logsCol.countDocuments({ userId, status: "completed", completedAt: { $gte: weekStart, $lte: weekEnd } }),
     aggregateRecovery(userId),
+    getWorkoutTypesForUser(userId),
   ])
 
   const todayDow = dayOfWeekTz(new Date(), userTz)
@@ -60,5 +64,6 @@ export const load: PageServerLoad = async ({ locals }) => {
     inProgressLogs: inProgressLogs.map(serializeWorkoutLog),
     recovery,
     stats: { thisWeekCount, totalSessions },
+    workoutTypes,
   }
 }

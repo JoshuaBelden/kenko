@@ -4,16 +4,8 @@
   import { page } from "$app/state"
   import { Button, Card, PageHeader, StatNumber } from "$lib/components"
   import { icons } from "$lib/icons"
-  import { cardioTypeLabel } from "$lib/format"
   import { localDateStr, localTimeStr, toDatetime } from "$lib/dates"
-
-  const CARDIO_TYPE_OPTIONS = [
-    { value: "run", label: "Run" },
-    { value: "cycle", label: "Cycle" },
-    { value: "row", label: "Row" },
-    { value: "swim", label: "Swim" },
-    { value: "other", label: "Other" },
-  ]
+  import { DEFAULT_WORKOUT_TYPES, workoutTypeLabel, type WorkoutType } from "$lib/workoutTypes"
 
   const REGION_LABELS: Record<string, string> = {
     torso: "Torso",
@@ -28,7 +20,9 @@
   let inProgressLogs = $state(page.data.inProgressLogs ?? [])
   let recovery = $state(page.data.recovery ?? [])
   let stats = $state(page.data.stats ?? { thisWeekCount: 0, totalSessions: 0 })
+  let workoutTypes = $state<WorkoutType[]>(page.data.workoutTypes ?? DEFAULT_WORKOUT_TYPES)
   $effect(() => {
+    workoutTypes = page.data.workoutTypes ?? DEFAULT_WORKOUT_TYPES
     plans = page.data.plans ?? []
     inProgressLogs = page.data.inProgressLogs ?? []
     recovery = page.data.recovery ?? []
@@ -110,7 +104,7 @@
     if (session?.type === "cardio") {
       cardioPickerPlanId = planId
       cardioPickerSessionId = sessionId
-      cardioPickerType = "run"
+      cardioPickerType = defaultTypeKey
       cardioPickerOpen = true
       return
     }
@@ -148,10 +142,12 @@
     cardioPickerSessionId = null
   }
 
-  // Manual cardio entry state
+  const defaultTypeKey = $derived(workoutTypes[0]?.key ?? "other")
+
+  // Manual workout entry state
   const tz = $derived(page.data.user?.profile?.timezone ?? "America/Los_Angeles")
   let manualOpen = $state(false)
-  let manualType = $state("run")
+  let manualType = $state("")
   let manualStartDate = $state("")
   let manualStartTime = $state("")
   let manualEndDate = $state("")
@@ -165,7 +161,9 @@
   function openManualCardio() {
     const end = new Date()
     const start = new Date(end.getTime() - 30 * 60000)
-    manualType = "run"
+    manualType = defaultTypeKey
+    newTypeOpen = false
+    newTypeLabel = ""
     manualStartDate = localDateStr(start, tz)
     manualStartTime = localTimeStr(start, tz)
     manualEndDate = localDateStr(end, tz)
@@ -193,8 +191,8 @@
       manualError = "Completed must be after started"
       return
     }
-    if (manualDistance == null || manualDistance <= 0) {
-      manualError = "Distance is required"
+    if (manualDistance != null && manualDistance < 0) {
+      manualError = "Distance can't be negative"
       return
     }
 
@@ -206,7 +204,7 @@
         cardioType: manualType,
         startedAt,
         completedAt,
-        cardioDistance: manualDistance,
+        cardioDistance: manualDistance || null,
         caloriesBurned: manualCalories ?? null,
         notes: manualNotes.trim() || null,
       }),
@@ -215,7 +213,7 @@
 
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      manualError = data.error ?? "Failed to save cardio"
+      manualError = data.error ?? "Failed to save workout"
       return
     }
 
@@ -223,6 +221,47 @@
     await invalidateAll()
     recentLogs = null
     openRecentTab()
+  }
+
+  // Inline creation of a new workout type (saved to the active journey)
+  let newTypeOpen = $state(false)
+  let newTypeLabel = $state("")
+  let newTypeSaving = $state(false)
+
+  function openNewType() {
+    newTypeLabel = ""
+    manualError = ""
+    newTypeOpen = true
+  }
+
+  async function saveNewType() {
+    const label = newTypeLabel.trim()
+    if (!label) return
+    newTypeSaving = true
+    const res = await fetch("/api/dojo/workout-types", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label }),
+    })
+    newTypeSaving = false
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      manualError = data.error ?? "Failed to add workout type"
+      return
+    }
+    workoutTypes = data.workoutTypes
+    manualType = data.type.key
+    newTypeOpen = false
+    newTypeLabel = ""
+  }
+
+  function onNewTypeKeydown(e: KeyboardEvent) {
+    if (e.key === "Enter") {
+      e.preventDefault()
+      saveNewType()
+    } else if (e.key === "Escape") {
+      newTypeOpen = false
+    }
   }
 
   let deletingLogId = $state<string | null>(null)
@@ -242,27 +281,50 @@
 
 {#if !manualOpen}
   <div class="dojo-controls">
-    <Button variant="primary" onclick={openManualCardio}>+ LOG CARDIO</Button>
+    <Button variant="primary" onclick={openManualCardio}>+ LOG WORKOUT</Button>
   </div>
 {:else}
   <section class="section">
     <Card>
       <div class="manual-form">
-        <h3 class="manual-title">Log Cardio</h3>
+        <h3 class="manual-title">Log Workout</h3>
 
         <div class="form-field">
           <span class="field-label">Type</span>
           <div class="manual-type-options">
-            {#each CARDIO_TYPE_OPTIONS as opt}
+            {#each workoutTypes as opt (opt.key)}
               <button
                 type="button"
                 class="cardio-picker-option"
-                class:selected={manualType === opt.value}
-                onclick={() => (manualType = opt.value)}
+                class:selected={manualType === opt.key}
+                onclick={() => (manualType = opt.key)}
               >
                 {opt.label}
               </button>
             {/each}
+            {#if newTypeOpen}
+              <div class="new-type-inline">
+                <!-- svelte-ignore a11y_autofocus -->
+                <input
+                  type="text"
+                  class="field-input"
+                  aria-label="New workout type"
+                  placeholder="e.g. Pickleball"
+                  maxlength="40"
+                  autofocus
+                  bind:value={newTypeLabel}
+                  onkeydown={onNewTypeKeydown}
+                />
+                <Button variant="primary" onclick={saveNewType} disabled={newTypeSaving || !newTypeLabel.trim()}>
+                  {newTypeSaving ? "Adding..." : "Add"}
+                </Button>
+                <Button variant="secondary" onclick={() => (newTypeOpen = false)}>Cancel</Button>
+              </div>
+            {:else}
+              <button type="button" class="cardio-picker-option new-type-btn" onclick={openNewType}>
+                + New type
+              </button>
+            {/if}
           </div>
         </div>
 
@@ -286,7 +348,7 @@
         <div class="manual-row">
           <div class="form-field">
             <label class="field-label" for="manual-distance">Distance (miles)</label>
-            <input id="manual-distance" type="number" class="field-input" bind:value={manualDistance} min="0" step="any" />
+            <input id="manual-distance" type="number" class="field-input" bind:value={manualDistance} placeholder="Optional" min="0" step="any" />
           </div>
           <div class="form-field">
             <label class="field-label" for="manual-calories">Calories Burned</label>
@@ -433,7 +495,7 @@
                 <span class="log-date">{formatDate(log.startedAt)}</span>
                 <span class="log-duration">{duration(log.startedAt, log.completedAt)}</span>
                 {#if log.planSnapshot?.sessionType === "cardio"}
-                  <span class="log-sets">{cardioTypeLabel(log.cardioType)}</span>
+                  <span class="log-sets">{workoutTypeLabel(log.cardioType, workoutTypes)}</span>
                   {#if log.cardioDistance}
                     <span class="log-sets">{log.cardioDistance} mi</span>
                   {/if}
@@ -514,14 +576,14 @@
 {#if cardioPickerOpen}
   <div class="cardio-picker-overlay">
     <div class="cardio-picker-card">
-      <h3 class="cardio-picker-title">What kind of cardio?</h3>
+      <h3 class="cardio-picker-title">What kind of workout?</h3>
       <div class="cardio-picker-options">
-        {#each CARDIO_TYPE_OPTIONS as opt}
+        {#each workoutTypes as opt (opt.key)}
           <button
             type="button"
             class="cardio-picker-option"
-            class:selected={cardioPickerType === opt.value}
-            onclick={() => (cardioPickerType = opt.value)}
+            class:selected={cardioPickerType === opt.key}
+            onclick={() => (cardioPickerType = opt.key)}
           >
             {opt.label}
           </button>
@@ -950,6 +1012,23 @@
 
   .manual-type-options .cardio-picker-option {
     padding: var(--space-2) var(--space-4);
+  }
+
+  .new-type-btn {
+    border-style: dashed;
+    color: var(--ink-light);
+  }
+
+  .new-type-inline {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+
+  .new-type-inline .field-input {
+    width: 12rem;
+    max-width: 100%;
   }
 
   .manual-row {

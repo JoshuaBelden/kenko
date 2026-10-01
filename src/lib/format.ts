@@ -47,19 +47,3 @@ export function formatDuration(
   return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`
 }
 
-export function cardioTypeLabel(type: string | null | undefined): string {
-  switch (type) {
-    case "run":
-      return "Run"
-    case "cycle":
-      return "Cycle"
-    case "row":
-      return "Row"
-    case "swim":
-      return "Swim"
-    case "other":
-      return "Other"
-    default:
-      return "Cardio"
-  }
-}
