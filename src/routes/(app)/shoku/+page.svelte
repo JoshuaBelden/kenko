@@ -75,6 +75,10 @@
     selectedMacro = selectedMacro === key ? null : key
   }
 
+  function sumMacro(entries: any[], field: string) {
+    return entries.reduce((sum, e) => sum + (e[field] ?? 0), 0)
+  }
+
   function formatMacro(value: number, unit: string) {
     return `${Math.round(value * 10) / 10}${unit}`
   }
@@ -384,6 +388,9 @@
   <section class="section">
     <div class="category-header">
       <h3>{cat.label}</h3>
+      {#if entries.length > 0}
+        <span class="category-macros">P {Math.round(sumMacro(entries, "calculatedProtein"))}g &middot; C {Math.round(sumMacro(entries, "calculatedNetCarbs"))}g &middot; F {Math.round(sumMacro(entries, "calculatedFat"))}g</span>
+      {/if}
       <button class="btn-add" onclick={() => openSearch(cat.key)}>+</button>
     </div>
 
@@ -837,6 +844,18 @@
   .category-header h3 {
     font-size: var(--text-lg);
     margin: 0;
+  }
+
+  .category-macros {
+    margin-left: auto;
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .category-macros + .btn-add {
+    margin-left: 0;
   }
 
   .btn-add {
