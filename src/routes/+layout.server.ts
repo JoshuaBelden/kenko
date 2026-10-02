@@ -2,7 +2,10 @@ import { getUsersCollection, getJourneysCollection } from "$lib/server/collectio
 import { ObjectId } from "mongodb"
 import type { LayoutServerLoad } from "./$types"
 
-export const load: LayoutServerLoad = async ({ locals }) => {
+export const load: LayoutServerLoad = async ({ locals, depends }) => {
+  // Invalidated after client-side profile writes (e.g. dashboard layout) so navigation sees fresh data
+  depends("app:profile")
+
   if (!locals.userId) {
     return { user: null, activeJourneys: [] }
   }

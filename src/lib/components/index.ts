@@ -1,6 +1,7 @@
 export { default as BarcodeScanner } from "./BarcodeScanner.svelte"
 export { default as Button } from "./Button.svelte"
 export { default as Card } from "./Card.svelte"
+export { default as DashboardWidget } from "./DashboardWidget.svelte"
 export { default as ExerciseSearchModal } from "./ExerciseSearchModal.svelte"
 export { default as FoodSearchModal } from "./FoodSearchModal.svelte"
 export { default as HabitPip } from "./HabitPip.svelte"

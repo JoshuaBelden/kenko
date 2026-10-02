@@ -211,6 +211,9 @@ export async function getJourneyOverview(
     result.kata = { dailyCommitments, otherCommitments }
   }
 
+  // Running progress across the journey
+  result.running = await getRunningProgress(userId, journey, userTz, now)
+
   // Weight log data (all-time history, journey-scoped goal/target)
   const weightLogCol = await getWeightLogCollection()
   const journeyStartStr = journey.startDate instanceof Date
@@ -238,4 +241,126 @@ export async function getJourneyOverview(
   }
 
   return result
+}
+
+type RunWeek = {
+  weekStart: string
+  runs: number
+  miles: number
+  /** Duration and distance of runs that have a usable duration, for pace */
+  minutes: number
+  pacedMiles: number
+  avgPace: number | null
+}
+
+/** Minutes per mile across a set of runs, weighted by distance. */
+function weightedPace(minutes: number, miles: number): number | null {
+  return miles > 0 && minutes > 0 ? minutes / miles : null
+}
+
+/**
+ * Running progress across the journey: completed "run" logs with a distance,
+ * bucketed into Monday-start weeks in the user's timezone.
+ */
+async function getRunningProgress(
+  userId: ObjectId,
+  journey: WithId<Document>,
+  userTz: string,
+  now: Date,
+) {
+  const journeyStart = journey.startDate instanceof Date ? journey.startDate : new Date(journey.startDate)
+  const journeyEnd = journey.endDate instanceof Date ? journey.endDate : new Date(journey.endDate)
+  const rangeEnd = journeyEnd < now ? journeyEnd : now
+
+  const logs = await getWorkoutLogsCollection()
+  const runs = await logs
+    .find({
+      userId,
+      status: "completed",
+      cardioType: "run",
+      cardioDistance: { $gt: 0 },
+      completedAt: { $gte: journeyStart, $lte: rangeEnd },
+    })
+    .project({ startedAt: 1, completedAt: 1, cardioDistance: 1 })
+    .sort({ completedAt: 1 })
+    .toArray()
+
+  const thisWeekStart = startOfWeekTz(now, userTz)
+  const lastWeekStart = startOfWeekTz(new Date(thisWeekStart.getTime() - 86400000), userTz)
+  const emptyWeekStats = { miles: 0, avgPace: null as number | null }
+
+  if (runs.length === 0) {
+    return {
+      weeks: [] as RunWeek[],
+      summary: { totalRuns: 0, totalMiles: 0, avgPace: null, bestPace: null, longestRun: null },
+      thisWeek: emptyWeekStats,
+      lastWeek: emptyWeekStats,
+    }
+  }
+
+  const weeks = new Map<number, RunWeek>()
+  let totalMiles = 0
+  let totalMinutes = 0
+  let totalPacedMiles = 0
+  let bestPace: number | null = null
+  let longestRun = 0
+
+  for (const r of runs) {
+    const miles = r.cardioDistance as number
+    const minutes = r.startedAt instanceof Date && r.completedAt instanceof Date
+      ? Math.max((r.completedAt.getTime() - r.startedAt.getTime()) / 60000, 0)
+      : 0
+
+    const weekStart = startOfWeekTz(r.completedAt, userTz)
+    const week = weeks.get(weekStart.getTime()) ?? {
+      weekStart: weekStart.toISOString(), runs: 0, miles: 0, minutes: 0, pacedMiles: 0, avgPace: null,
+    }
+    week.runs++
+    week.miles += miles
+    totalMiles += miles
+    longestRun = Math.max(longestRun, miles)
+
+    // Runs without a usable duration still count toward mileage, but not pace
+    if (minutes > 0) {
+      week.minutes += minutes
+      week.pacedMiles += miles
+      totalMinutes += minutes
+      totalPacedMiles += miles
+      // Ignore sub-mile efforts so a short sprint doesn't set the best pace
+      const pace = minutes / miles
+      if (miles >= 1 && (bestPace === null || pace < bestPace)) bestPace = pace
+    }
+    weeks.set(weekStart.getTime(), week)
+  }
+
+  // Fill empty weeks from the first run through the current week so gaps show up
+  const firstWeek = startOfWeekTz(runs[0].completedAt, userTz)
+  const lastWeek = startOfWeekTz(rangeEnd, userTz)
+  const filled: RunWeek[] = []
+  for (let t = firstWeek.getTime(); t <= lastWeek.getTime(); ) {
+    const week = weeks.get(t) ?? { weekStart: new Date(t).toISOString(), runs: 0, miles: 0, minutes: 0, pacedMiles: 0, avgPace: null }
+    week.avgPace = weightedPace(week.minutes, week.pacedMiles)
+    week.miles = Math.round(week.miles * 100) / 100
+    filled.push(week)
+    // Step via startOfWeekTz so DST shifts don't drift the boundary
+    t = startOfWeekTz(new Date(t + 8 * 86400000), userTz).getTime()
+  }
+
+  const weekStats = (start: Date) => {
+    const w = weeks.get(start.getTime())
+    return w ? { miles: Math.round(w.miles * 100) / 100, avgPace: weightedPace(w.minutes, w.pacedMiles) } : emptyWeekStats
+  }
+
+  return {
+    weeks: filled.map(({ minutes: _m, pacedMiles: _p, ...w }) => w),
+    summary: {
+      totalRuns: runs.length,
+      totalMiles: Math.round(totalMiles * 100) / 100,
+      avgPace: weightedPace(totalMinutes, totalPacedMiles),
+      bestPace,
+      longestRun,
+    },
+    thisWeek: weekStats(thisWeekStart),
+    lastWeek: weekStats(lastWeekStart),
+  }
 }

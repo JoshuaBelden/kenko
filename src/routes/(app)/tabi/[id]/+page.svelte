@@ -1,11 +1,13 @@
 <script lang="ts">
-  import { goto, invalidateAll } from "$app/navigation"
+  import { goto, invalidate, invalidateAll } from "$app/navigation"
   import { page } from "$app/state"
-  import { Button, Card, ProgressBar, RadialProgress, StarRating, DotRating, TipTapEditor } from "$lib/components"
+  import { flip } from "svelte/animate"
+  import { Button, Card, DashboardWidget, ProgressBar, RadialProgress, StarRating, DotRating, TipTapEditor } from "$lib/components"
+  import { isDashboardWidgetId, resolveWidgetOrder, type DashboardWidgetId } from "$lib/dashboardWidgets"
   import SettingsTabs from "$lib/components/settings/SettingsTabs.svelte"
   import TrainerChat from "$lib/components/TrainerChat.svelte"
   import { localToday, localDateStr, localTimeStr, toDatetime } from "$lib/dates"
-  import { formatDate, formatDateShort } from "$lib/format"
+  import { formatDate, formatDateShort, formatPace } from "$lib/format"
   import { icons } from "$lib/icons"
   import { DEFAULT_KICKOFF_PROMPT, DEFAULT_SYSTEM_PROMPT, DEFAULT_TRAINER_MODEL, trainerModelLabel } from "$lib/trainer"
   import { DEFAULT_WORKOUT_TYPES, type WorkoutType } from "$lib/workoutTypes"
@@ -704,6 +706,132 @@
     }
   })
 
+  // ── Running progress card (weekly pace and mileage across the journey) ──
+  type RunWeek = { weekStart: string; runs: number; miles: number; avgPace: number | null }
+
+  const runningChart = $derived.by(() => {
+    const weeks = (overviewData?.running?.weeks ?? []) as RunWeek[]
+    if (!weeks.length) return null
+
+    const paced = weeks
+      .map((w, i) => ({ ...w, i }))
+      .filter((w): w is RunWeek & { i: number; avgPace: number } => w.avgPace != null)
+
+    // Least-squares trend of weekly pace over week index
+    let trend: { x1: number; y1: number; x2: number; y2: number } | null = null
+    if (paced.length >= 2) {
+      const n = paced.length
+      const sumX = paced.reduce((a, p) => a + p.i, 0)
+      const sumY = paced.reduce((a, p) => a + p.avgPace, 0)
+      const sumXY = paced.reduce((a, p) => a + p.i * p.avgPace, 0)
+      const sumXX = paced.reduce((a, p) => a + p.i * p.i, 0)
+      const denom = n * sumXX - sumX * sumX
+      const slope = denom !== 0 ? (n * sumXY - sumX * sumY) / denom : 0
+      const intercept = sumY / n - (slope * sumX) / n
+      const first = paced[0].i
+      const last = paced[n - 1].i
+      trend = { x1: first, y1: intercept + slope * first, x2: last, y2: intercept + slope * last }
+    }
+
+    const paces = [...paced.map((p) => p.avgPace), ...(trend ? [trend.y1, trend.y2] : [])]
+    const minP = paces.length ? Math.min(...paces) : 0
+    const maxP = paces.length ? Math.max(...paces) : 0
+    const padding = Math.max((maxP - minP) * 0.15, 0.25)
+
+    return {
+      weeks,
+      paced,
+      trend,
+      yMin: minP - padding,
+      yMax: maxP + padding,
+      maxMiles: Math.max(...weeks.map((w) => w.miles), 1),
+    }
+  })
+
+  function runWeekTooltip(w: RunWeek): string {
+    const pace = w.avgPace != null ? `${formatPace(w.avgPace, false)} /mi · ` : ""
+    return `Week of ${formatDateShort(w.weekStart, tz)}: ${pace}${w.miles} mi (${w.runs} run${w.runs === 1 ? "" : "s"})`
+  }
+
+  // ── Dashboard layout (order + collapsed widgets, saved to the user profile) ──
+  const WEIGHT_ICON = '<path d="M3 3v18h18"/><polyline points="7 14 11 10 14 13 20 7"/>'
+  const savedLayout = page.data.user?.profile?.dashboardLayout
+  let widgetOrder = $state<DashboardWidgetId[]>(resolveWidgetOrder(savedLayout?.order))
+  let collapsedWidgets = $state<DashboardWidgetId[]>((savedLayout?.collapsed ?? []).filter(isDashboardWidgetId))
+  let draggingWidget = $state<DashboardWidgetId | null>(null)
+  let lastReorderAt = 0
+  let saveLayoutTimer: ReturnType<typeof setTimeout> | undefined
+
+  function isWidgetVisible(id: DashboardWidgetId): boolean {
+    switch (id) {
+      case "shoku": return !!(journey.shokuTargets && overviewData?.shoku)
+      case "weight": return !!weightProgressCard
+      case "kata": return !!(journey.kataTargets && overviewData?.kata)
+      case "dojo": return !!(journey.dojoTargets && overviewData?.dojo)
+      case "running": return !!overviewData?.running && (!!journey.dojoTargets || overviewData.running.summary.totalRuns > 0)
+      case "danjiki": return !!(journey.danjikiTargets && overviewData?.danjiki)
+    }
+  }
+
+  const visibleWidgets = $derived(overviewData ? widgetOrder.filter(isWidgetVisible) : [])
+
+  function saveLayout() {
+    clearTimeout(saveLayoutTimer)
+    saveLayoutTimer = setTimeout(async () => {
+      const res = await fetch("/api/profile/dashboard-layout", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order: widgetOrder, collapsed: collapsedWidgets }),
+      })
+      // Refresh only the root layout's profile so returning to this page restores the saved layout
+      if (res.ok) await invalidate("app:profile")
+    }, 400)
+  }
+
+  /** Moves `id` into `overId`'s slot, shifting the cards in between. */
+  function moveWidget(id: DashboardWidgetId, overId: DashboardWidgetId) {
+    const next = widgetOrder.filter((w) => w !== id)
+    next.splice(widgetOrder.indexOf(overId), 0, id)
+    widgetOrder = next
+  }
+
+  function toggleWidget(id: DashboardWidgetId) {
+    collapsedWidgets = collapsedWidgets.includes(id)
+      ? collapsedWidgets.filter((w) => w !== id)
+      : [...collapsedWidgets, id]
+    saveLayout()
+  }
+
+  function startWidgetDrag(id: DashboardWidgetId, e: PointerEvent) {
+    if (e.button !== 0) return
+    e.preventDefault()
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    draggingWidget = id
+  }
+
+  function dragWidget(e: PointerEvent) {
+    if (!draggingWidget) return
+    // Let the flip animation settle so cards sliding under the pointer don't bounce back
+    if (Date.now() - lastReorderAt < 220) return
+    const overId = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-widget-id]")?.getAttribute("data-widget-id")
+    if (!isDashboardWidgetId(overId) || overId === draggingWidget) return
+    moveWidget(draggingWidget, overId)
+    lastReorderAt = Date.now()
+  }
+
+  function endWidgetDrag() {
+    if (!draggingWidget) return
+    draggingWidget = null
+    saveLayout()
+  }
+
+  function nudgeWidget(id: DashboardWidgetId, direction: -1 | 1) {
+    const target = visibleWidgets[visibleWidgets.indexOf(id) + direction]
+    if (!target) return
+    moveWidget(id, target)
+    saveLayout()
+  }
+
   function weatherIcon(code: number): string {
     if (code === 0) return "\u2600\uFE0F"
     if (code <= 3) return "\u26C5"
@@ -999,6 +1127,136 @@
     </button>
   </nav>
 
+  {#snippet trendChart(
+    range: { chartStart: Date; chartEnd: Date; totalMs: number },
+    series: TrendSeries,
+    unit: string,
+    target: number | null,
+  )}
+    {@const cW = 600}
+    {@const cH = 200}
+    {@const cPad = { top: 20, right: 20, bottom: 34, left: 56 }}
+    {@const plotW = cW - cPad.left - cPad.right}
+    {@const plotH = cH - cPad.top - cPad.bottom}
+    {@const xForDate = (d: Date) => cPad.left + (plotW * (d.getTime() - range.chartStart.getTime())) / range.totalMs}
+    {@const yForValue = (v: number) => cPad.top + plotH - (plotH * (v - series.yMin)) / (series.yMax - series.yMin)}
+    {@const tx1 = xForDate(new Date(series.trendStart.date + "T00:00:00"))}
+    {@const ty1 = yForValue(series.trendStart.weight)}
+    {@const tx2 = xForDate(new Date(series.trendEnd.date + "T00:00:00"))}
+    {@const ty2 = yForValue(series.trendEnd.weight)}
+
+    <svg class="weight-chart" viewBox="0 0 {cW} {cH}" preserveAspectRatio="xMidYMid meet">
+      <!-- Y-axis gridlines and labels -->
+      {#each Array(5) as _, i}
+        {@const yVal = series.yMin + ((series.yMax - series.yMin) * (4 - i)) / 4}
+        {@const y = cPad.top + (plotH * i) / 4}
+        <line x1={cPad.left} y1={y} x2={cW - cPad.right} y2={y} class="chart-grid" />
+        <text x={cPad.left - 6} y={y + 4} class="chart-label" text-anchor="end">{Math.round(yVal * 10) / 10}</text>
+      {/each}
+
+      <!-- X-axis labels -->
+      <text x={xForDate(range.chartStart)} y={cH - 4} class="chart-label" text-anchor="start">
+        {formatDateShort(range.chartStart.toISOString(), tz)}
+      </text>
+      <text x={xForDate(range.chartEnd)} y={cH - 4} class="chart-label" text-anchor="end">
+        {formatDateShort(range.chartEnd.toISOString(), tz)}
+      </text>
+
+      <!-- Target reference line -->
+      {#if target != null}
+        {@const yTarget = yForValue(target)}
+        <line x1={cPad.left} y1={yTarget} x2={cW - cPad.right} y2={yTarget} class="chart-line-target" />
+        <text x={cW - cPad.right} y={yTarget - 6} class="chart-label-goal" text-anchor="end">Target</text>
+      {/if}
+
+      <!-- Actual line -->
+      {#if series.entries.length >= 2}
+        <polyline
+          fill="none"
+          class="chart-line-actual"
+          points={series.entries.map((e) => `${xForDate(new Date(e.date + "T00:00:00"))},${yForValue(e.weight)}`).join(" ")}
+        />
+      {/if}
+
+      <!-- Actual dots -->
+      {#each series.entries as e}
+        {@const x = xForDate(new Date(e.date + "T00:00:00"))}
+        {@const y = yForValue(e.weight)}
+        <circle cx={x} cy={y} r="8" class="chart-dot-hit" use:tooltip={weightDotTooltip(e.date, e.weight, unit)} />
+        <circle cx={x} cy={y} r="3" class="chart-dot" />
+      {/each}
+
+      <!-- Linear trend line -->
+      <line x1={tx1} y1={ty1} x2={tx2} y2={ty2} class="chart-line-trend" />
+    </svg>
+  {/snippet}
+
+  <!-- Pace axis is inverted: faster (lower) pace plots higher, so improvement trends upward -->
+  {#snippet paceChart(chart: NonNullable<typeof runningChart>)}
+    {@const cW = 600}
+    {@const cH = 200}
+    {@const cPad = { top: 20, right: 20, bottom: 34, left: 56 }}
+    {@const plotW = cW - cPad.left - cPad.right}
+    {@const plotH = cH - cPad.top - cPad.bottom}
+    {@const xForWeek = (i: number) => cPad.left + (plotW * (i + 0.5)) / chart.weeks.length}
+    {@const yForPace = (p: number) => cPad.top + (plotH * (p - chart.yMin)) / (chart.yMax - chart.yMin)}
+
+    <svg class="weight-chart" viewBox="0 0 {cW} {cH}" preserveAspectRatio="xMidYMid meet">
+      {#each Array(5) as _, i}
+        {@const pVal = chart.yMin + ((chart.yMax - chart.yMin) * i) / 4}
+        {@const y = cPad.top + (plotH * i) / 4}
+        <line x1={cPad.left} y1={y} x2={cW - cPad.right} y2={y} class="chart-grid" />
+        <text x={cPad.left - 6} y={y + 4} class="chart-label" text-anchor="end">{formatPace(pVal, false)}</text>
+      {/each}
+
+      <text x={cPad.left} y={cH - 4} class="chart-label" text-anchor="start">{formatDateShort(chart.weeks[0].weekStart, tz)}</text>
+      <text x={cW - cPad.right} y={cH - 4} class="chart-label" text-anchor="end">{formatDateShort(chart.weeks[chart.weeks.length - 1].weekStart, tz)}</text>
+
+      {#if chart.paced.length >= 2}
+        <polyline fill="none" class="chart-line-actual" points={chart.paced.map((w) => `${xForWeek(w.i)},${yForPace(w.avgPace)}`).join(" ")} />
+      {/if}
+
+      {#each chart.paced as w}
+        {@const x = xForWeek(w.i)}
+        {@const y = yForPace(w.avgPace)}
+        <circle cx={x} cy={y} r="8" class="chart-dot-hit" use:tooltip={runWeekTooltip(w)} />
+        <circle cx={x} cy={y} r="3" class="chart-dot" />
+      {/each}
+
+      {#if chart.trend}
+        <line x1={xForWeek(chart.trend.x1)} y1={yForPace(chart.trend.y1)} x2={xForWeek(chart.trend.x2)} y2={yForPace(chart.trend.y2)} class="chart-line-trend" />
+      {/if}
+    </svg>
+  {/snippet}
+
+  {#snippet milesChart(chart: NonNullable<typeof runningChart>)}
+    {@const cW = 600}
+    {@const cH = 140}
+    {@const cPad = { top: 16, right: 20, bottom: 34, left: 56 }}
+    {@const plotW = cW - cPad.left - cPad.right}
+    {@const plotH = cH - cPad.top - cPad.bottom}
+    {@const slotW = plotW / chart.weeks.length}
+    {@const barW = Math.max(Math.min(slotW * 0.6, 40), 2)}
+
+    <svg class="weight-chart" viewBox="0 0 {cW} {cH}" preserveAspectRatio="xMidYMid meet">
+      {#each [1, 0.5, 0] as frac}
+        {@const y = cPad.top + plotH * (1 - frac)}
+        <line x1={cPad.left} y1={y} x2={cW - cPad.right} y2={y} class="chart-grid" />
+        <text x={cPad.left - 6} y={y + 4} class="chart-label" text-anchor="end">{Math.round(chart.maxMiles * frac * 10) / 10}</text>
+      {/each}
+
+      {#each chart.weeks as w, i}
+        {@const h = (plotH * w.miles) / chart.maxMiles}
+        {@const x = cPad.left + slotW * (i + 0.5) - barW / 2}
+        <rect x={x} y={cPad.top + plotH - h} width={barW} height={h} rx="2" class="chart-bar" />
+        <rect x={cPad.left + slotW * i} y={cPad.top} width={slotW} height={plotH} class="chart-dot-hit" use:tooltip={runWeekTooltip(w)} />
+      {/each}
+
+      <text x={cPad.left} y={cH - 4} class="chart-label" text-anchor="start">{formatDateShort(chart.weeks[0].weekStart, tz)}</text>
+      <text x={cW - cPad.right} y={cH - 4} class="chart-label" text-anchor="end">{formatDateShort(chart.weeks[chart.weeks.length - 1].weekStart, tz)}</text>
+    </svg>
+  {/snippet}
+
   <!-- ════════════ OVERVIEW TAB ════════════ -->
   {#if activeTab === "overview"}
     {#if !hasAnyTargets}
@@ -1016,19 +1274,24 @@
       <p class="loading-text">Loading...</p>
     {:else if overviewData}
       <div class="widget-grid">
-        <!-- Nutrition Widget -->
-        {#if journey.shokuTargets && overviewData.shoku}
-          {@const shoku = overviewData.shoku}
-          {@const targets = journey.shokuTargets}
-          <Card>
-            <div class="widget">
-              <div class="widget-header">
-                <h3 class="widget-title">
-                  <svg class="widget-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">{@html icons.shoku}</svg>
-                  Nutrition
-                </h3>
-                <a href="/shoku" class="widget-link">View &rarr;</a>
-              </div>
+        {#each visibleWidgets as id (id)}
+        <div class="widget-slot" class:widget-dragging={draggingWidget === id} data-widget-id={id} animate:flip={{ duration: 200 }}>
+          {#if id === "shoku"}
+          <DashboardWidget
+            title="Nutrition"
+            icon={icons.shoku}
+            collapsed={collapsedWidgets.includes(id)}
+            onToggle={() => toggleWidget(id)}
+            onDragStart={(e) => startWidgetDrag(id, e)}
+            onDragMove={dragWidget}
+            onDragEnd={endWidgetDrag}
+            onMove={(dir) => nudgeWidget(id, dir)}
+          >
+            {#snippet headerExtra()}
+              <a href="/shoku" class="widget-link">View &rarr;</a>
+            {/snippet}
+              {@const shoku = overviewData.shoku}
+              {@const targets = journey.shokuTargets}
 
               {#if targets.dailyCalorieTarget}
                 {@const remaining = targets.dailyCalorieTarget - shoku.totals.calories + (shoku.caloriesBurnedToday ?? 0)}
@@ -1086,113 +1349,47 @@
                   <ProgressBar value={pct(shoku.waterOz, targets.dailyWaterTargetOz)} />
                 </div>
               {/if}
+          </DashboardWidget>
+          {:else if id === "weight"}
+          <DashboardWidget
+            title="Weight"
+            icon={WEIGHT_ICON}
+            collapsed={collapsedWidgets.includes(id)}
+            onToggle={() => toggleWidget(id)}
+            onDragStart={(e) => startWidgetDrag(id, e)}
+            onDragMove={dragWidget}
+            onDragEnd={endWidgetDrag}
+            onMove={(dir) => nudgeWidget(id, dir)}
+          >
+            {#snippet headerExtra()}
+              <div class="weight-range-toggle">
+              <button
+                type="button"
+                class="weight-range-btn"
+                class:weight-range-btn-active={weightCardRange === "week"}
+                onclick={() => (weightCardRange = "week")}
+              >
+                Week
+              </button>
+              <button
+                type="button"
+                class="weight-range-btn"
+                class:weight-range-btn-active={weightCardRange === "month"}
+                onclick={() => (weightCardRange = "month")}
+              >
+                Month
+              </button>
+              <button
+                type="button"
+                class="weight-range-btn"
+                class:weight-range-btn-active={weightCardRange === "all"}
+                onclick={() => (weightCardRange = "all")}
+              >
+                All
+              </button>
             </div>
-          </Card>
-        {/if}
-
-        {#snippet trendChart(
-          range: { chartStart: Date; chartEnd: Date; totalMs: number },
-          series: TrendSeries,
-          unit: string,
-          target: number | null,
-        )}
-          {@const cW = 600}
-          {@const cH = 200}
-          {@const cPad = { top: 20, right: 20, bottom: 34, left: 56 }}
-          {@const plotW = cW - cPad.left - cPad.right}
-          {@const plotH = cH - cPad.top - cPad.bottom}
-          {@const xForDate = (d: Date) => cPad.left + (plotW * (d.getTime() - range.chartStart.getTime())) / range.totalMs}
-          {@const yForValue = (v: number) => cPad.top + plotH - (plotH * (v - series.yMin)) / (series.yMax - series.yMin)}
-          {@const tx1 = xForDate(new Date(series.trendStart.date + "T00:00:00"))}
-          {@const ty1 = yForValue(series.trendStart.weight)}
-          {@const tx2 = xForDate(new Date(series.trendEnd.date + "T00:00:00"))}
-          {@const ty2 = yForValue(series.trendEnd.weight)}
-
-          <svg class="weight-chart" viewBox="0 0 {cW} {cH}" preserveAspectRatio="xMidYMid meet">
-            <!-- Y-axis gridlines and labels -->
-            {#each Array(5) as _, i}
-              {@const yVal = series.yMin + ((series.yMax - series.yMin) * (4 - i)) / 4}
-              {@const y = cPad.top + (plotH * i) / 4}
-              <line x1={cPad.left} y1={y} x2={cW - cPad.right} y2={y} class="chart-grid" />
-              <text x={cPad.left - 6} y={y + 4} class="chart-label" text-anchor="end">{Math.round(yVal * 10) / 10}</text>
-            {/each}
-
-            <!-- X-axis labels -->
-            <text x={xForDate(range.chartStart)} y={cH - 4} class="chart-label" text-anchor="start">
-              {formatDateShort(range.chartStart.toISOString(), tz)}
-            </text>
-            <text x={xForDate(range.chartEnd)} y={cH - 4} class="chart-label" text-anchor="end">
-              {formatDateShort(range.chartEnd.toISOString(), tz)}
-            </text>
-
-            <!-- Target reference line -->
-            {#if target != null}
-              {@const yTarget = yForValue(target)}
-              <line x1={cPad.left} y1={yTarget} x2={cW - cPad.right} y2={yTarget} class="chart-line-target" />
-              <text x={cW - cPad.right} y={yTarget - 6} class="chart-label-goal" text-anchor="end">Target</text>
-            {/if}
-
-            <!-- Actual line -->
-            {#if series.entries.length >= 2}
-              <polyline
-                fill="none"
-                class="chart-line-actual"
-                points={series.entries.map((e) => `${xForDate(new Date(e.date + "T00:00:00"))},${yForValue(e.weight)}`).join(" ")}
-              />
-            {/if}
-
-            <!-- Actual dots -->
-            {#each series.entries as e}
-              {@const x = xForDate(new Date(e.date + "T00:00:00"))}
-              {@const y = yForValue(e.weight)}
-              <circle cx={x} cy={y} r="8" class="chart-dot-hit" use:tooltip={weightDotTooltip(e.date, e.weight, unit)} />
-              <circle cx={x} cy={y} r="3" class="chart-dot" />
-            {/each}
-
-            <!-- Linear trend line -->
-            <line x1={tx1} y1={ty1} x2={tx2} y2={ty2} class="chart-line-trend" />
-          </svg>
-        {/snippet}
-
-        <!-- Weight Widget -->
-        {#if weightProgressCard}
-          {@const wp = weightProgressCard}
-          <Card>
-            <div class="widget">
-              <div class="widget-header">
-                <h3 class="widget-title">
-                  <svg class="widget-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <path d="M3 3v18h18"/><polyline points="7 14 11 10 14 13 20 7"/>
-                  </svg>
-                  Weight
-                </h3>
-                <div class="weight-range-toggle">
-                  <button
-                    type="button"
-                    class="weight-range-btn"
-                    class:weight-range-btn-active={weightCardRange === "week"}
-                    onclick={() => (weightCardRange = "week")}
-                  >
-                    Week
-                  </button>
-                  <button
-                    type="button"
-                    class="weight-range-btn"
-                    class:weight-range-btn-active={weightCardRange === "month"}
-                    onclick={() => (weightCardRange = "month")}
-                  >
-                    Month
-                  </button>
-                  <button
-                    type="button"
-                    class="weight-range-btn"
-                    class:weight-range-btn-active={weightCardRange === "all"}
-                    onclick={() => (weightCardRange = "all")}
-                  >
-                    All
-                  </button>
-                </div>
-              </div>
+            {/snippet}
+              {@const wp = weightProgressCard!}
 
               <div class="remaining-rows">
                 <div class="remaining-row"><span class="stat-label">Current</span><span class="stat-values">{wp.currentWeight != null ? `${wp.currentWeight} lbs` : "—"}</span></div>
@@ -1211,22 +1408,22 @@
               {:else}
                 <p class="widget-text">Log your weight and waist in today's journal check-in to start tracking progress.</p>
               {/if}
-            </div>
-          </Card>
-        {/if}
-
-        <!-- Habits Widget -->
-        {#if journey.kataTargets && overviewData.kata}
-          {@const kata = overviewData.kata}
-          <Card>
-            <div class="widget">
-              <div class="widget-header">
-                <h3 class="widget-title">
-                  <svg class="widget-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">{@html icons.kata}</svg>
-                  Habits
-                </h3>
-                <a href="/kata" class="widget-link">View &rarr;</a>
-              </div>
+          </DashboardWidget>
+          {:else if id === "kata"}
+          <DashboardWidget
+            title="Habits"
+            icon={icons.kata}
+            collapsed={collapsedWidgets.includes(id)}
+            onToggle={() => toggleWidget(id)}
+            onDragStart={(e) => startWidgetDrag(id, e)}
+            onDragMove={dragWidget}
+            onDragEnd={endWidgetDrag}
+            onMove={(dir) => nudgeWidget(id, dir)}
+          >
+            {#snippet headerExtra()}
+              <a href="/kata" class="widget-link">View &rarr;</a>
+            {/snippet}
+              {@const kata = overviewData.kata}
 
               {#if kata.dailyCommitments?.length > 0}
                 <div class="widget-subsection-label">Today</div>
@@ -1257,23 +1454,23 @@
                   </div>
                 {/each}
               {/if}
-            </div>
-          </Card>
-        {/if}
-
-        <!-- Workout Widget -->
-        {#if journey.dojoTargets && overviewData.dojo}
-          {@const dojo = overviewData.dojo}
-          {@const targets = journey.dojoTargets}
-          <Card>
-            <div class="widget">
-              <div class="widget-header">
-                <h3 class="widget-title">
-                  <svg class="widget-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">{@html icons.dojo}</svg>
-                  Workout
-                </h3>
-                <a href="/dojo" class="widget-link">View &rarr;</a>
-              </div>
+          </DashboardWidget>
+          {:else if id === "dojo"}
+          <DashboardWidget
+            title="Workout"
+            icon={icons.dojo}
+            collapsed={collapsedWidgets.includes(id)}
+            onToggle={() => toggleWidget(id)}
+            onDragStart={(e) => startWidgetDrag(id, e)}
+            onDragMove={dragWidget}
+            onDragEnd={endWidgetDrag}
+            onMove={(dir) => nudgeWidget(id, dir)}
+          >
+            {#snippet headerExtra()}
+              <a href="/dojo" class="widget-link">View &rarr;</a>
+            {/snippet}
+              {@const dojo = overviewData.dojo}
+              {@const targets = journey.dojoTargets}
 
               {#if targets.sessionsPerWeek}
                 <div class="widget-stat">
@@ -1308,23 +1505,81 @@
                   {/each}
                 </div>
               {/if}
-            </div>
-          </Card>
-        {/if}
+          </DashboardWidget>
+          {:else if id === "running"}
+          <DashboardWidget
+            title="Running"
+            icon={icons.running}
+            collapsed={collapsedWidgets.includes(id)}
+            onToggle={() => toggleWidget(id)}
+            onDragStart={(e) => startWidgetDrag(id, e)}
+            onDragMove={dragWidget}
+            onDragEnd={endWidgetDrag}
+            onMove={(dir) => nudgeWidget(id, dir)}
+          >
+            {#snippet headerExtra()}
+              <a href="/dojo" class="widget-link">View &rarr;</a>
+            {/snippet}
+              {@const run = overviewData.running}
+              {#if run.summary.totalRuns === 0}
+                <p class="widget-text">No runs with distance logged in this journey yet.</p>
+              {:else}
+                {@const tw = run.thisWeek}
+                {@const lw = run.lastWeek}
+                {@const milesDelta = Math.round((tw.miles - lw.miles) * 100) / 100}
+                {@const paceDelta = tw.avgPace != null && lw.avgPace != null ? tw.avgPace - lw.avgPace : null}
+                <div class="remaining-rows">
+                  <div class="remaining-row"><span class="stat-label">Runs</span><span class="stat-values">{run.summary.totalRuns}</span></div>
+                  <div class="remaining-row"><span class="stat-label">Miles</span><span class="stat-values">{run.summary.totalMiles} mi</span></div>
+                  <div class="remaining-row"><span class="stat-label">Avg pace</span><span class="stat-values">{formatPace(run.summary.avgPace, false)} /mi</span></div>
+                  <div class="remaining-row"><span class="stat-label">Best pace</span><span class="stat-values">{formatPace(run.summary.bestPace, false)} /mi</span></div>
+                  <div class="remaining-row"><span class="stat-label">Longest</span><span class="stat-values">{run.summary.longestRun} mi</span></div>
+                </div>
 
-        <!-- Fasting Widget -->
-        {#if journey.danjikiTargets && overviewData.danjiki}
-          {@const danjiki = overviewData.danjiki}
-          {@const target = journey.danjikiTargets.weeklyFastingHours}
-          <Card>
-            <div class="widget">
-              <div class="widget-header">
-                <h3 class="widget-title">
-                  <svg class="widget-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">{@html icons.danjiki}</svg>
-                  Fasting
-                </h3>
-                <a href="/danjiki" class="widget-link">View &rarr;</a>
-              </div>
+                <div class="remaining-rows run-weeks">
+                  <div class="remaining-row"><span class="stat-label">This week</span><span class="stat-values">{tw.miles} mi · {formatPace(tw.avgPace, false)} /mi</span></div>
+                  <div class="remaining-row"><span class="stat-label">Last week</span><span class="stat-values">{lw.miles} mi · {formatPace(lw.avgPace, false)} /mi</span></div>
+                  <div class="remaining-row">
+                    <span class="stat-label">Change</span>
+                    <span class="stat-values">
+                      <span class:delta-good={milesDelta > 0} class:delta-bad={milesDelta < 0}>
+                        {milesDelta > 0 ? "▲" : milesDelta < 0 ? "▼" : ""} {Math.abs(milesDelta)} mi
+                      </span>
+                      {#if paceDelta != null && Math.round(Math.abs(paceDelta) * 60) > 0}
+                        · <span class:delta-good={paceDelta < 0} class:delta-bad={paceDelta > 0}>
+                          {paceDelta < 0 ? "▲" : "▼"} {formatPace(Math.abs(paceDelta), false)} {paceDelta < 0 ? "faster" : "slower"}
+                        </span>
+                      {/if}
+                    </span>
+                  </div>
+                </div>
+
+                {#if runningChart}
+                  {#if runningChart.paced.length > 0}
+                    <span class="stat-label weight-chart-caption">Weekly pace (min/mi, faster is higher)</span>
+                    {@render paceChart(runningChart)}
+                  {/if}
+                  <span class="stat-label weight-chart-caption">Weekly miles</span>
+                  {@render milesChart(runningChart)}
+                {/if}
+              {/if}
+          </DashboardWidget>
+          {:else if id === "danjiki"}
+          <DashboardWidget
+            title="Fasting"
+            icon={icons.danjiki}
+            collapsed={collapsedWidgets.includes(id)}
+            onToggle={() => toggleWidget(id)}
+            onDragStart={(e) => startWidgetDrag(id, e)}
+            onDragMove={dragWidget}
+            onDragEnd={endWidgetDrag}
+            onMove={(dir) => nudgeWidget(id, dir)}
+          >
+            {#snippet headerExtra()}
+              <a href="/danjiki" class="widget-link">View &rarr;</a>
+            {/snippet}
+              {@const danjiki = overviewData.danjiki}
+              {@const target = journey.danjikiTargets.weeklyFastingHours}
 
               {#if target}
                 <div class="widget-stat">
@@ -1345,11 +1600,11 @@
                   <span>{elapsed}h elapsed of {danjiki.activeFast.targetDuration}h target</span>
                 </div>
               {/if}
-            </div>
-          </Card>
-        {/if}
+          </DashboardWidget>
+          {/if}
+        </div>
+        {/each}
       </div>
-
     {/if}
 
   <!-- ════════════ JOURNAL TAB ════════════ -->
@@ -2258,6 +2513,36 @@
 
   .widget-icon {
     flex-shrink: 0;
+  }
+
+  .widget-slot {
+    min-width: 0;
+  }
+
+  .widget-dragging {
+    position: relative;
+    z-index: 1;
+    opacity: 0.85;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    border-radius: var(--radius-md);
+  }
+
+  .run-weeks {
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border);
+  }
+
+  .delta-good {
+    color: var(--accent-green);
+  }
+
+  .delta-bad {
+    color: var(--accent-red);
+  }
+
+  .chart-bar {
+    fill: var(--ink);
+    opacity: 0.7;
   }
 
   .widget-link {

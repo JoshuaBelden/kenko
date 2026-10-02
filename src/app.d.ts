@@ -26,6 +26,7 @@ declare global {
           zipCode?: string
           latitude?: number
           longitude?: number
+          dashboardLayout?: { order: string[]; collapsed: string[] }
         } | null
       } | null
       activeJourneys: Array<{

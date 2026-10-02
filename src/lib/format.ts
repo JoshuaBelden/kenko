@@ -23,12 +23,13 @@ export function formatDateRange(start: string, end: string, tz: string): string 
   return `${formatDateShort(start, tz)} — ${formatDateShort(end, tz)}`
 }
 
-export function formatPace(minutesPerMile: number | null | undefined): string {
+export function formatPace(minutesPerMile: number | null | undefined, withUnit = true): string {
   if (minutesPerMile == null || !isFinite(minutesPerMile) || minutesPerMile <= 0) return "—"
   const totalSeconds = Math.round(minutesPerMile * 60)
   const min = Math.floor(totalSeconds / 60)
   const sec = totalSeconds % 60
-  return `${min}:${sec.toString().padStart(2, "0")} min/mile`
+  const pace = `${min}:${sec.toString().padStart(2, "0")}`
+  return withUnit ? `${pace} min/mile` : pace
 }
 
 export function formatDuration(
