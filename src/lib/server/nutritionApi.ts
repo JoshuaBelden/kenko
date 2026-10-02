@@ -125,13 +125,16 @@ export async function lookupBarcodeWithRaw(barcode: string): Promise<BarcodeLook
 
 export async function searchByName(query: string): Promise<NutritionApiResult[]> {
   try {
-    const url = `https://world.openfoodfacts.net/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=10&lc=en&cc=us`
+    const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=10&lc=en&cc=us`
     const res = await fetch(url, {
       headers: { "User-Agent": "Kenko/1.0" },
       signal: AbortSignal.timeout(5000),
     })
 
-    if (!res.ok) return []
+    if (!res.ok) {
+      console.warn(`OpenFoodFacts search failed: ${res.status} for "${query}"`)
+      return []
+    }
 
     const data = await res.json()
     if (!Array.isArray(data.products)) return []
@@ -139,7 +142,8 @@ export async function searchByName(query: string): Promise<NutritionApiResult[]>
     return data.products
       .filter((p: Record<string, unknown>) => p.product_name)
       .map((p: Record<string, unknown>) => mapProduct(p, (p.code as string) ?? ""))
-  } catch {
+  } catch (err) {
+    console.warn(`OpenFoodFacts search error for "${query}":`, err)
     return []
   }
 }
