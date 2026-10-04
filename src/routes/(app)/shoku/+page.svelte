@@ -186,8 +186,8 @@
     searchOpen = true
   }
 
-  async function handleFoodSelect(foodId: string, quantity: number, unit: string, category: string) {
-    searchOpen = false
+  async function handleFoodSelect(foodId: string, quantity: number, unit: string, category: string, keepOpen = false) {
+    if (!keepOpen) searchOpen = false
     const res = await fetch("/api/shoku/diary", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

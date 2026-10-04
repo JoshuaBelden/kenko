@@ -8,7 +8,7 @@
     categories?: any[]
     context?: "diary" | "meal-plan"
     onclose: () => void
-    onselect: (foodId: string, quantity: number, unit: string, category: string) => void
+    onselect: (foodId: string, quantity: number, unit: string, category: string, keepOpen?: boolean) => void
   }
 
   let { open, category, categories = [], context = "diary", onclose, onselect }: Props = $props()
@@ -58,6 +58,7 @@
   let scanRawJson = $state<Record<string, unknown> | null>(null)
   let manualBarcode = $state("")
   let manualLookingUp = $state(false)
+  let addedMessage = $state("")
 
   $effect(() => {
     selectedCategory = category
@@ -109,6 +110,7 @@
   function handleInput(e: Event) {
     const val = (e.target as HTMLInputElement).value
     query = val
+    addedMessage = ""
     clearTimeout(searchTimeout)
     searchTimeout = setTimeout(() => search(val), 400)
   }
@@ -132,10 +134,12 @@
     }
   }
 
-  function confirmSelection() {
+  function confirmSelection(keepOpen = false) {
     if (!selectedFood) return
-    onselect(selectedFood.id, servings, selectedUnit, selectedCategory)
+    const name = selectedFood.name
+    onselect(selectedFood.id, servings, selectedUnit, selectedCategory, keepOpen)
     reset()
+    if (keepOpen) addedMessage = `Added ${name}`
   }
 
   async function handleBarcodeScan(barcode: string) {
@@ -212,7 +216,7 @@
     fZinc = data.zinc?.toString() ?? ""
   }
 
-  async function handleInlineCreate() {
+  async function handleInlineCreate(keepOpen = false) {
     if (!fName.trim()) {
       createError = "Name is required"
       return
@@ -267,8 +271,9 @@
       }
 
       const created = await res.json()
-      onselect(created.id, 1, "serving", selectedCategory)
+      onselect(created.id, 1, "serving", selectedCategory, keepOpen)
       reset()
+      if (keepOpen) addedMessage = `Added ${created.name}`
     } catch {
       createError = "Failed to create food item"
     }
@@ -316,6 +321,7 @@
     manualLookingUp = false
     hasSearched = false
     libraryOnly = true
+    addedMessage = ""
   }
 
   function handleClose() {
@@ -504,9 +510,14 @@
             <p class="error-msg">{createError}</p>
           {/if}
           <div class="form-actions">
-            <Button variant="primary" onclick={handleInlineCreate} disabled={creating}>
+            <Button variant="primary" onclick={() => handleInlineCreate()} disabled={creating}>
               {creating ? "Saving..." : "Save & add to diary"}
             </Button>
+            {#if context !== "meal-plan"}
+              <Button variant="secondary" onclick={() => handleInlineCreate(true)} disabled={creating}>
+                Save & add more
+              </Button>
+            {/if}
           </div>
         </div>
 
@@ -549,7 +560,10 @@
             {/if}
           </div>
           <div class="form-actions">
-            <Button variant="primary" onclick={confirmSelection}>{context === "meal-plan" ? "Add to Meal Plan" : "Add to diary"}</Button>
+            <Button variant="primary" onclick={() => confirmSelection()}>{context === "meal-plan" ? "Add to Meal Plan" : "Add to diary"}</Button>
+            {#if context !== "meal-plan"}
+              <Button variant="secondary" onclick={() => confirmSelection(true)}>Add more to diary</Button>
+            {/if}
           </div>
         </div>
 
@@ -602,6 +616,9 @@
         </div>
         {#if barcodeError}
           <p class="barcode-error">{barcodeError}</p>
+        {/if}
+        {#if addedMessage}
+          <p class="added-msg">{addedMessage}</p>
         {/if}
         <div class="results">
           {#if searching}
@@ -832,6 +849,12 @@
     color: var(--accent);
   }
 
+  .added-msg {
+    padding: var(--space-2) var(--space-5);
+    font-size: var(--text-sm);
+    color: var(--ink-light);
+  }
+
   .scanner-wrap {
     flex: 1;
     min-height: 250px;
@@ -971,6 +994,9 @@
   }
 
   .form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
     padding-top: var(--space-2);
   }
 
