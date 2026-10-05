@@ -75,6 +75,37 @@
     selectedMacro = selectedMacro === key ? null : key
   }
 
+  // Meal sections collapse by default once a later meal has entries.
+  // Manual toggles override the default until the date changes.
+  let collapseOverrides = $state<Record<string, boolean>>({})
+  let overridesDate = ""
+
+  $effect(() => {
+    if (currentDate !== overridesDate) {
+      overridesDate = currentDate
+      collapseOverrides = {}
+    }
+  })
+
+  function hasEntries(key: string) {
+    return (grouped[key]?.length ?? 0) > 0
+  }
+
+  function defaultCollapsed(key: string) {
+    if (key === "snack" || key === "uncategorized") return true
+    if (key === "breakfast") return hasEntries("lunch")
+    if (key === "lunch") return hasEntries("dinner")
+    return false
+  }
+
+  function isCollapsed(key: string) {
+    return collapseOverrides[key] ?? defaultCollapsed(key)
+  }
+
+  function toggleCollapsed(key: string) {
+    collapseOverrides = { ...collapseOverrides, [key]: !isCollapsed(key) }
+  }
+
   function sumMacro(entries: any[], field: string) {
     return entries.reduce((sum, e) => sum + (e[field] ?? 0), 0)
   }
@@ -387,13 +418,21 @@
   {@const entries = grouped[cat.key] ?? []}
   <section class="section">
     <div class="category-header">
-      <h3>{cat.label}</h3>
+      <button
+        class="category-toggle"
+        aria-expanded={!isCollapsed(cat.key)}
+        onclick={() => toggleCollapsed(cat.key)}
+      >
+        <span class="chevron" class:is-collapsed={isCollapsed(cat.key)} aria-hidden="true">&#9662;</span>
+        <h3>{cat.label}</h3>
+      </button>
       {#if entries.length > 0}
-        <span class="category-macros">P {Math.round(sumMacro(entries, "calculatedProtein"))}g &middot; C {Math.round(sumMacro(entries, "calculatedNetCarbs"))}g &middot; F {Math.round(sumMacro(entries, "calculatedFat"))}g</span>
+        <span class="category-macros">{Math.round(sumMacro(entries, "calculatedCalories"))} cal &middot; P {Math.round(sumMacro(entries, "calculatedProtein"))}g &middot; C {Math.round(sumMacro(entries, "calculatedNetCarbs"))}g &middot; F {Math.round(sumMacro(entries, "calculatedFat"))}g</span>
       {/if}
       <button class="btn-add" onclick={() => openSearch(cat.key)}>+</button>
     </div>
 
+    {#if !isCollapsed(cat.key)}
       <div class="entries-stack">
         {#each visibleHints(cat.key) as hint}
           <div class="meal-hint">
@@ -467,6 +506,7 @@
           <p class="empty-cat">No entries yet</p>
         {/if}
       </div>
+    {/if}
   </section>
 {/each}
 
@@ -844,6 +884,28 @@
   .category-header h3 {
     font-size: var(--text-lg);
     margin: 0;
+  }
+
+  .category-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: inherit;
+    font: inherit;
+  }
+
+  .chevron {
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+    transition: transform var(--transition-fast);
+  }
+
+  .chevron.is-collapsed {
+    transform: rotate(-90deg);
   }
 
   .category-macros {
