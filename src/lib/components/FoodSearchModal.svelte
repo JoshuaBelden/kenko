@@ -536,7 +536,7 @@
           <div class="form-row">
             <div class="form-field">
               <label class="field-label" for="log-servings">Quantity</label>
-              <input id="log-servings" type="number" min="0.1" step="any" bind:value={servings} />
+              <input id="log-servings" type="number" min="0" step="any" bind:value={servings} />
             </div>
             <div class="form-field">
               <label class="field-label" for="log-unit">Unit</label>

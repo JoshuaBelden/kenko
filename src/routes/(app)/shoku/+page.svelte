@@ -450,7 +450,7 @@
                 <div class="form-row">
                   <div class="form-field">
                     <label class="field-label" for="edit-qty">Quantity</label>
-                    <input id="edit-qty" type="number" min="0.1" step="any" bind:value={editQuantity} />
+                    <input id="edit-qty" type="number" min="0" step="any" bind:value={editQuantity} />
                   </div>
                   <div class="form-field">
                     <label class="field-label" for="edit-unit">Unit</label>

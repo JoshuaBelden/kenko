@@ -417,7 +417,7 @@
                       class="serving-input"
                       value={entry.item.servingSize}
                       step="any"
-                      min="0.1"
+                      min="0"
                       onchange={(e) => updateItemServing(category, entry.index, parseFloat(e.currentTarget.value) || 1)}
                     />
                     <span class="item-name">{entry.food.name}</span>
