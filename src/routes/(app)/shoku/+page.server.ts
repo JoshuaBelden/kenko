@@ -22,7 +22,16 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
   const foodItemLogs = await getFoodItemLogsCollection()
   const entries = await foodItemLogs.find(filter).sort({ loggedAt: 1 }).toArray()
-  const serialized = entries.map(serializeFoodItemLog)
+  // Serving size lives on the food item, not the log entry
+  const loggedFoodIds = [...new Set(entries.map((e) => e.foodItemId.toString()))].map((id) => new ObjectId(id))
+  const loggedFoods = loggedFoodIds.length
+    ? await (await getFoodItemsCollection()).find({ _id: { $in: loggedFoodIds } }, { projection: { servingSize: 1 } }).toArray()
+    : []
+  const servingSizeMap = new Map(loggedFoods.map((f) => [f._id.toString(), f.servingSize ?? 100]))
+  const serialized = entries.map((doc) => {
+    const entry = serializeFoodItemLog(doc)
+    return { ...entry, foodServingSize: servingSizeMap.get(entry.foodItemId) ?? null }
+  })
 
   const grouped: Record<string, typeof serialized> = {
     breakfast: [],
@@ -114,6 +123,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
                 foodName: food.name,
                 servingSize: item.servingSize ?? 1,
                 servingUnit: item.servingUnit ?? "serving",
+                foodServingSize: food.servingSize ?? 100,
+                foodBaseUnit: food.baseUnit ?? "g",
                 macroType: item.macroType,
                 calories: food.calories ?? 0,
                 protein: food.protein ?? 0,

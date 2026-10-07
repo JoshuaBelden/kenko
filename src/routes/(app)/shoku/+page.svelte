@@ -438,7 +438,8 @@
           <div class="meal-hint">
             <button class="hint-add-btn" onclick={() => addFromMealBuild(hint, cat.key)}>Add</button>
             <span class="hint-name">{hint.foodName}</span>
-            <span class="hint-detail">{hint.servingSize} {hint.servingSize === 1 ? "serving" : "servings"}</span>
+            <span class="hint-detail">{hint.servingSize} {hint.servingSize === 1 ? "serving" : "servings"} ({hint.foodServingSize}{hint.foodBaseUnit})</span>
+            <span class="hint-cals">{Math.round(hint.calories * hint.servingSize)} cal</span>
             <span class="hint-macros">{Math.round(hint.protein * hint.servingSize)}P &middot; {Math.round(hint.netCarbs * hint.servingSize)}C &middot; {Math.round(hint.fat * hint.servingSize)}F</span>
           </div>
         {/each}
@@ -493,7 +494,7 @@
                 <span class="entry-name">{entry.foodName}</span>
                 <span class="entry-detail">
                   <span class="entry-main">
-                    <span class="entry-servings">{entry.quantity} {entry.unit === "serving" ? (entry.quantity === 1 ? "serving" : "servings") : unitLabel(entry.unit)}</span>
+                    <span class="entry-servings">{entry.quantity} {entry.unit === "serving" ? (entry.quantity === 1 ? "serving" : "servings") : unitLabel(entry.unit)}{#if entry.unit === "serving" && entry.foodServingSize != null}<span class="entry-serving-size"> ({entry.foodServingSize}{entry.foodBaseUnit})</span>{/if}</span>
                     <span class="entry-cals">{formatMacro(entry.calculatedCalories, "")} cal</span>
                   </span>
                   <span class="entry-macros">P {formatMacro(entry.calculatedProtein, "g")} &middot; C {formatMacro(entry.calculatedNetCarbs, "g")} &middot; F {formatMacro(entry.calculatedFat, "g")}</span>
@@ -621,6 +622,15 @@
     font-family: var(--font-body);
     font-size: var(--text-xs);
     color: var(--ink-faint);
+  }
+
+  .hint-cals {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--ink-light);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
 
   .hint-macros {
@@ -991,6 +1001,10 @@
     color: var(--ink-faint);
     white-space: nowrap;
     padding: 0 var(--space-3);
+  }
+
+  .entry-serving-size {
+    font-size: var(--text-xs);
   }
 
   .entry-macros {

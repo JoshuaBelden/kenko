@@ -332,7 +332,7 @@
     background: none;
     border: none;
     border-left: 3px solid transparent;
-    padding: 0;
+    padding: 0 0 0 var(--space-3);
     font-family: var(--font-body);
     transition: border-color var(--transition-fast);
   }
