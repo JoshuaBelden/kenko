@@ -20,7 +20,7 @@
     border-radius: var(--radius-sm);
     font-family: var(--font-body);
     font-size: var(--text-xs);
-    white-space: nowrap;
+    white-space: pre;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   }
 </style>

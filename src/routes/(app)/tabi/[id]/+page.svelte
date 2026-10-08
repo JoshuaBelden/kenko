@@ -2,7 +2,7 @@
   import { goto, invalidate, invalidateAll } from "$app/navigation"
   import { page } from "$app/state"
   import { flip } from "svelte/animate"
-  import { Button, Card, DashboardWidget, ProgressBar, RadialProgress, StarRating, DotRating, TipTapEditor } from "$lib/components"
+  import { Button, Card, DashboardWidget, DaySticker, ProgressBar, RadialProgress, StarRating, DotRating, TipTapEditor, WeekMedal } from "$lib/components"
   import { isDashboardWidgetId, resolveWidgetOrder, type DashboardWidgetId } from "$lib/dashboardWidgets"
   import SettingsTabs from "$lib/components/settings/SettingsTabs.svelte"
   import TrainerChat from "$lib/components/TrainerChat.svelte"
@@ -99,13 +99,14 @@
   let calendarMonth = $state(new Date())
   const calendarToday = $derived(localToday(tz))
   let calendarData = $state<Record<string, any>>({})
+  let calendarWeeks = $state<Record<string, any>>({})
   let calendarTdee = $state<number | null>(null)
   let calendarLoading = $state(false)
   let selectedDay = $state<string | null>(null)
   let progressSidebarOpen = $state(false)
 
-  function monthStrOf(d: Date) {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+  function dateStrOf(d: Date) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
   }
 
   // Monday-start week: JS getDay() is 0=Sun..6=Sat, so shift by (dow + 6) % 7 days back to Monday
@@ -115,15 +116,21 @@
     return date
   }
 
-  const calendarLoadKey = $derived.by(() => {
-    if (calendarViewMode === "month") return monthStrOf(calendarMonth)
-    const start = startOfWeekMonday(calendarMonth)
-    const end = new Date(start)
+  // Visible grid range: one Monday–Sunday week, or the month padded out to full weeks
+  const calendarRange = $derived.by(() => {
+    const start =
+      calendarViewMode === "month"
+        ? startOfWeekMonday(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1))
+        : startOfWeekMonday(calendarMonth)
+    const end =
+      calendarViewMode === "month"
+        ? startOfWeekMonday(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0))
+        : new Date(start)
     end.setDate(end.getDate() + 6)
-    const startM = monthStrOf(start)
-    const endM = monthStrOf(end)
-    return startM === endM ? startM : `${startM},${endM}`
+    return { start, end }
   })
+
+  const calendarLoadKey = $derived(`${dateStrOf(calendarRange.start)}_${dateStrOf(calendarRange.end)}`)
 
   let lastLoadedKey = ""
   $effect(() => {
@@ -139,25 +146,20 @@
   async function loadCalendarData(key: string) {
     calendarLoading = true
     try {
-      const months = key.split(",")
-      const results = await Promise.all(
-        months.map((m) =>
-          fetch(`/api/journeys/${journey.id}/calendar?month=${m}`).then((res) => (res.ok ? res.json() : null)),
-        ),
-      )
-      const mergedDays: Record<string, any> = {}
-      let tdee: number | null = null
-      for (const result of results) {
-        if (!result) continue
-        Object.assign(mergedDays, result.days ?? {})
-        if (result.tdee != null) tdee = result.tdee
+      const [start, end] = key.split("_")
+      const res = await fetch(`/api/journeys/${journey.id}/calendar?start=${start}&end=${end}`)
+      if (!res.ok) throw new Error(`Calendar request failed: ${res.status}`)
+      const result = await res.json()
+      // Ignore a stale response if the user navigated while it was in flight
+      if (key === lastLoadedKey) {
+        calendarData = result.days ?? {}
+        calendarWeeks = result.weeks ?? {}
+        calendarTdee = result.tdee ?? null
       }
-      calendarData = mergedDays
-      calendarTdee = tdee
     } catch (err) {
       console.error("Failed to load calendar data:", err)
     }
-    calendarLoading = false
+    if (key === lastLoadedKey) calendarLoading = false
   }
 
   function dayData(dateStr: string) {
@@ -168,34 +170,16 @@
     return !!calendarData[dateStr]
   }
 
-  type Cell = { day: number; dateStr: string } | null
+  // `outside` marks days from the previous/next month that pad out the month grid
+  type Cell = { day: number; dateStr: string; outside: boolean }
 
   const calendarRows = $derived.by(() => {
-    if (calendarViewMode === "week") {
-      const start = startOfWeekMonday(calendarMonth)
-      const days: Cell[] = []
-      for (let i = 0; i < 7; i++) {
-        const d = new Date(start)
-        d.setDate(d.getDate() + i)
-        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
-        days.push({ day: d.getDate(), dateStr })
-      }
-      return [{ days, weekIndex: 0 }]
-    }
-
-    const year = calendarMonth.getFullYear()
+    const { start, end } = calendarRange
     const month = calendarMonth.getMonth()
-    const startDow = (new Date(year, month, 1).getDay() + 6) % 7 // Monday-start offset
-    const daysInMonth = new Date(year, month + 1, 0).getDate()
-
-    // Build flat list of day cells (null = blank)
-    const flat: Cell[] = Array(startDow).fill(null)
-    for (let d = 1; d <= daysInMonth; d++) {
-      const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`
-      flat.push({ day: d, dateStr })
+    const flat: Cell[] = []
+    for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      flat.push({ day: d.getDate(), dateStr: dateStrOf(d), outside: calendarViewMode === "month" && d.getMonth() !== month })
     }
-    // Pad trailing blanks to complete the last week
-    while (flat.length % 7 !== 0) flat.push(null)
 
     // Chunk into rows of 7 days + 1 summary cell
     const rows: { days: Cell[]; weekIndex: number }[] = []
@@ -204,6 +188,12 @@
     }
     return rows
   })
+
+  const STICKER_STATUS_MARK: Record<string, string> = { hit: "✓", close: "~", miss: "✗" }
+
+  function awardTooltip(title: string, goals: { label: string; status: string; detail: string }[]): string {
+    return [title, ...goals.map((g) => `${STICKER_STATUS_MARK[g.status]} ${g.label} ${g.detail}`)].join("\n")
+  }
 
   const calendarMonthLabel = $derived(
     new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(calendarMonth),
@@ -1866,29 +1856,29 @@
               {#each calendarRows as row}
                 <div class="calendar-row" class:calendar-row-alt={row.weekIndex % 2 === 1}>
                   {#each row.days as cell, i}
-                    {#if cell}
-                      {@const dd = dayData(cell.dateStr)}
-                      <div
-                        class="calendar-cell"
-                        class:calendar-cell-today={cell.dateStr === calendarToday}
-                        class:calendar-cell-active={dd}
-                        onclick={() => { if (dd) selectedDay = cell.dateStr }}
-                        role={dd ? "button" : undefined}
-                        tabindex={dd ? 0 : undefined}
-                        onkeydown={(e) => { if (dd && (e.key === "Enter" || e.key === " ")) selectedDay = cell.dateStr }}
-                      >
-                        <!-- Top-left: day name (mobile week view) + day number -->
-                        <span class="calendar-day-number"><span class="cal-dow-label">{WEEK_DOW[i]}</span>{cell.day}</span>
-                        <!-- Top-center: weather -->
-                        {#if dd?.weather}
-                          <span class="cal-weather">{weatherIcon(dd.weather.weatherCode)} {dd.weather.temperatureMax}°/{dd.weather.temperatureMin}°</span>
-                        {/if}
-                        <!-- Top-right: day rating -->
-                        <div class="cal-rating">
-                          {#if dd?.dayRating}
-                            <div class="cal-dots">
-                              {#each Array(5) as _, i}
-                                <span class="cal-dot" class:cal-dot-filled={i < dd.dayRating}></span>
+                    {@const dd = dayData(cell.dateStr)}
+                    <div
+                      class="calendar-cell"
+                      class:calendar-cell-outside={cell.outside}
+                      class:calendar-cell-today={cell.dateStr === calendarToday}
+                      class:calendar-cell-active={dd}
+                      onclick={() => { if (dd) selectedDay = cell.dateStr }}
+                      role={dd ? "button" : undefined}
+                      tabindex={dd ? 0 : undefined}
+                      onkeydown={(e) => { if (dd && (e.key === "Enter" || e.key === " ")) selectedDay = cell.dateStr }}
+                    >
+                      <!-- Top-left: day name (mobile week view) + day number -->
+                      <span class="calendar-day-number"><span class="cal-dow-label">{WEEK_DOW[i]}</span>{cell.day}</span>
+                      <!-- Top-center: weather -->
+                      {#if dd?.weather}
+                        <span class="cal-weather">{weatherIcon(dd.weather.weatherCode)} {dd.weather.temperatureMax}°/{dd.weather.temperatureMin}°</span>
+                      {/if}
+                      <!-- Top-right: day rating -->
+                      <div class="cal-rating">
+                        {#if dd?.dayRating}
+                          <div class="cal-dots">
+                            {#each Array(5) as _, i}
+                              <span class="cal-dot" class:cal-dot-filled={i < dd.dayRating}></span>
                               {/each}
                             </div>
                           {/if}
@@ -1941,14 +1931,32 @@
                             {/if}
                           {/if}
                         </div>
+                        <!-- Bottom-right: sticker for a completed Perfect / Outstanding day -->
+                        {#if dd?.award?.tier}
+                          <div class="cal-sticker">
+                            <DaySticker
+                              tier={dd.award.tier}
+                              title={awardTooltip(dd.award.tier === "perfect" ? "Perfect day" : "Outstanding day", dd.award.goals)}
+                            />
+                          </div>
+                        {/if}
                       </div>
-                    {:else}
-                      <div class="calendar-cell calendar-cell-empty"></div>
-                    {/if}
                   {/each}
                   <div class="calendar-cell calendar-cell-summary">
-                    {#if row.days.filter(Boolean).some((c) => calendarData[c!.dateStr])}
-                      {@const weekDays = row.days.filter(Boolean).map((c) => calendarData[c!.dateStr]).filter(Boolean)}
+                    {#if calendarWeeks[row.days[0].dateStr]?.medal}
+                      {@const weekAward = calendarWeeks[row.days[0].dateStr]}
+                      <div class="cal-medal">
+                        <WeekMedal
+                          medal={weekAward.medal}
+                          title={awardTooltip(
+                            `${weekAward.medal[0].toUpperCase()}${weekAward.medal.slice(1)} week · ${weekAward.stickerDays} sticker day${weekAward.stickerDays === 1 ? "" : "s"}`,
+                            weekAward.targets,
+                          )}
+                        />
+                      </div>
+                    {/if}
+                    {#if row.days.some((c) => calendarData[c.dateStr])}
+                      {@const weekDays = row.days.map((c) => calendarData[c.dateStr]).filter(Boolean)}
                       {@const allWorkouts = weekDays.flatMap((d: any) => d.workouts ?? [])}
                       {@const weekVolume = allWorkouts.filter((w: any) => w.type === "strength").reduce((s: number, w: any) => s + (w.totalVolume ?? 0), 0)}
                       {@const weekStrengthDur = allWorkouts.filter((w: any) => w.type === "strength").reduce((s: number, w: any) => s + (w.durationMin ?? 0), 0)}
@@ -3020,6 +3028,22 @@
     align-self: start;
   }
 
+  .cal-sticker {
+    grid-column: 3;
+    grid-row: 2;
+    justify-self: end;
+    align-self: end;
+  }
+
+  .cal-medal {
+    margin-bottom: auto;
+  }
+
+  /* Previous/next-month days that pad out the month grid */
+  .calendar-cell-outside {
+    opacity: 0.5;
+  }
+
   .cal-stats {
     grid-column: 1 / 3;
     display: flex;
@@ -3112,8 +3136,13 @@
       font-size: var(--text-base);
     }
 
+    .calendar-grid-week .cal-sticker {
+      z-index: 1;
+    }
+
     .calendar-grid-week .cal-stats {
       grid-column: 1 / -1;
+      grid-row: 2;
       align-self: start;
       gap: var(--space-1);
     }

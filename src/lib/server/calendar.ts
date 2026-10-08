@@ -1,9 +1,10 @@
 import { getWeightLogCollection, getJournalEntriesCollection, getUsersCollection } from "$lib/server/collections"
 import { getFastsCollection } from "$lib/server/danjiki"
-import { startOfDayTz, endOfDayTz } from "$lib/server/dates"
+import { addDaysStr, buildAwardGoals, dailyCommitmentsMet, evaluateDay, evaluateWeek, type WeekAward } from "$lib/server/awards"
+import { startOfDayTz, endOfDayTz, todayStr } from "$lib/server/dates"
 import { getWorkoutLogsCollection } from "$lib/server/dojo"
 import { getCommitmentsCollection, getCommitmentLogsCollection } from "$lib/server/kata"
-import { getFoodItemLogsCollection } from "$lib/server/shoku"
+import { getFoodItemLogsCollection, getWaterLogCollection } from "$lib/server/shoku"
 import { calculateTdee } from "$lib/server/tdee"
 import { ObjectId, type Document, type WithId } from "mongodb"
 
@@ -21,6 +22,9 @@ export function dateStrFromDate(d: Date, tz: string): string {
  * Builds the per-day Progress data (workouts, fasts, journal, commitments, weight, calories)
  * for a journey between two inclusive YYYY-MM-DD dates in the user's timezone.
  * Shared by the calendar API and the AI Trainer.
+ *
+ * Past days inside the journey get an `award` (sticker tier + goal results), and every
+ * full Monday–Sunday week in the range that has ended gets an entry in `weeks`, keyed by its Monday.
  */
 export async function getCalendarDays(
   userId: ObjectId,
@@ -28,7 +32,7 @@ export async function getCalendarDays(
   userTz: string,
   firstDay: string,
   lastDay: string,
-): Promise<{ days: Record<string, any>; tdee: number | null }> {
+): Promise<{ days: Record<string, any>; weeks: Record<string, WeekAward>; tdee: number | null }> {
   const rangeStart = startOfDayTz(firstDay, userTz)
   const rangeEnd = endOfDayTz(lastDay, userTz)
   const journeyId = journey._id
@@ -48,6 +52,7 @@ export async function getCalendarDays(
     foodItemLogs,
     commitmentDocs,
     userDoc,
+    waterEntries,
   ] = await Promise.all([
     getWorkoutLogsCollection().then((col) =>
       col
@@ -109,6 +114,14 @@ export async function getCalendarDays(
         )
       : Promise.resolve([]),
     getUsersCollection().then((col) => col.findOne({ _id: userId })),
+    getWaterLogCollection().then((col) =>
+      col
+        .find({
+          userId,
+          date: { $gte: firstDay, $lte: lastDay },
+        })
+        .toArray(),
+    ),
   ])
 
   const totalCommitments = commitmentDocs.length
@@ -133,7 +146,10 @@ export async function getCalendarDays(
         waist: null,
         weather: null,
         caloriesConsumed: 0,
+        proteinConsumed: 0,
+        waterOz: 0,
         caloriesBurned: 0,
+        commitments: {} as Record<string, number>,
       }
     }
     return days[dateStr]
@@ -183,16 +199,11 @@ export async function getCalendarDays(
     day.weather = entry.weather ?? day.weather
   }
 
-  // Commitment logs — count distinct commitments met per day
-  const commitmentsByDay = new Map<string, Set<string>>()
+  // Commitment logs — summed value per commitment per day
   for (const log of commitmentLogs) {
-    const d = dateStrFromDate(log.date, userTz)
-    ensureDay(d)
-    if (!commitmentsByDay.has(d)) commitmentsByDay.set(d, new Set())
-    if (log.value > 0) commitmentsByDay.get(d)!.add(log.commitmentId.toString())
-  }
-  for (const [d, ids] of commitmentsByDay) {
-    days[d].commitmentsMet = ids.size
+    const day = ensureDay(dateStrFromDate(log.date, userTz))
+    const id = log.commitmentId.toString()
+    day.commitments[id] = (day.commitments[id] ?? 0) + (log.value ?? 0)
   }
 
   // Weight entries
@@ -207,6 +218,12 @@ export async function getCalendarDays(
     const d = dateStrFromDate(entry.date, userTz)
     const day = ensureDay(d)
     day.caloriesConsumed += entry.calculatedCalories ?? 0
+    day.proteinConsumed += entry.calculatedProtein ?? 0
+  }
+
+  // Water
+  for (const entry of waterEntries) {
+    if (entry.ounces > 0) ensureDay(entry.date).waterOz = entry.ounces
   }
 
   // Compute effective TDEE
@@ -234,5 +251,39 @@ export async function getCalendarDays(
     }
   }
 
-  return { days, tdee: effectiveTdee }
+  const goals = buildAwardGoals(journey, commitmentDocs, (d) => dateStrFromDate(d, userTz))
+
+  // Commitments met: daily habits are direction-aware; other periods count any logged contribution
+  const dailyIds = new Set(goals.dailyCommitments.map((c) => c.id))
+  for (const [d, day] of Object.entries(days)) {
+    const daily = dailyCommitmentsMet(goals, d, day.commitments)
+    const otherLogged = Object.entries(day.commitments as Record<string, number>).filter(
+      ([id, v]) => !dailyIds.has(id) && v > 0,
+    ).length
+    day.commitmentsMet = daily.met + otherLogged
+  }
+
+  // Stickers and medals — only for completed days inside the journey
+  const today = todayStr(userTz)
+  const journeyStart = journey.startDate ? dateStrFromDate(new Date(journey.startDate), userTz) : null
+  const journeyEnd = journey.endDate ? dateStrFromDate(new Date(journey.endDate), userTz) : null
+  const isEligible = (d: string) =>
+    d < today && (!journeyStart || d >= journeyStart) && (!journeyEnd || d <= journeyEnd)
+
+  for (const [d, day] of Object.entries(days)) {
+    day.award = isEligible(d) ? evaluateDay(day, goals, d) : null
+  }
+
+  const weeks: Record<string, WeekAward> = {}
+  for (let d = firstDay; d <= lastDay; d = addDaysStr(d, 1)) {
+    const isMonday = new Date(`${d}T12:00:00Z`).getUTCDay() === 1
+    const sunday = addDaysStr(d, 6)
+    if (!isMonday || sunday > lastDay || sunday >= today) continue
+    const weekDates = Array.from({ length: 7 }, (_, i) => addDaysStr(d, i))
+    const eligible = weekDates.filter(isEligible)
+    if (eligible.length === 0) continue
+    weeks[d] = evaluateWeek(weekDates, eligible, days, goals)
+  }
+
+  return { days, weeks, tdee: effectiveTdee }
 }
