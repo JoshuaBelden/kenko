@@ -4,6 +4,10 @@
   interface Props {
     open: boolean
     exercises: any[]
+    /** Show the rest-seconds field (plans store rest; live sessions don't) */
+    showRest?: boolean
+    /** Prefill reps/weight per exerciseId when an exercise is picked (e.g. from last session) */
+    suggestions?: Record<string, { weight: number; reps: number }>
     onclose: () => void
     onadd: (exercise: {
       exerciseId: string
@@ -14,7 +18,7 @@
     }) => void
   }
 
-  let { open, exercises, onclose, onadd }: Props = $props()
+  let { open, exercises, showRest = true, suggestions = {}, onclose, onadd }: Props = $props()
 
   let searchQuery = $state("")
   let regionFilter = $state("")
@@ -109,6 +113,15 @@
     restSeconds = "90"
   }
 
+  function selectExercise(id: string) {
+    selectedExerciseId = id
+    const suggestion = suggestions[id]
+    if (suggestion) {
+      targetReps = String(suggestion.reps)
+      targetWeight = suggestion.weight ? String(suggestion.weight) : ""
+    }
+  }
+
   function handleClose() {
     reset()
     onclose()
@@ -182,7 +195,7 @@
           <button
             class="result-item"
             class:selected={selectedExerciseId === ex.id}
-            onclick={() => (selectedExerciseId = ex.id)}
+            onclick={() => selectExercise(ex.id)}
           >
             <div class="result-info">
               <span class="result-name">{ex.name}</span>
@@ -210,10 +223,12 @@
               <label class="field-label">Weight (lbs)</label>
               <input type="number" class="field-input" bind:value={targetWeight} placeholder="opt" />
             </div>
-            <div class="config-field">
-              <label class="field-label">Rest (s)</label>
-              <input type="number" class="field-input" bind:value={restSeconds} min="0" />
-            </div>
+            {#if showRest}
+              <div class="config-field">
+                <label class="field-label">Rest (s)</label>
+                <input type="number" class="field-input" bind:value={restSeconds} min="0" />
+              </div>
+            {/if}
           </div>
           <div class="config-actions">
             <Button variant="primary" onclick={handleAdd}>Add Exercise</Button>

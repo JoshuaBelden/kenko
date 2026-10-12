@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation"
   import { page } from "$app/state"
-  import { Button, Card, PageHeader } from "$lib/components"
+  import { Button, Card, ExerciseSearchModal, PageHeader } from "$lib/components"
   import { icons } from "$lib/icons"
   import { formatDuration, formatPace } from "$lib/format"
   import { DEFAULT_WORKOUT_TYPES, workoutTypeLabel, type WorkoutType } from "$lib/workoutTypes"
@@ -123,9 +123,8 @@
   let restSecondsLeft = $state(0)
   let restTimerInterval = $state<ReturnType<typeof setInterval> | null>(null)
 
-  // Add exercise from library
-  let addExerciseOpen = $state(false)
-  let addExerciseId = $state("")
+  // Add exercise from library — exerciseOrder index to insert after (-1 = top), null = closed
+  let addExerciseAfter = $state<number | null>(null)
 
   const snapshotExercises = $derived(log?.planSnapshot?.exercises ?? [])
   const isCompleted = $derived(log?.status === "completed")
@@ -148,16 +147,27 @@
     return snapshotExercises.find((e: any) => e.exerciseId === exerciseId)
   }
 
-  // All unique exerciseIds in order (snapshot + additional)
+  // All unique exerciseIds in order — follows the sets array so inserted exercises keep
+  // their position; snapshot exercises without sets stay after their snapshot predecessor
   const exerciseOrder = $derived(() => {
-    const ordered: string[] = snapshotExercises.map((e: any) => e.exerciseId)
+    const ordered: string[] = []
     for (const s of sets) {
-      if (s.isAdditional && !ordered.includes(s.exerciseId)) {
-        ordered.push(s.exerciseId)
-      }
+      if (!ordered.includes(s.exerciseId)) ordered.push(s.exerciseId)
     }
+    snapshotExercises.forEach((e: any, i: number) => {
+      if (ordered.includes(e.exerciseId)) return
+      const prevId = snapshotExercises[i - 1]?.exerciseId
+      ordered.splice(prevId ? ordered.indexOf(prevId) + 1 : 0, 0, e.exerciseId)
+    })
     return ordered
   })
+
+  // Index in sets just past every set of the exercises at exerciseOrder positions <= orderIdx
+  function setInsertIndex(orderIdx: number): number {
+    const order = exerciseOrder()
+    const idx = sets.findIndex(s => order.indexOf(s.exerciseId) > orderIdx)
+    return idx === -1 ? sets.length : idx
+  }
 
   function exerciseName(exerciseId: string): string {
     const snap = snapshotExercises.find((e: any) => e.exerciseId === exerciseId)
@@ -176,23 +186,26 @@
     const existing = setsForExercise(exerciseId)
     const target = getTargetForExercise(exerciseId)
     const lastSet = existing[existing.length - 1]
+    // Insert after this exercise's existing sets so it keeps its place in the list
+    const at = setInsertIndex(exerciseOrder().indexOf(exerciseId))
 
-    sets = [...sets, {
+    const newSet = {
       exerciseId,
       setNumber: existing.length + 1,
       weight: lastSet?.weight ?? target?.targetWeight ?? 0,
       reps: lastSet?.reps ?? target?.targetReps ?? 10,
       rpe: null,
       isAdditional,
-    }]
+    }
+    sets = [...sets.slice(0, at), newSet, ...sets.slice(at)]
   }
 
   function updateSet(exerciseId: string, setNumber: number, field: string, value: any) {
     sets = sets.map(s => {
       if (s.exerciseId !== exerciseId) return s
       if (s.setNumber === setNumber) return { ...s, [field]: value }
-      // Propagate weight/reps changes to all sets below
-      if ((field === "weight" || field === "reps") && s.setNumber > setNumber) {
+      // Propagate weight/reps changes to incomplete sets below
+      if ((field === "weight" || field === "reps") && s.setNumber > setNumber && !s.completed) {
         return { ...s, [field]: value }
       }
       return s
@@ -362,15 +375,25 @@
   }
 
 
-  function openAddExercise() {
-    addExerciseOpen = true
-    addExerciseId = exercises[0]?.id ?? ""
-  }
-
-  function confirmAddExercise() {
-    if (!addExerciseId) return
-    addSet(addExerciseId, true)
-    addExerciseOpen = false
+  function confirmAddExercise(picked: { exerciseId: string; targetSets: number; targetReps: number; targetWeight: number | null }) {
+    if (addExerciseAfter === null) return
+    const { exerciseId } = picked
+    const existing = setsForExercise(exerciseId)
+    const order = exerciseOrder()
+    // Already in the workout: append after its sets; otherwise insert at the chosen slot
+    const at = order.includes(exerciseId)
+      ? setInsertIndex(order.indexOf(exerciseId))
+      : setInsertIndex(addExerciseAfter)
+    const newSets = Array.from({ length: picked.targetSets }, (_, i) => ({
+      exerciseId,
+      setNumber: existing.length + i + 1,
+      weight: picked.targetWeight ?? 0,
+      reps: picked.targetReps,
+      rpe: null,
+      isAdditional: true,
+    }))
+    sets = [...sets.slice(0, at), ...newSets, ...sets.slice(at)]
+    addExerciseAfter = null
   }
 
   async function handleRecalculate() {
@@ -656,6 +679,11 @@
   {/if}
 
   {#if !isCardio}
+  <!-- Add Exercise from Library — inserted after the exercise at afterIdx -->
+  {#snippet addExerciseSlot(afterIdx: number)}
+    <button class="add-exercise-btn" onclick={() => (addExerciseAfter = afterIdx)}>+ Add Exercise</button>
+  {/snippet}
+
   <!-- Exercise List -->
   <div class="exercise-list">
   {#each exerciseOrder() as exerciseId, exIdx}
@@ -765,30 +793,14 @@
         {/if}
       </div>
     </Card>
-  {/each}
-  </div>
-
-  <!-- Add Exercise from Library -->
-  {#if !isCompleted}
-    {#if addExerciseOpen}
-      <Card>
-        <div class="add-exercise-form">
-          <span class="field-label">Add Exercise from Library</span>
-          <select class="field-input" bind:value={addExerciseId}>
-            {#each exercises as ex}
-              <option value={ex.id}>{ex.name}</option>
-            {/each}
-          </select>
-          <div class="form-actions">
-            <Button variant="secondary" onclick={() => (addExerciseOpen = false)}>Cancel</Button>
-            <Button variant="primary" onclick={confirmAddExercise}>Add</Button>
-          </div>
-        </div>
-      </Card>
-    {:else}
-      <button class="add-exercise-btn" onclick={openAddExercise}>+ Add Exercise</button>
+    {#if !isCompleted}
+      {@render addExerciseSlot(exIdx)}
     {/if}
+  {/each}
+  {#if !isCompleted && exerciseOrder().length === 0}
+    {@render addExerciseSlot(-1)}
   {/if}
+  </div>
   {/if}
 
   <!-- Cardio Distance & Dates -->
@@ -870,6 +882,15 @@
     <Button variant="ghost" onclick={handleBackToDojo}>Close</Button>
   </div>
 {/if}
+
+<ExerciseSearchModal
+  open={addExerciseAfter !== null}
+  {exercises}
+  showRest={false}
+  suggestions={page.data.setSuggestions ?? {}}
+  onclose={() => (addExerciseAfter = null)}
+  onadd={confirmAddExercise}
+/>
 
 <style>
   .exercise-list {
@@ -1239,18 +1260,11 @@
     transition: all var(--transition-fast);
     width: 100%;
     text-align: center;
-    margin-top: var(--space-2);
   }
 
   .add-exercise-btn:hover {
     border-color: var(--border-strong);
     color: var(--ink);
-  }
-
-  .add-exercise-form {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
   }
 
   /* Form shared */

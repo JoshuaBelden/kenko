@@ -1,5 +1,6 @@
 import { ObjectId, type Document, type Filter, type WithId } from "mongodb"
 import type { Equipment, Muscle, MuscleRegion } from "$lib/planDraft"
+import { suggestNextSet, type SetSuggestion } from "$lib/progression"
 import { getDb } from "./db"
 
 // ========================================
@@ -322,6 +323,44 @@ export function buildPlanSessionDoc(
   }
 }
 
+/**
+ * Next-session weight/reps suggestions keyed by exerciseId, each based on that exercise's
+ * sets in the most recent completed session that included it. Pass exerciseIds to limit
+ * the lookup; omit to cover every exercise found in recent history.
+ */
+export async function getSetSuggestions(
+  userId: ObjectId,
+  exerciseIds?: ObjectId[],
+): Promise<Record<string, SetSuggestion>> {
+  const logs = await getWorkoutLogsCollection()
+  const filter: Filter<Document> = { userId, status: "completed" }
+  if (exerciseIds) filter["sets.exerciseId"] = { $in: exerciseIds }
+  const recent = await logs
+    .find(filter, { projection: { sets: 1 } })
+    .sort({ completedAt: -1 })
+    .limit(100)
+    .toArray()
+
+  const wanted = exerciseIds ? new Set(exerciseIds.map(id => id.toString())) : null
+  const seen = new Set<string>()
+  const suggestions: Record<string, SetSuggestion> = {}
+  for (const log of recent) {
+    const byExercise = new Map<string, any[]>()
+    for (const s of log.sets ?? []) {
+      const id = s.exerciseId?.toString()
+      if (!id || seen.has(id) || (wanted && !wanted.has(id))) continue
+      byExercise.set(id, [...(byExercise.get(id) ?? []), s])
+    }
+    for (const [id, sets] of byExercise) {
+      seen.add(id)
+      const suggestion = suggestNextSet(sets)
+      if (suggestion) suggestions[id] = suggestion
+    }
+    if (wanted && seen.size === wanted.size) break
+  }
+  return suggestions
+}
+
 export async function startWorkoutLog(
   userId: ObjectId,
   planId: ObjectId,
@@ -361,14 +400,16 @@ export async function startWorkoutLog(
       }
     })
 
-    // Pre-populate sets from exercise targets
+    // Pre-populate sets from the last session's progression, falling back to plan targets
+    const suggestions = await getSetSuggestions(userId, exerciseIds)
     initialSets = snapshotExercises.flatMap((e: any) => {
       const count = e.targetSets ?? 3
+      const suggestion = suggestions[e.exerciseId?.toString()]
       return Array.from({ length: count }, (_, i) => ({
         exerciseId: e.exerciseId,
         setNumber: i + 1,
-        weight: e.targetWeight ?? 0,
-        reps: e.targetReps ?? 10,
+        weight: suggestion?.weight ?? e.targetWeight ?? 0,
+        reps: suggestion?.reps ?? e.targetReps ?? 10,
         rpe: null,
         isAdditional: false,
         completed: false,
