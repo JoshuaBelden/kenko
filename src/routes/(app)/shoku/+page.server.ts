@@ -3,6 +3,7 @@ import { getJourneysCollection } from "$lib/server/collections"
 import { startOfDayTz, endOfDayTz, todayStr } from "$lib/server/dates"
 import { getTodaysCaloriesBurned } from "$lib/server/dojo"
 import { ObjectId } from "mongodb"
+import { ADDITIONAL_NUTRIENT_KEYS, type AdditionalNutrientKey } from "$lib/nutrients"
 import type { PageServerLoad } from "./$types"
 
 export const load: PageServerLoad = async ({ locals, url }) => {
@@ -22,15 +23,20 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
   const foodItemLogs = await getFoodItemLogsCollection()
   const entries = await foodItemLogs.find(filter).sort({ loggedAt: 1 }).toArray()
-  // Serving size lives on the food item, not the log entry
+  // Serving size and additional nutrients (per serving) live on the food item, not the log entry
   const loggedFoodIds = [...new Set(entries.map((e) => e.foodItemId.toString()))].map((id) => new ObjectId(id))
+  const projection: Record<string, 1> = { servingSize: 1 }
+  for (const key of ADDITIONAL_NUTRIENT_KEYS) projection[key] = 1
   const loggedFoods = loggedFoodIds.length
-    ? await (await getFoodItemsCollection()).find({ _id: { $in: loggedFoodIds } }, { projection: { servingSize: 1 } }).toArray()
+    ? await (await getFoodItemsCollection()).find({ _id: { $in: loggedFoodIds } }, { projection }).toArray()
     : []
-  const servingSizeMap = new Map(loggedFoods.map((f) => [f._id.toString(), f.servingSize ?? 100]))
+  const foodMap = new Map(loggedFoods.map((f) => [f._id.toString(), f]))
   const serialized = entries.map((doc) => {
     const entry = serializeFoodItemLog(doc)
-    return { ...entry, foodServingSize: servingSizeMap.get(entry.foodItemId) ?? null }
+    const food = foodMap.get(entry.foodItemId)
+    const foodNutrients: Partial<Record<AdditionalNutrientKey, number | null>> = {}
+    for (const key of ADDITIONAL_NUTRIENT_KEYS) foodNutrients[key] = food?.[key] ?? null
+    return { ...entry, foodServingSize: food ? (food.servingSize ?? 100) : null, foodNutrients }
   })
 
   const grouped: Record<string, typeof serialized> = {

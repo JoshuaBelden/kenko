@@ -4,7 +4,8 @@
   import { Button, Card, PageHeader, RadialProgress, StatNumber } from "$lib/components"
   import { icons } from "$lib/icons"
   import FoodSearchModal from "$lib/components/FoodSearchModal.svelte"
-  import { getCompatibleUnits, unitLabel, type DiaryUnit } from "$lib/units"
+  import { getCompatibleUnits, servingsFor, unitLabel, type DiaryUnit } from "$lib/units"
+  import { ADDITIONAL_NUTRIENTS } from "$lib/nutrients"
 
   let grouped = $state(page.data.grouped ?? {})
   let totals = $state(page.data.totals ?? { calories: 0, protein: 0, netCarbs: 0, fat: 0 })
@@ -264,6 +265,17 @@
     editNote = entry.note ?? ""
   }
 
+  // Additional nutrients scaled to the quantity being edited; null values are hidden
+  function additionalNutrients(entry: any) {
+    const servings = servingsFor(editQuantity || 0, editUnit, entry.foodServingSize ?? 100)
+    if (servings == null) return []
+    return ADDITIONAL_NUTRIENTS.flatMap(n => {
+      const perServing = entry.foodNutrients?.[n.key]
+      if (perServing == null) return []
+      return [{ ...n, value: Math.round(perServing * servings * 10) / 10 }]
+    })
+  }
+
   async function saveEdit() {
     if (!editingId) return
     const res = await fetch(`/api/shoku/diary/${editingId}`, {
@@ -471,6 +483,13 @@
                     </select>
                   </div>
                 </div>
+                {#if additionalNutrients(entry).length > 0}
+                  <div class="nutrient-grid">
+                    {#each additionalNutrients(entry) as n (n.key)}
+                      <div class="nutrient"><span class="nutrient-label">{n.label}</span><span>{n.value}{n.unit}</span></div>
+                    {/each}
+                  </div>
+                {/if}
                 <div class="form-field">
                   <label class="field-label" for="edit-note">Note</label>
                   <input id="edit-note" bind:value={editNote} placeholder="Optional note" />
@@ -1026,6 +1045,22 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
+  }
+
+  .nutrient-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+    gap: var(--space-2) var(--space-4);
+  }
+
+  .nutrient {
+    display: flex;
+    justify-content: space-between;
+    font-size: var(--text-sm);
+  }
+
+  .nutrient-label {
+    color: var(--ink-faint);
   }
 
   /* Quick add modal */
