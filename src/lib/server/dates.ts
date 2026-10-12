@@ -50,6 +50,27 @@ export function todayStr(tz: string): string {
 }
 
 /**
+ * Calendar date of `date` as YYYY-MM-DD in the given timezone.
+ */
+export function dateStrTz(date: Date, tz: string): string {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
+  return fmt.format(date)
+}
+
+/**
+ * Add `days` calendar days to a YYYY-MM-DD string.
+ */
+export function addDaysStr(dateStr: string, days: number): string {
+  const [year, month, day] = dateStr.split("-").map(Number)
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10)
+}
+
+/**
  * Start of day (00:00:00.000) for a given YYYY-MM-DD in the specified
  * timezone, returned as a UTC Date suitable for MongoDB queries.
  */

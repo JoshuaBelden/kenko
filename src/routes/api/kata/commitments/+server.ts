@@ -108,6 +108,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     direction: body.direction,
     period: body.period,
     loggingStyle: body.loggingStyle,
+    defaultChecked: body.loggingStyle === "checkbox" && body.defaultChecked === true,
+    autoCheckedThrough: null,
     targetValue: body.targetValue,
     unit: body.unit?.trim() || null,
     startDate: null,

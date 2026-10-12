@@ -1,5 +1,6 @@
 import { ObjectId, type Document, type WithId } from "mongodb"
 import { getDb } from "./db"
+import { addDaysStr, dateStrTz, endOfDayTz, startOfDayTz, todayStr } from "./dates"
 
 // ========================================
 // Collections
@@ -66,6 +67,7 @@ export function serializeCommitment(doc: WithId<Document>) {
     direction: doc.direction ?? null,
     period: doc.period ?? null,
     loggingStyle: doc.loggingStyle ?? null,
+    defaultChecked: doc.defaultChecked ?? false,
     targetValue: doc.targetValue ?? null,
     unit: doc.unit ?? null,
     startDate: doc.startDate instanceof Date ? doc.startDate.toISOString() : doc.startDate ?? null,
@@ -315,6 +317,75 @@ export async function getTodayLog(commitmentId: ObjectId, userId: ObjectId, refe
     userId,
     date: { $gte: startOfDay(ref), $lte: endOfDay(ref) },
   })
+}
+
+// ========================================
+// Default-checked checkbox commitments
+// ========================================
+
+// Safety cap on how many missed days are filled in one pass
+const MAX_AUTO_CHECK_DAYS = 366
+
+/**
+ * Creates checked logs for checkbox commitments with `defaultChecked` on every
+ * day since they were last filled, through today. Days that already have a log
+ * (including ones the user explicitly unchecked, value 0) are left untouched.
+ */
+export async function autoCheckDefaultCommitments(userId: ObjectId, tz: string) {
+  const commitmentsCol = await getCommitmentsCollection()
+  const today = todayStr(tz)
+  const todayStart = startOfDayTz(today, tz)
+
+  const due = await commitmentsCol
+    .find({
+      userId,
+      isActive: true,
+      loggingStyle: "checkbox",
+      defaultChecked: true,
+      $or: [{ autoCheckedThrough: null }, { autoCheckedThrough: { $lt: todayStart } }],
+    })
+    .toArray()
+  if (due.length === 0) return
+
+  const logsCol = await getCommitmentLogsCollection()
+  const now = new Date()
+
+  for (const c of due) {
+    let first = c.autoCheckedThrough instanceof Date ? addDaysStr(dateStrTz(c.autoCheckedThrough, tz), 1) : today
+    if (first > today) first = today
+    const earliest = addDaysStr(today, -(MAX_AUTO_CHECK_DAYS - 1))
+    if (first < earliest) first = earliest
+
+    const ops = []
+    for (let day = first; day <= today; day = addDaysStr(day, 1)) {
+      const dayStart = startOfDayTz(day, tz)
+      ops.push({
+        updateOne: {
+          filter: { commitmentId: c._id, userId, date: { $gte: dayStart, $lte: endOfDayTz(day, tz) } },
+          update: {
+            $setOnInsert: {
+              commitmentId: c._id,
+              userId,
+              date: dayStart,
+              value: c.targetValue ?? 1,
+              createdAt: now,
+              updatedAt: now,
+            },
+          },
+          upsert: true,
+        },
+      })
+    }
+
+    try {
+      await logsCol.bulkWrite(ops, { ordered: false })
+    } catch (err: any) {
+      // A concurrent request may have inserted the same day first
+      if (err?.code !== 11000 && !err?.writeErrors?.every((e: any) => e.code === 11000)) throw err
+    }
+
+    await commitmentsCol.updateOne({ _id: c._id }, { $set: { autoCheckedThrough: todayStart } })
+  }
 }
 
 // ========================================

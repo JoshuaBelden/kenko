@@ -12,6 +12,7 @@
   let direction = $state<"achieve" | "limit">(commitment?.direction ?? "achieve")
   let period = $state<"daily" | "weekly" | "monthly" | "journey_total">(commitment?.period ?? "daily")
   let loggingStyle = $state<"checkbox" | "quantity">(commitment?.loggingStyle ?? "checkbox")
+  let defaultChecked = $state(commitment?.defaultChecked ?? false)
   let targetValue = $state(commitment?.targetValue ?? 1)
   let unit = $state(commitment?.unit ?? "")
   let saving = $state(false)
@@ -114,6 +115,7 @@
         direction,
         period,
         loggingStyle,
+        defaultChecked: loggingStyle === "checkbox" && defaultChecked,
         targetValue,
         unit: loggingStyle === "quantity" ? unit.trim() || null : null,
       }),
@@ -210,6 +212,23 @@
           </div>
         </div>
 
+        {#if loggingStyle === "checkbox"}
+          <div class="field">
+            <span class="label">Default State</span>
+            <div class="toggle-group">
+              <button type="button" class="toggle-btn" class:active={!defaultChecked} onclick={() => defaultChecked = false}>
+                Unchecked
+              </button>
+              <button type="button" class="toggle-btn" class:active={defaultChecked} onclick={() => defaultChecked = true}>
+                Checked
+              </button>
+            </div>
+            {#if defaultChecked}
+              <span class="hint">New days start checked. Uncheck a day if you missed it.</span>
+            {/if}
+          </div>
+        {/if}
+
         {#if loggingStyle === "quantity"}
           <div class="field">
             <span class="label">Direction</span>
@@ -285,6 +304,12 @@
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.2em;
+    color: var(--ink-faint);
+  }
+
+  .hint {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
     color: var(--ink-faint);
   }
 

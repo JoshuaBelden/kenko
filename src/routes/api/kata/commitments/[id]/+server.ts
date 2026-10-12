@@ -116,6 +116,13 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
     }
     updates.loggingStyle = body.loggingStyle
   }
+  if (body.defaultChecked !== undefined || body.loggingStyle !== undefined) {
+    const loggingStyle = body.loggingStyle ?? existing.loggingStyle
+    const defaultChecked = loggingStyle === "checkbox" && (body.defaultChecked ?? existing.defaultChecked) === true
+    updates.defaultChecked = defaultChecked
+    // Turning it on starts auto-checking from today; past days are not backfilled
+    if (defaultChecked && !existing.defaultChecked) updates.autoCheckedThrough = null
+  }
   if (body.targetValue !== undefined) {
     if (typeof body.targetValue !== "number" || body.targetValue <= 0) {
       return json({ error: "targetValue must be a positive number" }, { status: 400 })

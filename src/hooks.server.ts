@@ -1,5 +1,6 @@
 import { ensureIndexes, getSessionToken, getSessionUserId } from "$lib/server/auth"
 import { getUsersCollection } from "$lib/server/collections"
+import { autoCheckDefaultCommitments } from "$lib/server/kata"
 import { redirect, type Handle } from "@sveltejs/kit"
 import { ObjectId } from "mongodb"
 
@@ -21,8 +22,15 @@ export const handle: Handle = async ({ event, resolve }) => {
         { projection: { profileComplete: 1, isAdmin: 1, "profile.timezone": 1, "profile.latitude": 1, "profile.longitude": 1 } },
       )
 
-      event.locals.userTimezone = user?.profile?.timezone ?? "America/Los_Angeles"
+      const userTimezone = user?.profile?.timezone ?? "America/Los_Angeles"
+      event.locals.userTimezone = userTimezone
       event.locals.isAdmin = user?.isAdmin ?? false
+
+      try {
+        await autoCheckDefaultCommitments(new ObjectId(userId), userTimezone)
+      } catch (err) {
+        console.error("Failed to auto-check default commitments", err)
+      }
 
       // Check if profile is complete — redirect incomplete profiles to /profile
       if (!event.url.pathname.startsWith("/profile") && event.url.pathname !== "/logout") {
